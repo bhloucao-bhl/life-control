@@ -62,27 +62,36 @@ async function importExportedJson(text) {
 }
 
 /* ============================================================
-   Login (link magico por e-mail)
+   Login (e-mail + senha)
    ============================================================ */
 
 const LC = { bg: '#0B0B0F', surface: '#16161E', border: '#282833', text: '#ECECEF', text3: '#63636F', accent: '#E6B450' };
 
 function Login() {
   const [email, setEmail] = useState('');
-  const [sent, setSent] = useState(false);
+  const [pass, setPass] = useState('');
+  const [mode, setMode] = useState('in'); // 'in' = entrar | 'up' = criar
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [msg, setMsg] = useState('');
 
-  const send = async () => {
-    if (!email.trim()) return;
-    setBusy(true); setErr('');
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: typeof window !== 'undefined' ? window.location.origin : undefined },
-    });
+  const go = async () => {
+    if (!email.trim() || pass.length < 6) { setErr('Informe e-mail e senha (mínimo 6 caracteres).'); return; }
+    setBusy(true); setErr(''); setMsg('');
+    const creds = { email: email.trim(), password: pass };
+    const { data, error } = mode === 'up'
+      ? await supabase.auth.signUp(creds)
+      : await supabase.auth.signInWithPassword(creds);
     setBusy(false);
-    if (error) setErr(error.message); else setSent(true);
+    if (error) { setErr(error.message); return; }
+    if (mode === 'up' && data && data.user && !data.session) {
+      setMsg('Conta criada. Confirme pelo e-mail e depois entre com sua senha.');
+      setMode('in');
+    }
+    // Com sessão criada, o listener em Page() troca de tela sozinho.
   };
+
+  const inputStyle = { width: '100%', background: '#101017', border: `1px solid ${LC.border}`, borderRadius: 10, color: LC.text, padding: '12px 14px', fontSize: 16, outline: 'none', boxSizing: 'border-box', marginBottom: 10 };
 
   return (
     <div style={{ background: LC.bg, color: LC.text, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif' }}>
@@ -92,27 +101,27 @@ function Login() {
           <span style={{ fontSize: 17, fontWeight: 700 }}>Life Control</span>
         </div>
         <p style={{ color: LC.text3, fontSize: 13.5, lineHeight: 1.5, marginBottom: 22 }}>
-          Entre com seu e-mail. Enviamos um link de acesso — sem senha.
+          {mode === 'up' ? 'Crie sua conta com e-mail e senha.' : 'Entre com seu e-mail e senha.'}
         </p>
 
-        {sent ? (
-          <div style={{ background: LC.surface, border: `1px solid ${LC.border}`, borderRadius: 14, padding: 18, fontSize: 13.5, lineHeight: 1.55 }}>
-            Link enviado para <b>{email}</b>. Abra o e-mail <b>neste mesmo aparelho</b> e toque no link.
-          </div>
-        ) : (
-          <>
-            <input
-              value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="seu@email.com"
-              onKeyDown={(e) => { if (e.key === 'Enter') send(); }}
-              style={{ width: '100%', background: '#101017', border: `1px solid ${LC.border}`, borderRadius: 10, color: LC.text, padding: '12px 14px', fontSize: 15, outline: 'none', boxSizing: 'border-box', marginBottom: 10 }}
-            />
-            <button onClick={send} disabled={busy || !email.trim()}
-              style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: 'none', background: LC.accent, color: '#171200', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy || !email.trim() ? 0.5 : 1 }}>
-              {busy ? 'Enviando…' : 'Receber link de acesso'}
-            </button>
-            {err && <div style={{ color: '#F0787C', fontSize: 12.5, marginTop: 10 }}>{err}</div>}
-          </>
-        )}
+        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email"
+          autoComplete="username" placeholder="seu@email.com" style={inputStyle} />
+        <input value={pass} onChange={(e) => setPass(e.target.value)} type="password"
+          autoComplete={mode === 'up' ? 'new-password' : 'current-password'} placeholder="sua senha"
+          onKeyDown={(e) => { if (e.key === 'Enter') go(); }} style={inputStyle} />
+
+        <button onClick={go} disabled={busy}
+          style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: 'none', background: LC.accent, color: '#171200', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
+          {busy ? 'Aguarde…' : mode === 'up' ? 'Criar conta' : 'Entrar'}
+        </button>
+
+        <button onClick={() => { setMode(mode === 'up' ? 'in' : 'up'); setErr(''); setMsg(''); }}
+          style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 12, background: 'transparent', border: `1px solid ${LC.border}`, color: LC.text3, fontSize: 13, cursor: 'pointer' }}>
+          {mode === 'up' ? 'Já tenho conta — entrar' : 'Primeira vez — criar conta'}
+        </button>
+
+        {err && <div style={{ color: '#F0787C', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>{err}</div>}
+        {msg && <div style={{ color: LC.accent, fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
       </div>
     </div>
   );
