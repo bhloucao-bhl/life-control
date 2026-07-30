@@ -872,7 +872,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
             <div key={fx.code} style={{ display: 'flex', gap: 7, alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 10, color: C.text3, fontWeight: 600 }}>{fx.code}</span>
               <span style={{ fontSize: 12.5, fontWeight: 700 }}>{fmtMoney(fx.value, lang)}</span>
-              <span style={{ fontSize: 8.5, color: fx.pct < 0 ? C.rose : C.green }}>{fx.pct < 0 ? '▼' : '▲'}{Math.abs(fx.pct).toFixed(2)}%</span>
+              {fx.pct != null && <span style={{ fontSize: 8.5, color: fx.pct < 0 ? C.rose : C.green }}>{fx.pct < 0 ? '▼' : '▲'}{Math.abs(fx.pct).toFixed(2)}%</span>}
             </div>
           )) : (
             <div style={{ fontSize: 10, color: C.text3, display: 'flex', alignItems: 'center', gap: 5 }}>
