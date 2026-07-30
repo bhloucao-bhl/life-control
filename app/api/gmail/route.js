@@ -131,6 +131,37 @@ export async function POST(req) {
       return Response.json({ ok: true });
     }
 
+    if (b.compose) {
+      const to = b.to, subject = b.subject || '(sem assunto)';
+      const lines = [
+        `To: ${to}`,
+        `Subject: =?UTF-8?B?${Buffer.from(subject, 'utf8').toString('base64')}?=`,
+        'Content-Type: text/plain; charset="UTF-8"',
+        'MIME-Version: 1.0',
+      ];
+      const raw = Buffer.from(lines.join('\r\n') + '\r\n\r\n' + b.compose, 'utf8')
+        .toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const r = await fetch(`${G}/messages/send`, { method: 'POST', headers: h, body: JSON.stringify({ raw }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error('send: ' + JSON.stringify(j).slice(0, 200));
+      return Response.json({ ok: true, id: j.id });
+    }
+
+    if (b.compose) {
+      const lines = [
+        `To: ${b.to}`,
+        `Subject: =?UTF-8?B?${Buffer.from(b.subject || '', 'utf8').toString('base64')}?=`,
+        'Content-Type: text/plain; charset="UTF-8"',
+        'MIME-Version: 1.0',
+      ];
+      const raw = Buffer.from(lines.join('\r\n') + '\r\n\r\n' + (typeof b.compose === 'string' ? b.compose : (b.body || '')), 'utf8')
+        .toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      const r = await fetch(`${G}/messages/send`, { method: 'POST', headers: h, body: JSON.stringify({ raw }) });
+      const j = await r.json();
+      if (!r.ok) throw new Error('send: ' + JSON.stringify(j).slice(0, 200));
+      return Response.json({ ok: true, id: j.id });
+    }
+
     if (b.reply) {
       const subject = (b.subject || '').startsWith('Re:') ? b.subject : 'Re: ' + (b.subject || '');
       const lines = [
