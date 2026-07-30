@@ -2,16 +2,76 @@ export const runtime = 'nodejs';
 export const revalidate = 0;
 
 /**
- * Dados ao vivo: clima (open-meteo) + cambio (AwesomeAPI).
- * Ambos sao APIs publicas e gratuitas, sem chave.
- * Roda no servidor para evitar bloqueio de CORS e para poder cachear.
+ * Dados ao vivo: clima (open-meteo) + cambio (varias fontes em cascata).
+ * Todas as APIs sao publicas e gratuitas, sem chave.
  */
+
+// ---------- Cambio: tenta as fontes em ordem ate uma responder ----------
+async function fxAwesome() {
+  const r = await fetch('https://economia.awesomeapi.com.br/last/USD-BRL,EUR-BRL', { next: { revalidate: 600 } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  const pick = (k, code) => {
+    const v = j[k];
+    if (!v || !v.bid) return null;
+    const pct = v.pctChange != null ? Number(v.pctChange) : null;
+    return { code, value: Number(v.bid), pct: isNaN(pct) ? null : pct };
+  };
+  const out = [pick('USDBRL', 'USD'), pick('EURBRL', 'EUR')].filter(Boolean);
+  if (!out.length) throw new Error('sem dados');
+  return { fx: out, source: 'awesomeapi' };
+}
+
+async function fxErApi() {
+  // 1 BRL = rates.USD dolares  ->  USD/BRL = 1 / rates.USD
+  const r = await fetch('https://open.er-api.com/v6/latest/BRL', { next: { revalidate: 600 } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  const rates = j && j.rates;
+  if (!rates || !rates.USD || !rates.EUR) throw new Error('sem rates');
+  return {
+    fx: [
+      { code: 'USD', value: 1 / Number(rates.USD), pct: null },
+      { code: 'EUR', value: 1 / Number(rates.EUR), pct: null },
+    ],
+    source: 'er-api',
+  };
+}
+
+async function fxFrankfurter() {
+  const r = await fetch('https://api.frankfurter.dev/v1/latest?base=BRL&symbols=USD,EUR', { next: { revalidate: 600 } });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const j = await r.json();
+  const rates = j && j.rates;
+  if (!rates || !rates.USD || !rates.EUR) throw new Error('sem rates');
+  return {
+    fx: [
+      { code: 'USD', value: 1 / Number(rates.USD), pct: null },
+      { code: 'EUR', value: 1 / Number(rates.EUR), pct: null },
+    ],
+    source: 'frankfurter',
+  };
+}
+
+async function getFx(errors) {
+  const chain = [['awesomeapi', fxAwesome], ['er-api', fxErApi], ['frankfurter', fxFrankfurter]];
+  for (const [name, fn] of chain) {
+    try {
+      const res = await fn();
+      if (res && res.fx && res.fx.length) return res;
+    } catch (e) {
+      errors.push('fx/' + name + ': ' + String(e.message || e));
+    }
+  }
+  return { fx: null, source: null };
+}
+
 export async function GET(req) {
   const { searchParams } = new URL(req.url);
   const lat = searchParams.get('lat') || '-23.5505';
   const lon = searchParams.get('lon') || '-46.6333';
 
-  const out = { weather: null, fx: null, errors: [] };
+  const out = { weather: null, fx: null, fxSource: null, errors: [] };
 
   // ---------- Clima ----------
   try {
@@ -21,7 +81,7 @@ export async function GET(req) {
       `&daily=weather_code,temperature_2m_max,temperature_2m_min` +
       `&timezone=auto&forecast_days=6`;
     const r = await fetch(wxUrl, { next: { revalidate: 900 } });
-    if (!r.ok) throw new Error('open-meteo ' + r.status);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
     const cur = j.current || {};
     const d = j.daily || {};
@@ -45,16 +105,9 @@ export async function GET(req) {
   }
 
   // ---------- Cambio ----------
-  try {
-    const r = await fetch('https://economia.awesomeapi.com.br/last/USD-BRL,EUR-BRL', { next: { revalidate: 600 } });
-    if (!r.ok) throw new Error('awesomeapi ' + r.status);
-    const j = await r.json();
-    const pick = (k, code) => (j[k] ? { code, value: Number(j[k].bid), pct: Number(j[k].pctChange) } : null);
-    out.fx = [pick('USDBRL', 'USD'), pick('EURBRL', 'EUR')].filter(Boolean);
-    if (out.fx.length === 0) out.fx = null;
-  } catch (e) {
-    out.errors.push('fx: ' + String(e.message || e));
-  }
+  const fxRes = await getFx(out.errors);
+  out.fx = fxRes.fx;
+  out.fxSource = fxRes.source;
 
   return Response.json(out, {
     headers: { 'Cache-Control': 'public, s-maxage=600, stale-while-revalidate=1800' },
