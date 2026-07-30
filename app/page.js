@@ -150,12 +150,12 @@ import {
 
 /* ---------------- palette ---------------- */
 const C = {
-  bg: '#0B0B0F', bg2: '#101017', surface: '#16161E', surface2: '#1D1D27',
-  border: '#282833', borderSoft: '#1E1E28',
-  text: '#ECECEF', text2: '#9C9CA8', text3: '#63636F',
-  accent: '#E6B450', accentSoft: 'rgba(230,180,80,0.13)',
-  rose: '#F0787C', green: '#5FBF8F', blue: '#6BA6E6', violet: '#9B8CF0',
-  teal: '#5FB3B3', sky: '#7CC0E8',
+  bg: '#08080C', bg2: '#12121B', surface: '#1A1A25', surface2: '#24242F',
+  border: '#353543', borderSoft: '#2A2A36',
+  text: '#F7F7FA', text2: '#B8B8C6', text3: '#8A8A99',
+  accent: '#F5C263', accentSoft: 'rgba(245,194,99,0.16)',
+  rose: '#FF8A8E', green: '#6FD9A4', blue: '#7FBAF5', violet: '#B0A2FF',
+  teal: '#6ECDCD', sky: '#8FCFF7',
 };
 
 /* ---------------- i18n ---------------- */
@@ -191,6 +191,15 @@ const S = {
   gmailEmpty: L('Nenhum e-mail não lido nas últimas 24 horas.', 'No unread email in the last 24 hours.'),
   gmailConnect: L('Conecte o Gmail em Ajustes → Conexões.', 'Connect Gmail in Settings → Connections.'),
   writing: L('Escrevendo…', 'Writing…'), openGmail: L('Abrir no Gmail', 'Open in Gmail'),
+  refresh: L('Atualizar', 'Refresh'), rainChance: L('Chance de chuva', 'Rain chance'), humidity: L('Umidade', 'Humidity'),
+  wind: L('Vento', 'Wind'), uvIndex: L('Índice UV', 'UV index'), sunriseL: L('Nascer do sol', 'Sunrise'), sunsetL: L('Pôr do sol', 'Sunset'),
+  next12h: L('Próximas 12 horas', 'Next 12 hours'), weatherDetail: L('Detalhes do tempo', 'Weather detail'),
+  sleepStages: L('Fases do sono', 'Sleep stages'), deepS: L('Profundo', 'Deep'), remS: L('REM', 'REM'), lightS: L('Leve', 'Light'), awakeS: L('Acordado', 'Awake'),
+  efficiency: L('Eficiência', 'Efficiency'), lastNight: L('Última noite', 'Last night'), noSleepData: L('Sem dado de sono ainda.', 'No sleep data yet.'),
+  weightHistory: L('Histórico de peso', 'Weight history'), addWeight: L('Registrar peso', 'Log weight'), heightSettings: L('Altura fica em Ajustes.', 'Height lives in Settings.'),
+  suggestions: L('Sugestões do seu e-mail', 'Suggestions from your email'), scanInbox: L('Buscar viagens no e-mail', 'Scan email for trips'),
+  scanning: L('Lendo e-mails…', 'Reading email…'), noSuggestions: L('Nada novo encontrado.', 'Nothing new found.'),
+  addPhoto: L('Foto', 'Photo'), photo: L('Foto', 'Photo'),
   externalItem: L('Item externo — edite no app de origem.', 'External item — edit in the source app.'),
   openThere: L('Abrir no app de origem', 'Open in source app'),
   onlyCommitments: L('Compromissos', 'Commitments'), everything: L('Tudo', 'Everything'),
@@ -403,13 +412,15 @@ const DEFAULT_DEVICES = [
 const STORE_KEY = 'lcc_items_v1', SETTINGS_KEY = 'lcc_settings_v1';
 const hasStore = typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function';
 const memAtt = {};
+async function persistSeeded() { if (hasStore) { try { await window.storage.set('lcc_seeded_v1', '1'); } catch (e) {} } }
 async function loadState() {
-  let items = [], settings = null;
+  let items = [], settings = null, seeded = false;
   if (hasStore) {
     try { const r = await window.storage.get(STORE_KEY); if (r && r.value) items = JSON.parse(r.value); } catch (e) {}
     try { const r = await window.storage.get(SETTINGS_KEY); if (r && r.value) settings = JSON.parse(r.value); } catch (e) {}
+    try { const r = await window.storage.get('lcc_seeded_v1'); if (r && r.value) seeded = true; } catch (e) {}
   }
-  return { items, settings };
+  return { items, settings, seeded };
 }
 async function persistItems(x) { if (hasStore) { try { await window.storage.set(STORE_KEY, JSON.stringify(x)); } catch (e) {} } }
 async function persistSettings(x) { if (hasStore) { try { await window.storage.set(SETTINGS_KEY, JSON.stringify(x)); } catch (e) {} } }
@@ -466,7 +477,7 @@ function buildContext(items) {
 }
 
 /* ---------------- primitives ---------------- */
-const card = { background: C.surface, border: `1px solid ${C.borderSoft}`, borderRadius: 16 };
+const card = { background: C.surface, border: `1px solid ${C.borderSoft}`, borderRadius: 16, boxShadow: '0 1px 0 rgba(255,255,255,0.03) inset' };
 const inputStyle = { width: '100%', background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
 function Btn({ children, onClick, kind = 'primary', style, disabled }) {
   const kinds = { primary: { background: C.accent, color: '#171200', border: 'none', fontWeight: 600 }, ghost: { background: 'transparent', color: C.text2, border: `1px solid ${C.border}` }, soft: { background: C.surface2, color: C.text, border: `1px solid ${C.border}` }, danger: { background: 'transparent', color: C.rose, border: `1px solid ${C.rose}55` } };
@@ -476,7 +487,7 @@ function Chip({ children, active, onClick, color }) {
   return <button onClick={onClick} style={{ padding: '6px 11px', borderRadius: 999, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap', background: active ? (color ? color + '22' : C.accentSoft) : 'transparent', color: active ? (color || C.accent) : C.text2, border: `1px solid ${active ? (color || C.accent) + '55' : C.border}` }}>{children}</button>;
 }
 function Field({ label, children }) {
-  return <label style={{ display: 'block', marginBottom: 10 }}><div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5 }}>{label}</div>{children}</label>;
+  return <label style={{ display: 'block', marginBottom: 10 }}><div style={{ fontSize: 11.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5, fontWeight: 600 }}>{label}</div>{children}</label>;
 }
 function Empty({ icon: Icon, text }) {
   return <div style={{ ...card, padding: '26px 18px', textAlign: 'center', color: C.text3 }}>{Icon && <Icon size={22} style={{ opacity: 0.6, marginBottom: 8 }} />}<div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{text}</div></div>;
@@ -493,7 +504,7 @@ function SheetHead({ title, onClose, icon: Icon }) {
   </div>;
 }
 function SectionTitle({ icon: Icon, label, color }) {
-  return <div style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '18px 2px 10px' }}><Icon size={14} style={{ color: color || C.text2 }} /><span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600 }}>{label}</span></div>;
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 7, margin: '18px 2px 10px' }}><Icon size={14} style={{ color: color || C.text2 }} /><span style={{ fontSize: 12.5, color: C.text, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 700 }}>{label}</span></div>;
 }
 function ScreenTitle({ title, sub }) {
   return <div style={{ margin: '4px 2px 16px' }}><div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</div>{sub && <div style={{ fontSize: 13, color: C.text3, marginTop: 3 }}>{sub}</div>}</div>;
@@ -501,7 +512,7 @@ function ScreenTitle({ title, sub }) {
 function MiniStat({ label, value, color, small }) {
   return <div style={{ ...card, padding: '10px 12px', flex: 1, minWidth: 0 }}>
     <div style={{ fontSize: small ? 15 : 19, fontWeight: 700, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-    <div style={{ fontSize: 10.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2 }}>{label}</div>
+    <div style={{ fontSize: 10.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{label}</div>
   </div>;
 }
 function HintCard({ icon: Icon, text }) {
@@ -520,9 +531,9 @@ function ItemRow({ item, lang, t, onToggle, onOpen }) {
         <button onClick={(e) => { e.stopPropagation(); onToggle(item.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 1, color: item.status === 'done' ? C.green : C.text3 }}>{item.status === 'done' ? <CircleCheck size={20} style={{ animation: 'pop .32s ease' }} /> : <Circle size={20} />}</button>
       ) : <div style={{ marginTop: 2, color: mile ? C.accent : C.text3 }}><Ic size={18} /></div>}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 14.5, color: item.status === 'done' ? C.text3 : C.text, textDecoration: item.status === 'done' ? 'line-through' : 'none', lineHeight: 1.35, display: 'flex', gap: 6, alignItems: 'center' }}>{mile && <Star size={12} style={{ color: C.accent, flexShrink: 0 }} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span></div>
+        <div style={{ fontSize: 14.5, fontWeight: 500, color: item.status === 'done' ? C.text3 : C.text, textDecoration: item.status === 'done' ? 'line-through' : 'none', lineHeight: 1.35, display: 'flex', gap: 6, alignItems: 'center' }}>{mile && <Star size={12} style={{ color: C.accent, flexShrink: 0 }} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.title}</span></div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 5, alignItems: 'center' }}>
-          <span style={{ fontSize: 11.5, color: C.text3 }}>{t('t_' + item.type)}</span>
+          <span style={{ fontSize: 11.5, color: C.text2, fontWeight: 500 }}>{t('t_' + item.type)}</span>
           {item.date && <span style={{ fontSize: 11.5, color: overdue ? C.rose : C.text2, display: 'inline-flex', alignItems: 'center', gap: 3 }}>{overdue ? <AlertTriangle size={11} /> : <Clock size={11} />}{fmtDate(item.date, lang)}{item.time ? ' · ' + item.time : ''}</span>}
           {item.amount != null && <span style={{ fontSize: 11.5, color: C.green }}>{fmtMoney(item.amount, lang)}</span>}
           {item.person && <span style={{ fontSize: 11.5, color: C.text3 }}>· {item.person}</span>}
@@ -564,6 +575,33 @@ function Attachments({ list, lang, t, onAdd, onRemove }) {
         <button onClick={() => ref.current && ref.current.click()} style={{ width: 66, height: 66, borderRadius: 10, border: `1px dashed ${C.border}`, background: 'transparent', color: C.text3, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, fontSize: 10 }}>{busy ? <Loader2 size={18} className="spin" /> : <><Paperclip size={16} />{t('addFile')}</>}</button>
         <input ref={ref} type="file" accept="image/*,application/pdf" onChange={pick} style={{ display: 'none' }} />
       </div>
+    </div>
+  );
+}
+
+/* ---------------- photo avatar ---------------- */
+function PhotoPicker({ value, t, onChange }) {
+  const ref = useRef(); const [busy, setBusy] = useState(false);
+  const pick = async (e) => {
+    const f = e.target.files[0]; if (!f) return; setBusy(true);
+    try { const url = await fileToDataUrl(f, 600); const att = await saveAttachment(url, f.name, 'image'); if (att) onChange(att); } catch (err) {}
+    setBusy(false); e.target.value = '';
+  };
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+      {value ? <AttachThumb att={value} onRemove={() => onChange(null)} />
+        : <button onClick={() => ref.current && ref.current.click()} style={{ width: 66, height: 66, borderRadius: 999, border: `1px dashed ${C.border}`, background: 'transparent', color: C.text3, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, fontSize: 10 }}>{busy ? <Loader2 size={16} className="spin" /> : <><Camera size={16} />{t('addPhoto')}</>}</button>}
+      <input ref={ref} type="file" accept="image/*" onChange={pick} style={{ display: 'none' }} />
+    </div>
+  );
+}
+
+function Avatar({ photo, name, size = 42, color = C.sky }) {
+  const [src, setSrc] = useState(null);
+  useEffect(() => { let m = true; if (photo && photo.id) loadAttachment(photo.id).then((x) => { if (m && x) setSrc(x.dataUrl); }); return () => { m = false; }; }, [photo && photo.id]);
+  return (
+    <div style={{ width: size, height: size, borderRadius: 999, background: color + '22', color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.34, fontWeight: 700, flexShrink: 0, overflow: 'hidden' }}>
+      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : initials(name)}
     </div>
   );
 }
@@ -628,6 +666,11 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {metaFields.map(([k, ptL, enL, it]) => <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type={it === 'number' ? 'number' : it === 'date' ? 'date' : 'text'} value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: 'dark' }} /></Field></div>)}
         </div>
+      )}
+      {(type === 'person' || type === 'vehicle') && (
+        <Field label={t('photo')}>
+          <PhotoPicker value={f.meta.photo} t={t} onChange={(att) => upMeta({ photo: att })} />
+        </Field>
       )}
       {type === 'vehicle' && (
         <Field label={t('color')}><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{CAR_COLORS.map(([hex, ptn, enn]) => <button key={hex} onClick={() => upMeta({ color: hex })} title={lang === 'pt' ? ptn : enn} style={{ width: 30, height: 30, borderRadius: 8, background: hex, cursor: 'pointer', border: f.meta.color === hex ? `2px solid ${C.accent}` : `1px solid ${C.border}` }} />)}</div></Field>
@@ -779,7 +822,55 @@ const WMO = {
 function wmo(code, lang) { const e = WMO[code] || WMO[3]; return { kind: e[0], label: lang === 'pt' ? e[1] : e[2] }; }
 function wxIcon(k) { return k === 'sun' ? Sun : k === 'rain' ? CloudRain : k === 'cloud' ? Cloud : CloudSun; }
 
+function WeatherDetail({ wx, lang, t, onClose }) {
+  const d0 = (wx.days && wx.days[0]) || {};
+  const rows = [
+    [t('rainChance'), d0.rainProb != null ? d0.rainProb + '%' : '—', CloudRain, C.blue],
+    [lang === 'pt' ? 'Chuva prevista' : 'Rain', d0.rainMm != null ? String(d0.rainMm).replace('.', ',') + ' mm' : '—', CloudRain, C.sky],
+    [t('humidity'), wx.humidity != null ? wx.humidity + '%' : '—', Cloud, C.teal],
+    [t('wind'), wx.wind != null ? wx.wind + ' km/h' : '—', Wind, C.text2],
+    [t('uvIndex'), d0.uv != null ? String(d0.uv) : '—', Sun, C.accent],
+    [t('sunriseL'), d0.sunrise || '—', Sun, C.accent],
+    [t('sunsetL'), d0.sunset || '—', CloudSun, C.violet],
+  ];
+  const hours = wx.hours || [];
+  const maxRain = Math.max(10, ...hours.map((h) => h.rain || 0));
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={t('weatherDetail')} onClose={onClose} icon={CloudSun} />
+      <div style={{ ...card, padding: 16, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 14 }}>
+        <div style={{ fontSize: 34, fontWeight: 800 }}>{wx.temp}°</div>
+        <div><div style={{ fontSize: 13.5 }}>{wmo(wx.code, lang).label}</div><div style={{ fontSize: 11.5, color: C.text2, marginTop: 2 }}>↑{d0.hi}° ↓{d0.lo}° · {t('feels')} {wx.feels}°</div></div>
+      </div>
+      {hours.length > 0 && (
+        <>
+          <div style={{ fontSize: 11.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 2px 8px', fontWeight: 600 }}>{t('next12h')}</div>
+          <div style={{ ...card, padding: 14, marginBottom: 12, display: 'flex', gap: 4, alignItems: 'flex-end', height: 108, overflowX: 'auto' }}>
+            {hours.map((h, i) => (
+              <div key={i} style={{ flex: '1 0 26px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                <span style={{ fontSize: 9, color: C.text2 }}>{h.rain != null ? h.rain + '%' : ''}</span>
+                <div style={{ width: 12, height: Math.max(3, ((h.rain || 0) / maxRain) * 46), background: C.blue, borderRadius: 3 }} />
+                <span style={{ fontSize: 9.5, color: C.text3 }}>{h.temp != null ? h.temp + '°' : ''}</span>
+                <span style={{ fontSize: 9, color: C.text3 }}>{h.h}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+      <div style={{ ...card, padding: 4 }}>
+        {rows.map(([l, v, Ic, col], i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none' }}>
+            <span style={{ fontSize: 12.5, color: C.text2, display: 'flex', gap: 8, alignItems: 'center' }}><Ic size={13} style={{ color: col }} />{l}</span>
+            <span style={{ fontSize: 13.5, fontWeight: 600 }}>{v}</span>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
 function WeatherCard({ lang, t, wx, loading }) {
+  const [open, setOpen] = useState(false);
   if (!wx) {
     return (
       <div style={{ ...card, padding: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, color: C.text3 }}>
@@ -791,7 +882,8 @@ function WeatherCard({ lang, t, wx, loading }) {
   const now = wmo(wx.code, lang);
   const NowIcon = wxIcon(now.kind);
   return (
-    <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+    <div onClick={() => setOpen(true)} style={{ ...card, padding: 14, marginBottom: 10, cursor: 'pointer' }}>
+      {open && <WeatherDetail wx={wx} lang={lang} t={t} onClose={() => setOpen(false)} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <NowIcon size={32} style={{ color: C.accent }} />
@@ -802,7 +894,7 @@ function WeatherCard({ lang, t, wx, loading }) {
         </div>
         <div style={{ textAlign: 'right', fontSize: 11.5, color: C.text3, lineHeight: 1.6 }}>
           {wx.feels != null && <div>{t('feels')} {wx.feels}°</div>}
-          <div>↑{wx.hi}° ↓{wx.lo}°</div>
+          <div>↑{wx.hi}° ↓{wx.lo}° <ChevronRight size={11} style={{ verticalAlign: 'middle', color: C.text3 }} /></div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
@@ -890,8 +982,8 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           {live && live.fx ? live.fx.map((fx) => (
             <div key={fx.code} style={{ display: 'flex', gap: 7, alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 10, color: C.text3, fontWeight: 600 }}>{fx.code}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 700 }}>{fmtMoney(fx.value, lang)}</span>
-              {fx.pct != null && <span style={{ fontSize: 8.5, color: fx.pct < 0 ? C.rose : C.green }}>{fx.pct < 0 ? '▼' : '▲'}{Math.abs(fx.pct).toFixed(2)}%</span>}
+              <span style={{ fontSize: 12.5, fontWeight: 700 }}>{Number(fx.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              {fx.pct != null && <span style={{ fontSize: 9, fontWeight: 700, color: fx.pct < 0 ? C.rose : C.green }}>{fx.pct < 0 ? '▼' : '▲'}{Math.abs(fx.pct).toFixed(2).replace('.', ',')}%</span>}
             </div>
           )) : (
             <div style={{ fontSize: 10, color: C.text3, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -977,6 +1069,19 @@ function MessageThread({ msg, lang, t, onClose, onSave, onDelete }) {
 }
 function MessagesScreen({ items, people, lang, t, setItems, onOpen, toggleTask, addItem, updateItem, delItem, flash }) {
   const [adding, setAdding] = useState(false); const [thread, setThread] = useState(null);
+  const [scan, setScan] = useState({ loading: false, list: null, error: null });
+  const runScan = () => {
+    setScan({ loading: true, list: null, error: null });
+    authFetch('/api/inbox-scan').then((r) => r.json())
+      .then((j) => setScan({ loading: false, list: j.suggestions || [], error: j.error || null }))
+      .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
+  };
+  const acceptSug = (sg) => {
+    const domain = (sg.type === 'flight' || sg.type === 'trip') ? 'travel' : sg.type === 'bill' ? 'finance' : 'personal';
+    addItem({ type: sg.type, domain, title: sg.title, date: sg.date, time: sg.time, amount: sg.amount, meta: { ...(sg.meta || {}), fromEmail: true } });
+    setScan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
+    flash(t('savedOne'));
+  };
   const msgs = items.filter((i) => i.type === 'message').sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   const triage = items.filter((i) => i.status === 'inbox');
   const unread = msgs.filter((m) => m.meta && m.meta.unread).length;
@@ -985,6 +1090,39 @@ function MessagesScreen({ items, people, lang, t, setItems, onOpen, toggleTask, 
     <div>
       <ScreenTitle title={t('messages')} sub={`${unread} ${t('unread')}`} />
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('t_message')}</Btn>
+      <div style={{ ...card, padding: 12, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <Sparkles size={16} style={{ color: C.accent, flexShrink: 0 }} />
+        <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{t('suggestions')}</span>
+        <Btn kind="soft" onClick={runScan} disabled={scan.loading} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+          {scan.loading ? <Loader2 size={13} className="spin" /> : <Mail size={13} />}{scan.loading ? t('scanning') : t('scanInbox')}
+        </Btn>
+      </div>
+      {scan.error && <HintCard icon={AlertTriangle} text={scan.error} />}
+      {scan.list && scan.list.length === 0 && !scan.loading && <HintCard icon={Check} text={t('noSuggestions')} />}
+      {scan.list && scan.list.map((sg) => {
+        const Ic = typeIcon(sg.type);
+        return (
+          <div key={sg.key} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <Ic size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{sg.title}</div>
+                <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>
+                  {t('t_' + sg.type)}{sg.date ? ' · ' + fmtDate(sg.date, lang) : ''}{sg.time ? ' ' + sg.time : ''}
+                  {sg.meta && sg.meta.from ? ` · ${sg.meta.from}→${sg.meta.to || ''}` : ''}
+                </div>
+                {sg.why && <div style={{ fontSize: 11, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{sg.why}</div>}
+                {sg.source && sg.source.subject && <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {sg.source.subject}</div>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Btn kind="soft" onClick={() => acceptSug(sg)} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={13} />{t('accept')}</Btn>
+              <Btn kind="ghost" onClick={() => setScan((p) => ({ ...p, list: p.list.filter((x) => x.key !== sg.key) }))} style={{ padding: '7px 12px', fontSize: 12.5 }}>{t('discard')}</Btn>
+              {sg.source && sg.source.link && <a href={sg.source.link} target="_blank" rel="noreferrer" style={{ ...card, padding: '7px 11px', color: C.text2, fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center' }}><Mail size={13} /></a>}
+            </div>
+          </div>
+        );
+      })}
       {triage.length > 0 && (
         <>
           <SectionTitle icon={Sparkles} label={t('toTriage')} color={C.accent} />
@@ -1039,8 +1177,8 @@ function NewsScreen({ lang, t, back }) {
 
 /* ---------------- Calendar ---------------- */
 const CAL_FILTERS = [['all', 'fAll', null], ['work', 'fWork', 'work'], ['personal', 'fPersonal', 'personal'], ['kids', 'fKids', 'kids'], ['house', 'fHouse', 'home'], ['health', 'fHealth', 'health']];
-function CalendarScreen({ items, lang, t, toggleTask, onOpen }) {
-  const [mode, setMode] = useState('week'); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7)); const [filter, setFilter] = useState(null); const [scope, setScope] = useState('all');
+function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh }) {
+  const [mode, setMode] = useState('week'); const [spin, setSpin] = useState(false); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7)); const [filter, setFilter] = useState(null); const [scope, setScope] = useState('all');
   const dated = items.filter((i) => i.date && i.status !== 'done' && i.type !== 'account' && i.type !== 'person' && i.type !== 'message' && (scope === 'all' || ['event', 'appointment', 'flight', 'trip'].includes(i.type)) && (!filter || i.domain === filter));
   const onDay = (iso) => dated.filter((i) => i.date === iso);
   const [y, m] = vm.split('-').map(Number);
@@ -1055,7 +1193,11 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen }) {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 22, fontWeight: 600 }}>{t('calendar')}</div>
-        <div style={{ display: 'flex', gap: 6 }}><Chip active={mode === 'week'} onClick={() => setMode('week')}>{t('week')}</Chip><Chip active={mode === 'month'} onClick={() => setMode('month')}>{t('month')}</Chip></div>
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <Chip active={mode === 'week'} onClick={() => setMode('week')}>{t('week')}</Chip>
+          <Chip active={mode === 'month'} onClick={() => setMode('month')}>{t('month')}</Chip>
+          {onRefresh && <button onClick={() => { setSpin(true); Promise.resolve(onRefresh()).finally(() => setTimeout(() => setSpin(false), 600)); }} title={t('refresh')} style={{ ...card, padding: 7, color: C.text2, cursor: 'pointer', display: 'flex' }}><RefreshCw size={14} className={spin ? 'spin' : ''} /></button>}
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         <Chip active={scope === 'all'} onClick={() => setScope('all')}>{t('everything')}</Chip>
@@ -1091,12 +1233,12 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen }) {
 }
 
 /* ---------------- Dashboard grid + generic module ---------------- */
-function DashboardScreen({ items, lang, t, open }) {
+function DashboardScreen({ items, lang, t, open, gmailCount }) {
   return (
     <div>
       <ScreenTitle title={t('dashboard')} sub={t('yourModules')} />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        {MODULES.map((mo) => { const count = items.filter(mo.filter).length; const Ic = mo.icon; return (
+        {MODULES.map((mo) => { const count = mo.key === 'gmail' ? (gmailCount || 0) : items.filter(mo.filter).length; const Ic = mo.icon; return (
           <button key={mo.key} onClick={() => open(mo)} style={{ ...card, padding: 15, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 92 }}>
             <div style={{ width: 34, height: 34, borderRadius: 10, background: mo.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={18} style={{ color: mo.color }} /></div>
             <div><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
@@ -1213,15 +1355,8 @@ function GmailThread({ m, lang, t, onClose, onAction, onReplied }) {
   );
 }
 
-function GmailScreen({ module, lang, t, back }) {
-  const [state, setState] = useState({ loading: true, connected: false, messages: [] });
+function GmailScreen({ module, lang, t, back, state, setState, load }) {
   const [sel, setSel] = useState(null);
-  const load = () => {
-    setState((p) => ({ ...p, loading: true }));
-    authFetch('/api/gmail').then((r) => r.json()).then((j) => setState({ loading: false, connected: !!j.connected, messages: j.messages || [], error: j.error }))
-      .catch((e) => setState({ loading: false, connected: false, messages: [], error: String(e) }));
-  };
-  useEffect(() => { load(); }, []);
   const act = async (id, action) => {
     setState((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== id) }));
     try { await authFetch('/api/gmail', { method: 'POST', body: JSON.stringify({ id, action }) }); } catch (e) {}
@@ -1522,7 +1657,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 }
 
 /* ---------------- Health dashboard ---------------- */
-function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn }) {
+function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight }) {
   const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const today = todayISO(); const w = health[today] || {};
   const hd = items.filter((i) => i.domain === 'health');
@@ -1542,16 +1677,19 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
         <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} locked={ouraOn} onClick={() => setLogOpen(true)} />
       </div>
       {ouraOn && <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', marginBottom: 8, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{t('ouraSynced')}</div>}
+
+      {ouraOn && (lastSleep ? <SleepCard s={lastSleep} lang={lang} t={t} /> : <div style={{ ...card, padding: 16, marginBottom: 10, color: C.text3, fontSize: 12.5, textAlign: 'center' }}>{t('noSleepData')}</div>)}
       <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
         <MiniStat label={t('weight')} value={profile.weight ? profile.weight + ' kg' : '—'} color={C.rose} small />
         <MiniStat label={t('height')} value={profile.height ? profile.height + ' cm' : '—'} color={C.blue} small />
         <MiniStat label={t('bmi')} value={bmi || '—'} color={C.accent} small />
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
-        <Btn kind="soft" onClick={() => setEditP(true)} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Scale size={14} />{t('editProfile')}</Btn>
+        <Btn kind="soft" onClick={() => setEditP(true)} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Scale size={14} />{t('addWeight')}</Btn>
         <Btn kind="soft" onClick={() => setAdding('appointment')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Stethoscope size={14} />{t('consultations')}</Btn>
         <Btn kind="soft" onClick={() => setAdding('document')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><FileText size={14} />{t('addDoc')}</Btn>
       </div>
+      <WeightHistory weights={weights} lang={lang} t={t} />
       <HintCard icon={Activity} text={t('appleHealth')} />
       {consultas.length > 0 && <><SectionTitle icon={Stethoscope} label={t('consultations')} color={C.rose} />{consultas.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       {treat.length > 0 && <><SectionTitle icon={Pill} label={t('treatments')} color={C.violet} />{treat.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
@@ -1561,8 +1699,104 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       {exams.length === 0 ? <Empty icon={Activity} text={t('nothingHere')} /> : exams.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {support.length > 0 && <><SectionTitle icon={FileText} label={t('support')} color={C.text2} />{support.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
-      {editP && <Modal onClose={() => setEditP(false)}><SheetHead title={t('editProfile')} onClose={() => setEditP(false)} icon={Scale} /><Field label={t('weight') + ' (kg)'}><input type="number" defaultValue={profile.weight || ''} onBlur={(e) => setProfile((p) => ({ ...p, weight: e.target.value }))} style={inputStyle} /></Field><Field label={t('height') + ' (cm)'}><input type="number" defaultValue={profile.height || ''} onBlur={(e) => setProfile((p) => ({ ...p, height: e.target.value }))} style={inputStyle} /></Field><Btn onClick={() => setEditP(false)} style={{ width: '100%' }}>{t('save')}</Btn></Modal>}
+      {editP && <WeightLog lang={lang} t={t} current={profile.weight} onSave={(kg) => { addWeight(kg); setEditP(false); }} onClose={() => setEditP(false)} />}
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'health', meta: {} }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(null); }} />}
+    </div>
+  );
+}
+
+function SleepCard({ s, lang, t }) {
+  const hm = (sec) => (sec == null ? '—' : `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`);
+  const parts = [['deep', s.deep, C.violet, t('deepS')], ['rem', s.rem, C.blue, t('remS')], ['light', s.light, C.teal, t('lightS')], ['awake', s.awake, C.text3, t('awakeS')]];
+  const tot = parts.reduce((a, b) => a + (b[1] || 0), 0) || 1;
+  const phases = typeof s.phases === 'string' ? s.phases.split('') : [];
+  const colorOf = (ch) => (ch === '1' ? C.violet : ch === '2' ? C.teal : ch === '3' ? C.blue : C.surface2);
+  return (
+    <div style={{ ...card, padding: 16, marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+        <span style={{ fontSize: 12.5, color: C.text, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>{t('sleepStages')}</span>
+        <span style={{ fontSize: 11.5, color: C.text2 }}>{t('lastNight')} · {hm(s.total)}</span>
+      </div>
+      {phases.length > 0 && (
+        <div style={{ display: 'flex', gap: 1, height: 46, marginBottom: 12, alignItems: 'stretch' }}>
+          {phases.map((ch, i) => (
+            <div key={i} style={{ flex: 1, display: 'flex', alignItems: ch === '4' ? 'flex-start' : ch === '3' ? 'center' : 'flex-end' }}>
+              <div style={{ width: '100%', height: ch === '1' ? '100%' : ch === '2' ? '58%' : ch === '3' ? '46%' : '26%', background: colorOf(ch), borderRadius: 1 }} />
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', height: 9, borderRadius: 999, overflow: 'hidden', marginBottom: 10 }}>
+        {parts.map(([k, v, col]) => <div key={k} style={{ width: ((v || 0) / tot) * 100 + '%', background: col }} />)}
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+        {parts.map(([k, v, col, label]) => (
+          <div key={k} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 11.5 }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: col }} />
+            <span style={{ color: C.text2 }}>{label}</span>
+            <span style={{ fontWeight: 700 }}>{hm(v)}</span>
+          </div>
+        ))}
+      </div>
+      {(s.efficiency || s.hrLowest || s.hrv) && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+          {s.efficiency != null && <MiniStat label={t('efficiency')} value={s.efficiency + '%'} color={C.green} />}
+          {s.hrLowest != null && <MiniStat label="FC mín" value={s.hrLowest} color={C.rose} />}
+          {s.hrv != null && <MiniStat label="HRV" value={s.hrv} color={C.blue} />}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WeightLog({ lang, t, current, onSave, onClose }) {
+  const [v, setV] = useState(current ? String(current) : '');
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={t('addWeight')} onClose={onClose} icon={Scale} />
+      <Field label={t('weight') + ' (kg)'}>
+        <input type="number" step="0.1" inputMode="decimal" value={v} onChange={(e) => setV(e.target.value)} autoFocus style={{ ...inputStyle, fontSize: 22, fontWeight: 700, textAlign: 'center', padding: '16px 12px' }} />
+      </Field>
+      <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 12, textAlign: 'center' }}>{fmtLong(todayISO(), lang)}</div>
+      <Btn onClick={() => { const n = Number(String(v).replace(',', '.')); if (!isNaN(n) && n > 0) onSave(n); }} disabled={!v} style={{ width: '100%' }}>{t('save')}</Btn>
+      <div style={{ fontSize: 11, color: C.text3, marginTop: 12, textAlign: 'center' }}>{t('heightSettings')}</div>
+    </Modal>
+  );
+}
+
+function WeightHistory({ weights, lang, t }) {
+  const list = (weights || []).slice().sort((a, b) => a.date.localeCompare(b.date));
+  if (list.length < 2) return null;
+  const vals = list.map((x) => x.kg);
+  const min = Math.min(...vals), max = Math.max(...vals);
+  const span = (max - min) || 1;
+  const W = 300, H = 74;
+  const pts = list.map((x, i) => {
+    const px = list.length === 1 ? W / 2 : (i / (list.length - 1)) * W;
+    const py = H - ((x.kg - min) / span) * (H - 14) - 7;
+    return [px, py];
+  });
+  const d = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const area = d + ` L${W},${H} L0,${H} Z`;
+  const first = list[0], last = list[list.length - 1];
+  const delta = last.kg - first.kg;
+  return (
+    <div style={{ ...card, padding: 16, marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+        <span style={{ fontSize: 12.5, color: C.text, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>{t('weightHistory')}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: delta > 0 ? C.rose : delta < 0 ? C.green : C.text2 }}>
+          {delta > 0 ? '+' : ''}{delta.toFixed(1).replace('.', ',')} kg
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 84, display: 'block' }} preserveAspectRatio="none">
+        <path d={area} fill={C.rose + '22'} />
+        <path d={d} fill="none" stroke={C.rose} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+        {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill={C.rose} />)}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5, color: C.text3, marginTop: 6 }}>
+        <span>{fmtDate(first.date, lang)} · {first.kg}kg</span>
+        <span>{fmtDate(last.date, lang)} · {last.kg}kg</span>
+      </div>
     </div>
   );
 }
@@ -1645,7 +1879,7 @@ function PersonDetail({ person, items, people, lang, t, back, backLabel, onOpen,
     <div>
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{backLabel}</button>
       <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
-        <div style={{ width: 56, height: 56, borderRadius: 999, background: (kid ? C.violet : C.sky) + '22', color: kid ? C.violet : C.sky, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700 }}>{initials(person.title)}</div>
+        <Avatar photo={person.meta && person.meta.photo} name={person.title} size={56} color={kid ? C.violet : C.sky} />
         <div style={{ flex: 1 }}><div style={{ fontSize: 20, fontWeight: 600 }}>{person.title}</div><div style={{ fontSize: 13, color: C.text3 }}>{[person.meta && person.meta.relationship, person.meta && person.meta.role].filter(Boolean).join(' · ')}</div></div>
         <button onClick={() => setEditing(true)} style={{ ...card, padding: 8, color: C.text2, cursor: 'pointer' }}><Cog size={15} /></button>
       </div>
@@ -1704,7 +1938,7 @@ function PeopleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('t_person')}</Btn>
       {persons.length === 0 ? <Empty icon={UserRound} text={t('nothingHere')} /> : persons.map((p) => (
         <div key={p.id} onClick={() => setSel(p.id)} style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
-          <div style={{ width: 42, height: 42, borderRadius: 999, background: C.sky + '22', color: C.sky, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, flexShrink: 0 }}>{initials(p.title)}</div>
+          <Avatar photo={p.meta && p.meta.photo} name={p.title} size={42} color={C.sky} />
           <div style={{ flex: 1 }}><div style={{ fontSize: 14.5, fontWeight: 600 }}>{p.title}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{[p.meta && p.meta.relationship, p.meta && p.meta.role].filter(Boolean).join(' · ')}</div></div>
           <ChevronRight size={16} style={{ color: C.text3 }} />
         </div>
@@ -1740,7 +1974,7 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
         const open = linked.filter((i) => i.type === 'task' && i.status !== 'done').length;
         return (
           <div key={p.id} onClick={() => setSel(p.id)} style={{ ...card, padding: 14, marginBottom: 10, display: 'flex', gap: 14, alignItems: 'center', cursor: 'pointer' }}>
-            <div style={{ width: 48, height: 48, borderRadius: 999, background: C.violet + '22', color: C.violet, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, flexShrink: 0 }}>{initials(p.title)}</div>
+            <Avatar photo={p.meta && p.meta.photo} name={p.title} size={48} color={C.violet} />
             <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 600 }}>{p.title}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 2 }}>{linked.length} {t('items')}{open ? ` · ${open} ${t('open').toLowerCase()}` : ''}</div></div>
             <ChevronRight size={16} style={{ color: C.text3 }} />
           </div>
@@ -1753,39 +1987,78 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
 /* ---------------- Travel ---------------- */
 function FlightMap({ flights, lang, t }) {
   const pts = {}; const routes = [];
-  flights.forEach((f) => { const a = ((f.meta && f.meta.from) || '').toUpperCase(), b = ((f.meta && f.meta.to) || '').toUpperCase(); if (AIRPORTS[a] && AIRPORTS[b]) { pts[a] = AIRPORTS[a]; pts[b] = AIRPORTS[b]; routes.push([a, b]); } });
-  const keys = Object.keys(pts); const proj = ([lon, lat]) => [lon + 180, 90 - lat];
+  flights.forEach((f) => {
+    const a = ((f.meta && f.meta.from) || '').toUpperCase(), b = ((f.meta && f.meta.to) || '').toUpperCase();
+    if (AIRPORTS[a] && AIRPORTS[b]) { pts[a] = AIRPORTS[a]; pts[b] = AIRPORTS[b]; routes.push([a, b]); }
+  });
+  const keys = Object.keys(pts);
   if (routes.length === 0) return <div style={{ ...card, padding: 20, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('nothingHere')}</div>;
+
+  // --- Mercator ---
+  const W = 340, H = 220, TS = 256;
+  const lon2x = (lon, z) => ((lon + 180) / 360) * Math.pow(2, z) * TS;
+  const lat2y = (lat, z) => {
+    const r = (lat * Math.PI) / 180;
+    return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * Math.pow(2, z) * TS;
+  };
+
+  const lons = keys.map((k) => pts[k][0]), lats = keys.map((k) => pts[k][1]);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+
+  // zoom que faz tudo caber (com folga)
+  let z = 5;
+  for (let zz = 5; zz >= 0; zz--) {
+    const w = Math.abs(lon2x(maxLon, zz) - lon2x(minLon, zz));
+    const h = Math.abs(lat2y(minLat, zz) - lat2y(maxLat, zz));
+    if (w <= W * 0.82 && h <= H * 0.72) { z = zz; break; }
+    z = 0;
+  }
+  const cx = lon2x((minLon + maxLon) / 2, z), cy = lat2y((minLat + maxLat) / 2, z);
+  const originX = cx - W / 2, originY = cy - H / 2;
+  const px = (lon) => lon2x(lon, z) - originX;
+  const py = (lat) => lat2y(lat, z) - originY;
+
+  // tiles visiveis
+  const n = Math.pow(2, z);
+  const tiles = [];
+  const x0 = Math.floor(originX / TS), x1 = Math.floor((originX + W) / TS);
+  const y0 = Math.max(0, Math.floor(originY / TS)), y1 = Math.min(n - 1, Math.floor((originY + H) / TS));
+  for (let tx = x0; tx <= x1; tx++) {
+    for (let ty = y0; ty <= y1; ty++) {
+      const wrapped = ((tx % n) + n) % n;
+      tiles.push({ key: tx + '_' + ty, x: tx * TS - originX, y: ty * TS - originY, url: `https://tile.openstreetmap.org/${z}/${wrapped}/${ty}.png` });
+    }
+  }
+
   return (
     <div style={{ ...card, padding: 10, marginBottom: 10, overflow: 'hidden' }}>
-      <svg viewBox="0 0 360 180" style={{ width: '100%', display: 'block', background: '#0d1420', borderRadius: 10 }}>
-        {[30, 60, 90, 120, 150, 210, 240, 270, 300, 330].map((x) => <line key={'v' + x} x1={x} y1={0} x2={x} y2={180} stroke="#1b2636" strokeWidth="0.4" />)}
-        {[30, 60, 120, 150].map((y) => <line key={'h' + y} x1={0} y1={y} x2={360} y2={y} stroke="#1b2636" strokeWidth="0.4" />)}
-        <line x1="0" y1="90" x2="360" y2="90" stroke="#223348" strokeWidth="0.6" />
-        {routes.map(([a, b], i) => { const [x1, y1] = proj(pts[a]), [x2, y2] = proj(pts[b]); const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.14 - 5; return <path key={i} d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke={C.accent} strokeWidth="0.9" opacity="0.75" />; })}
-        {keys.map((k) => { const [x, y] = proj(pts[k]); return <g key={k}><circle cx={x} cy={y} r="1.9" fill={C.accent} /><text x={x + 3} y={y + 1.5} fill="#cfd6e0" fontSize="5">{k}</text></g>; })}
-      </svg>
-      <div style={{ fontSize: 10.5, color: C.text3, marginTop: 8, textAlign: 'center' }}>{t('routeMapNote')}</div>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: `${W} / ${H}`, borderRadius: 10, overflow: 'hidden', background: '#0d1420' }}>
+        <div style={{ position: 'absolute', inset: 0, filter: 'grayscale(1) brightness(0.62) contrast(1.12)' }}>
+          {tiles.map((tl) => (
+            <img key={tl.key} src={tl.url} alt="" loading="lazy" referrerPolicy="no-referrer"
+              style={{ position: 'absolute', left: (tl.x / W) * 100 + '%', top: (tl.y / H) * 100 + '%', width: (TS / W) * 100 + '%', height: (TS / H) * 100 + '%' }} />
+          ))}
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          {routes.map(([a, b], i) => {
+            const x1p = px(pts[a][0]), y1p = py(pts[a][1]), x2p = px(pts[b][0]), y2p = py(pts[b][1]);
+            const mx = (x1p + x2p) / 2, my = (y1p + y2p) / 2 - Math.abs(x2p - x1p) * 0.18 - 6;
+            return <path key={i} d={`M${x1p},${y1p} Q${mx},${my} ${x2p},${y2p}`} fill="none" stroke={C.accent} strokeWidth="1.6" opacity="0.9" />;
+          })}
+          {keys.map((k) => (
+            <g key={k}>
+              <circle cx={px(pts[k][0])} cy={py(pts[k][1])} r="3.2" fill={C.accent} stroke="#000" strokeWidth="0.8" />
+              <text x={px(pts[k][0]) + 5} y={py(pts[k][1]) + 3} fill="#fff" fontSize="8" fontWeight="700" style={{ paintOrder: 'stroke', stroke: '#000', strokeWidth: 2 }}>{k}</text>
+            </g>
+          ))}
+        </svg>
+      </div>
+      <div style={{ fontSize: 9.5, color: C.text3, marginTop: 7, textAlign: 'center' }}>© OpenStreetMap · {t('routeMapNote')}</div>
     </div>
   );
 }
-function FlightRow({ f, lang, t, onOpen }) {
-  const mt = f.meta || {};
-  return (
-    <div onClick={() => onOpen(f)} style={{ ...card, padding: '13px 14px', marginBottom: 8, cursor: 'pointer' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><span style={{ fontSize: 16, fontWeight: 700 }}>{(mt.from || '???').toUpperCase()}</span><ArrowRight size={15} style={{ color: C.text3 }} /><span style={{ fontSize: 16, fontWeight: 700 }}>{(mt.to || '???').toUpperCase()}</span></div>
-        {(mt.attachments && mt.attachments.length > 0) && <Ticket size={15} style={{ color: C.accent }} />}
-      </div>
-      <div style={{ display: 'flex', gap: 10, marginTop: 6, flexWrap: 'wrap', fontSize: 11.5, color: C.text3 }}>
-        {mt.airline && <span>{mt.airline}{mt.flightNumber ? ' ' + mt.flightNumber : ''}</span>}
-        {f.date && <span>· {fmtDate(f.date, lang)}{f.time ? ' ' + f.time : ''}</span>}
-        {mt.seat && <span>· {lang === 'pt' ? 'Assento' : 'Seat'} {mt.seat}</span>}
-        {mt.durationMin && <span>· {(mt.durationMin / 60).toFixed(1)}h</span>}
-      </div>
-    </div>
-  );
-}
+
 function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, addItem, updateItem, delItem, flash }) {
   const [editing, setEditing] = useState(false); const [adding, setAdding] = useState(null);
   const mt = trip.meta || {}; const today = todayISO();
@@ -1880,6 +2153,17 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   );
 }
 
+function VehicleAvatar({ mt, size }) {
+  const [src, setSrc] = useState(null);
+  const ph = mt && mt.photo;
+  useEffect(() => { let m = true; if (ph && ph.id) loadAttachment(ph.id).then((x) => { if (m && x) setSrc(x.dataUrl); }); return () => { m = false; }; }, [ph && ph.id]);
+  return (
+    <div style={{ width: size, height: size, borderRadius: size * 0.22, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Car size={size * 0.52} style={{ color: (mt && mt.color) || C.text3 }} />}
+    </div>
+  );
+}
+
 /* ---------------- Cars ---------------- */
 function CarsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
   const [adding, setAdding] = useState(false); const [sel, setSel] = useState(null);
@@ -1894,7 +2178,7 @@ function CarsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
         const mt = v.meta || {};
         return (
           <div key={v.id} onClick={() => setSel(v.id)} style={{ ...card, padding: 14, marginBottom: 10, cursor: 'pointer', display: 'flex', gap: 14, alignItems: 'center' }}>
-            <div style={{ width: 54, height: 54, borderRadius: 12, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Car size={28} style={{ color: mt.color || C.text3 }} /></div>
+            <VehicleAvatar mt={mt} size={54} />
             <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 600 }}>{[mt.make, mt.model].filter(Boolean).join(' ') || v.title}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 2 }}>{[mt.year, mt.plate && mt.plate.toUpperCase()].filter(Boolean).join(' · ')}</div></div>
             {mt.km && <div style={{ fontSize: 12, color: C.teal }}>{Number(mt.km).toLocaleString(loc(lang))} km</div>}
             <ChevronRight size={16} style={{ color: C.text3 }} />
@@ -1918,7 +2202,7 @@ function VehicleDetail({ vehicle, items, people, lang, t, back, onOpen, toggleTa
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{t('cars')}</button>
       <div style={{ ...card, padding: 16, marginBottom: 12 }}>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <div style={{ width: 64, height: 64, borderRadius: 14, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Car size={34} style={{ color: mt.color || C.text3 }} /></div>
+          <VehicleAvatar mt={mt} size={64} />
           <div style={{ flex: 1 }}><div style={{ fontSize: 18, fontWeight: 600 }}>{[mt.make, mt.model].filter(Boolean).join(' ') || vehicle.title}</div><div style={{ fontSize: 12.5, color: C.text3, marginTop: 2 }}>{[mt.year, mt.plate && mt.plate.toUpperCase()].filter(Boolean).join(' · ')}</div>{mt.renavam && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>Renavam {mt.renavam}</div>}</div>
           <button onClick={() => setEditing(true)} style={{ ...card, padding: 8, color: C.text2, cursor: 'pointer' }}><Cog size={15} /></button>
         </div>
@@ -2053,6 +2337,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
     <Modal onClose={onClose}>
       <SheetHead title={t('settings')} onClose={onClose} icon={Cog} />
       <Field label={t('name')}><input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setSettings((s) => ({ ...s, name }))} style={inputStyle} /></Field>
+      <Field label={t('height') + ' (cm)'}><input type="number" value={settings.profile && settings.profile.height || ''} onChange={(e) => setSettings((s) => ({ ...s, profile: { ...(s.profile || {}), height: e.target.value } }))} style={inputStyle} /></Field>
       <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{t('editDock')}</div>
       <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
@@ -2063,7 +2348,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       </div>
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 8px' }}>{t('connections')}</div>
       <Connections lang={lang} t={t} />
-      <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); onClose(); } }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
+      <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); persistSeeded(); onClose(); } }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
       <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
       <input id="lcc-import" type="file" accept="application/json" style={{ display: 'none' }} onChange={async (e) => {
@@ -2073,7 +2358,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
         e.target.value = '';
       }} />
       <Btn kind="ghost" onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{lang === 'pt' ? 'Sair da conta' : 'Sign out'}</Btn>
-      <Btn kind="danger" onClick={() => { if (confirm(t('clearConfirm'))) { setItems([]); onClose(); } }} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Trash2 size={15} />{t('clearData')}</Btn>
+      <Btn kind="danger" onClick={() => { if (confirm(t('clearConfirm'))) { setItems([]); persistSeeded(); onClose(); } }} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Trash2 size={15} />{t('clearData')}</Btn>
       {!hasStore && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 14, textAlign: 'center' }}>{t('noPersist')}</div>}
     </Modal>
   );
@@ -2167,7 +2452,8 @@ function App() {
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
   const [claudeSeed, setClaudeSeed] = useState(null); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
-  const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false);
+  const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
+  const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
@@ -2177,7 +2463,8 @@ function App() {
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); setOuraOn(!!j.connected); }).catch(() => {});
+    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
+    loadGmail();
     authFetch('/api/google').then((r) => r.json()).then((j) => {
       if (!alive || !j) return;
       if (Array.isArray(j.events)) setGEvents(j.events);
@@ -2189,6 +2476,17 @@ function App() {
   useEffect(() => { if (ready) persistItems(items); }, [items, ready]);
   useEffect(() => { if (ready) persistSettings(settings); }, [settings, ready]);
 
+  const loadGmail = () => {
+    setGmail((p) => ({ ...p, loading: true }));
+    authFetch('/api/gmail').then((r) => r.json())
+      .then((j) => setGmail({ loading: false, connected: !!j.connected, messages: j.messages || [], error: j.error || null }))
+      .catch((e) => setGmail({ loading: false, connected: false, messages: [], error: String(e) }));
+  };
+  const refreshGoogle = () => authFetch('/api/google').then((r) => r.json()).then((j) => {
+    if (!j) return;
+    if (Array.isArray(j.events)) setGEvents(j.events);
+    if (Array.isArray(j.messages)) setGMsgs(j.messages);
+  }).catch(() => {});
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2000); };
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2212,6 +2510,11 @@ function App() {
   const delItem = (id) => setItems((p) => p.filter((i) => i.id !== id));
   const setHealth = (fn) => setSettings((s) => ({ ...s, health: typeof fn === 'function' ? fn(s.health || {}) : fn }));
   const setProfile = (fn) => setSettings((s) => ({ ...s, profile: typeof fn === 'function' ? fn(s.profile || {}) : fn }));
+  const addWeight = (kg) => setSettings((s) => {
+    const d = todayISO();
+    const list = (s.weights || []).filter((x) => x.date !== d).concat([{ date: d, kg }]);
+    return { ...s, weights: list.slice(-120), profile: { ...(s.profile || {}), weight: kg } };
+  });
   const setDevices = (fn) => setSettings((s) => ({ ...s, devices: typeof fn === 'function' ? fn(s.devices || DEFAULT_DEVICES) : fn }));
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
   const greeting = () => { const h = new Date().getHours(); return h < 12 ? t('goodMorning') : h < 18 ? t('goodAfternoon') : t('goodEvening'); };
@@ -2228,11 +2531,11 @@ function App() {
     if (mo.custom === 'cars') return <CarsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'people') return <PeopleScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
-    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} profile={settings.profile || {}} setProfile={setProfile} />;
+    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
     if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} />;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
-    if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} />;
+    if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} state={gmail} setState={setGmail} load={loadGmail} />;
     return <ModuleScreen module={mo} {...shared} back={back} />;
   };
 
@@ -2250,9 +2553,9 @@ function App() {
         {active.screen === 'home' && <TodayScreen {...shared} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
-        {active.screen === 'calendar' && <CalendarScreen {...shared} />}
+        {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
-        {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={items} lang={lang} t={t} open={(mo) => setActive({ screen: 'dashboard', module: mo })} />)}
+        {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} />)}
       </div>
 
       {active.screen !== 'claude' && (
