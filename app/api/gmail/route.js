@@ -41,10 +41,28 @@ export async function GET(req) {
   if (!token) return Response.json({ connected: false, messages: [] });
 
   const h = { Authorization: `Bearer ${token}` };
+
+  // Diagnostico: quais permissoes o token realmente tem hoje
+  let grantedScopes = null;
+  try {
+    const ti = await fetch('https://oauth2.googleapis.com/tokeninfo?access_token=' + encodeURIComponent(token), { cache: 'no-store' });
+    if (ti.ok) { const tj = await ti.json(); grantedScopes = tj.scope || null; }
+  } catch (e) {}
+
   try {
     const q = encodeURIComponent('is:unread newer_than:1d');
     const r = await fetch(`${G}/messages?q=${q}&maxResults=25`, { headers: h, cache: 'no-store' });
-    if (!r.ok) throw new Error('list HTTP ' + r.status);
+    if (!r.ok) {
+      const txt = await r.text();
+      let detail = txt.slice(0, 400);
+      try {
+        const ej = JSON.parse(txt);
+        const e = ej.error || {};
+        detail = (e.message || '') + (e.status ? ' [' + e.status + ']' : '');
+        if (e.errors && e.errors[0] && e.errors[0].reason) detail += ' (' + e.errors[0].reason + ')';
+      } catch (x) {}
+      throw new Error('HTTP ' + r.status + ' — ' + detail);
+    }
     const j = await r.json();
     const ids = (j.messages || []).map((m) => m.id);
 
