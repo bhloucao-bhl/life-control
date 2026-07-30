@@ -184,7 +184,13 @@ const S = {
   weatherOff: L('Clima indisponível agora.', 'Weather unavailable right now.'), fxOff: L('Cotação indisponível.', 'Rates unavailable.'),
   connections: L('Conexões', 'Connections'), connect: L('Conectar', 'Connect'), disconnect: L('Desconectar', 'Disconnect'),
   connected: L('Conectado', 'Connected'), notConfigured: L('Falta configurar na Vercel', 'Not configured on Vercel'),
-  ouraSynced: L('Oura sincronizado', 'Oura synced'), fromGoogle: L('Do Google', 'From Google'),
+  ouraSynced: L('Oura conectado · dados automáticos', 'Oura connected · automatic data'), fromGoogle: L('Google', 'Google'),
+  ouraNoData: L('Sem dado do Oura para hoje ainda.', 'No Oura data for today yet.'),
+  gmail: L('Gmail', 'Gmail'), unread24: L('Não lidos (24h)', 'Unread (24h)'), markRead: L('Marcar lido', 'Mark read'),
+  archive: L('Arquivar', 'Archive'), sendReply: L('Enviar resposta', 'Send reply'), sent: L('Enviado ✓', 'Sent ✓'),
+  gmailEmpty: L('Nenhum e-mail não lido nas últimas 24 horas.', 'No unread email in the last 24 hours.'),
+  gmailConnect: L('Conecte o Gmail em Ajustes → Conexões.', 'Connect Gmail in Settings → Connections.'),
+  writing: L('Escrevendo…', 'Writing…'), openGmail: L('Abrir no Gmail', 'Open in Gmail'),
   externalItem: L('Item externo — edite no app de origem.', 'External item — edit in the source app.'),
   openThere: L('Abrir no app de origem', 'Open in source app'),
   onlyCommitments: L('Compromissos', 'Commitments'), everything: L('Tudo', 'Everything'),
@@ -374,6 +380,7 @@ const MODULES = [
   { key: 'finance', icon: Wallet, color: C.green, filter: (i) => i.domain === 'finance' || i.type === 'expense' || i.type === 'bill' || i.type === 'account', types: ['account', 'expense', 'bill', 'note'], custom: 'finance' },
   { key: 'kids', icon: Users, color: C.violet, filter: (i) => i.domain === 'kids', types: ['appointment', 'event', 'task', 'shopping', 'gift', 'document', 'note'], custom: 'kids' },
   { key: 'people', icon: UserRound, color: C.sky, filter: (i) => i.type === 'person', types: ['person'], custom: 'people' },
+  { key: 'gmail', icon: Mail, color: C.blue, filter: () => false, types: ['message'], custom: 'gmail' },
   { key: 'docs', icon: FileText, color: C.blue, filter: (i) => i.type === 'document' || i.domain === 'docs', types: ['document'], custom: 'docs' },
   { key: 'cars', icon: Car, color: C.teal, filter: (i) => i.domain === 'cars' || i.type === 'vehicle', types: ['vehicle', 'maintenance', 'expense', 'document', 'note'], custom: 'cars' },
   { key: 'travel', icon: Plane, color: C.violet, filter: (i) => i.domain === 'travel' || i.type === 'trip' || i.type === 'flight', types: ['trip', 'flight', 'note'], custom: 'travel' },
@@ -382,7 +389,7 @@ const moduleByKey = (k) => MODULES.find((m) => m.key === k);
 const moduleDomain = (k) => (k === 'house' ? 'home' : k === 'tasks' || k === 'people' ? 'personal' : k);
 
 const SCREEN_ICONS = { home: Sun, messages: MessageSquare, calendar: CalIcon, dashboard: LayoutGrid, claude: Sparkles };
-const DOCKABLE = ['home', 'messages', 'calendar', 'dashboard', 'claude', 'tasks', 'finance', 'health', 'house', 'travel', 'cars', 'kids', 'people', 'docs'];
+const DOCKABLE = ['home', 'messages', 'calendar', 'dashboard', 'claude', 'tasks', 'finance', 'health', 'house', 'travel', 'cars', 'kids', 'people', 'docs', 'gmail'];
 const DEFAULT_DOCK = ['home', 'messages', 'calendar', 'dashboard', 'claude'];
 function navIcon(k) { return SCREEN_ICONS[k] || (moduleByKey(k) ? moduleByKey(k).icon : Circle); }
 function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
@@ -521,6 +528,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen }) {
           {item.person && <span style={{ fontSize: 11.5, color: C.text3 }}>· {item.person}</span>}
           {item.meta && item.meta.attachments && item.meta.attachments.length > 0 && <Paperclip size={11} style={{ color: C.text3 }} />}
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
+          {item.meta && item.meta.external === 'google' && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
         </div>
       </div>
       <ChevronRight size={16} style={{ color: C.text3, marginTop: 2 }} />
@@ -815,10 +823,10 @@ function WeatherCard({ lang, t, wx, loading }) {
 }
 
 /* ---------------- Today ---------------- */
-function ScoreRing({ label, value, color, onClick }) {
+function ScoreRing({ label, value, color, onClick, locked }) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
   return (
-    <button onClick={onClick} style={{ ...card, flex: 1, padding: 12, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+    <button onClick={locked ? undefined : onClick} style={{ ...card, flex: 1, padding: 12, cursor: locked ? 'default' : 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
       <div style={{ width: 62, height: 62, borderRadius: 999, background: value == null ? C.surface2 : `conic-gradient(${color} ${v * 3.6}deg, ${C.surface2} 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ width: 48, height: 48, borderRadius: 999, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 17, fontWeight: 700, color: value == null ? C.text3 : color }}>{value == null ? '–' : value}</div>
       </div>
@@ -846,7 +854,7 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
   useEffect(() => {
@@ -894,10 +902,12 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       </div>
       <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} />
       <div style={{ display: 'flex', gap: 10, margin: '10px 0' }}>
-        <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} onClick={() => setLogOpen(true)} />
-        <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => setLogOpen(true)} />
+        <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} locked={ouraOn} onClick={() => setLogOpen(true)} />
+        <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} locked={ouraOn} onClick={() => setLogOpen(true)} />
       </div>
-      {w.readiness == null && w.sleep == null && <div style={{ fontSize: 11.5, color: C.text3, textAlign: 'center', margin: '-2px 0 12px' }}>{t('connectOura')}</div>}
+      {ouraOn
+        ? <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', margin: '-2px 0 12px', display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{(w.readiness == null && w.sleep == null) ? t('ouraNoData') : t('ouraSynced')}</div>
+        : (w.readiness == null && w.sleep == null) && <div style={{ fontSize: 11.5, color: C.text3, textAlign: 'center', margin: '-2px 0 12px' }}>{t('connectOura')}</div>}
       <WeatherCard lang={lang} t={t} wx={live && live.weather} loading={liveLoading} />
       {balances.length > 0 ? balances.map((b) => <InfoCard key={b.id} icon={CreditCard} title={b.title} sub={t('available')} onClick={() => onOpen(b)} accent right={<span style={{ fontSize: 18, fontWeight: 700, color: C.green }}>{fmtMoney(b.meta.balance, lang)}</span>} />) : <InfoCard icon={CreditCard} title={t('available')} sub={t('addBalance')} onClick={() => goModule('finance')} right={<Plus size={18} style={{ color: C.text3 }} />} />}
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
@@ -933,7 +943,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder={t('askClaude')} onKeyDown={(e) => { if (e.key === 'Enter' && ask.trim()) { openClaude(ask.trim()); setAsk(''); } }} style={{ ...inputStyle, background: 'transparent', border: 'none' }} />
         <Btn onClick={() => { if (ask.trim()) { openClaude(ask.trim()); setAsk(''); } }} disabled={!ask.trim()} style={{ padding: '9px 12px' }}><Send size={15} /></Btn>
       </div>
-      {logOpen && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
+      {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
     </div>
   );
 }
@@ -1153,6 +1163,99 @@ function DocsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
         ? shown.map((x) => <ItemRow key={x.d.id} item={x.d} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)
         : cats.map((ck) => { const g = shown.filter((x) => x.cat === ck); if (!g.length) return null; return <div key={ck}><SectionTitle icon={FileText} label={ck} color={C.blue} />{g.map((x) => <ItemRow key={x.d.id} item={x.d} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</div>; }))}
       {adding && <AddModal title={t('addDoc')} icon={FileText} draft={{ type: 'document', domain: 'docs', meta: {} }} allowedTypes={['document']} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'docs', ...x }); flash(t('savedOne')); setAdding(false); }} />}
+    </div>
+  );
+}
+
+
+/* ---------------- Gmail (cliente simples) ---------------- */
+function GmailThread({ m, lang, t, onClose, onAction, onReplied }) {
+  const [reply, setReply] = useState(''); const [busy, setBusy] = useState(''); const [done, setDone] = useState('');
+  const draft = async () => {
+    setBusy('draft');
+    try {
+      const sys = `Escreva uma resposta breve, cordial e objetiva em ${lang === 'pt' ? 'português do Brasil' : 'US English'} para este e-mail. Devolva apenas o texto da resposta, sem assunto e sem assinatura.`;
+      const r = await callClaude(sys, [{ role: 'user', content: `De: ${m.sender}\nAssunto: ${m.subject}\n\n${m.body}` }]);
+      setReply(r);
+    } catch (e) {}
+    setBusy('');
+  };
+  const send = async () => {
+    if (!reply.trim()) return;
+    setBusy('send');
+    try {
+      const r = await authFetch('/api/gmail', { method: 'POST', body: JSON.stringify({ id: m.id, threadId: m.threadId, to: m.email, subject: m.subject, messageId: m.messageId, references: m.references, reply: reply.trim() }) });
+      const j = await r.json();
+      if (j.ok) { setDone(t('sent')); onReplied(m.id); setTimeout(onClose, 900); }
+      else alert(j.error || 'Erro');
+    } catch (e) { alert(String(e)); }
+    setBusy('');
+  };
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={m.sender} onClose={onClose} icon={Mail} />
+      <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{m.subject}</div>
+      <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 12 }}>{m.email} · {fmtDate(m.date.slice(0, 10), lang)}</div>
+      <div style={{ ...card, padding: 14, marginBottom: 14, fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', maxHeight: 260, overflowY: 'auto' }}>{m.body}</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <Btn kind="soft" onClick={() => { onAction(m.id, 'read'); onClose(); }} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={14} />{t('markRead')}</Btn>
+        <Btn kind="soft" onClick={() => { onAction(m.id, 'archive'); onClose(); }} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Download size={14} />{t('archive')}</Btn>
+        <Btn kind="danger" onClick={() => { if (confirm(t('delete') + '?')) { onAction(m.id, 'trash'); onClose(); } }} style={{ padding: '10px 12px' }}><Trash2 size={14} /></Btn>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{t('reply')}</div>
+      <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={5} style={{ ...inputStyle, resize: 'none', marginBottom: 8 }} />
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn kind="soft" onClick={draft} disabled={busy === 'draft'} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', fontSize: 12.5 }}>{busy === 'draft' ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}{busy === 'draft' ? t('writing') : t('draftReply')}</Btn>
+        <Btn onClick={send} disabled={busy === 'send' || !reply.trim()} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', fontSize: 12.5 }}>{busy === 'send' ? <Loader2 size={14} className="spin" /> : <Send size={14} />}{done || t('sendReply')}</Btn>
+      </div>
+      <a href={m.link} target="_blank" rel="noreferrer" style={{ display: 'block', textAlign: 'center', fontSize: 11.5, color: C.text3, marginTop: 12, textDecoration: 'none' }}>{t('openGmail')} →</a>
+    </Modal>
+  );
+}
+
+function GmailScreen({ module, lang, t, back }) {
+  const [state, setState] = useState({ loading: true, connected: false, messages: [] });
+  const [sel, setSel] = useState(null);
+  const load = () => {
+    setState((p) => ({ ...p, loading: true }));
+    authFetch('/api/gmail').then((r) => r.json()).then((j) => setState({ loading: false, connected: !!j.connected, messages: j.messages || [], error: j.error }))
+      .catch((e) => setState({ loading: false, connected: false, messages: [], error: String(e) }));
+  };
+  useEffect(() => { load(); }, []);
+  const act = async (id, action) => {
+    setState((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== id) }));
+    try { await authFetch('/api/gmail', { method: 'POST', body: JSON.stringify({ id, action }) }); } catch (e) {}
+  };
+  const current = sel && state.messages.find((m) => m.id === sel);
+  return (
+    <div>
+      <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 12.5, color: C.text2 }}>{t('unread24')} · {state.messages.length}</span>
+        <button onClick={load} style={{ ...card, padding: '6px 10px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12 }}>
+          {state.loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}
+        </button>
+      </div>
+      {!state.loading && !state.connected && <HintCard icon={Mail} text={t('gmailConnect')} />}
+      {state.error && <HintCard icon={AlertTriangle} text={state.error} />}
+      {state.loading
+        ? <div style={{ ...card, padding: 26, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={15} className="spin" />…</div>
+        : state.messages.length === 0
+          ? <Empty icon={Mail} text={state.connected ? t('gmailEmpty') : t('nothingHere')} />
+          : state.messages.map((m) => (
+            <div key={m.id} onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: C.blue }}>{initials(m.sender)}</div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sender}</span>
+                  <span style={{ fontSize: 10.5, color: C.text3, flexShrink: 0 }}>{m.date.slice(11, 16)}</span>
+                </div>
+                <div style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</div>
+                <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet}</div>
+              </div>
+            </div>
+          ))}
+      {current && <GmailThread m={current} lang={lang} t={t} onClose={() => setSel(null)} onAction={act} onReplied={(id) => setState((p) => ({ ...p, messages: p.messages.filter((x) => x.id !== id) }))} />}
     </div>
   );
 }
@@ -1419,7 +1522,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 }
 
 /* ---------------- Health dashboard ---------------- */
-function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile }) {
+function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn }) {
   const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const today = todayISO(); const w = health[today] || {};
   const hd = items.filter((i) => i.domain === 'health');
@@ -1435,9 +1538,10 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     <div>
       <ModuleHeader module={module} t={t} back={back} />
       <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-        <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} onClick={() => setLogOpen(true)} />
-        <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => setLogOpen(true)} />
+        <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} locked={ouraOn} onClick={() => setLogOpen(true)} />
+        <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} locked={ouraOn} onClick={() => setLogOpen(true)} />
       </div>
+      {ouraOn && <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', marginBottom: 8, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{t('ouraSynced')}</div>}
       <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
         <MiniStat label={t('weight')} value={profile.weight ? profile.weight + ' kg' : '—'} color={C.rose} small />
         <MiniStat label={t('height')} value={profile.height ? profile.height + ' cm' : '—'} color={C.blue} small />
@@ -1456,7 +1560,7 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       <SectionTitle icon={Activity} label={t('exams')} color={C.blue} />
       {exams.length === 0 ? <Empty icon={Activity} text={t('nothingHere')} /> : exams.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {support.length > 0 && <><SectionTitle icon={FileText} label={t('support')} color={C.text2} />{support.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
-      {logOpen && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
+      {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
       {editP && <Modal onClose={() => setEditP(false)}><SheetHead title={t('editProfile')} onClose={() => setEditP(false)} icon={Scale} /><Field label={t('weight') + ' (kg)'}><input type="number" defaultValue={profile.weight || ''} onBlur={(e) => setProfile((p) => ({ ...p, weight: e.target.value }))} style={inputStyle} /></Field><Field label={t('height') + ' (cm)'}><input type="number" defaultValue={profile.height || ''} onBlur={(e) => setProfile((p) => ({ ...p, height: e.target.value }))} style={inputStyle} /></Field><Btn onClick={() => setEditP(false)} style={{ width: '100%' }}>{t('save')}</Btn></Modal>}
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'health', meta: {} }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(null); }} />}
     </div>
@@ -2063,7 +2167,7 @@ function App() {
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
   const [claudeSeed, setClaudeSeed] = useState(null); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
-  const [ouraByDate, setOuraByDate] = useState({});
+  const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false);
   const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
@@ -2073,7 +2177,7 @@ function App() {
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (alive && j && j.byDate) setOuraByDate(j.byDate); }).catch(() => {});
+    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); setOuraOn(!!j.connected); }).catch(() => {});
     authFetch('/api/google').then((r) => r.json()).then((j) => {
       if (!alive || !j) return;
       if (Array.isArray(j.events)) setGEvents(j.events);
@@ -2124,17 +2228,18 @@ function App() {
     if (mo.custom === 'cars') return <CarsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'people') return <PeopleScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
-    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} profile={settings.profile || {}} setProfile={setProfile} />;
+    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} profile={settings.profile || {}} setProfile={setProfile} />;
     if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} />;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
+    if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} />;
     return <ModuleScreen module={mo} {...shared} back={back} />;
   };
 
   return (
-    <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: 480, margin: '0 auto', position: 'relative', paddingBottom: 78 }}>
+    <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: 480, margin: '0 auto', position: 'relative', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)' }}>
       <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:#16161E}`}</style>
-      <div style={{ padding: '16px 18px 8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div style={{ padding: '16px 18px 8px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life Control</div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={() => setSettings((s) => ({ ...s, lang: s.lang === 'pt' ? 'en' : 'pt' }))} style={{ ...card, padding: '5px 10px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Globe size={13} />{lang.toUpperCase()}</button>
@@ -2142,7 +2247,7 @@ function App() {
         </div>
       </div>
       <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+        {active.screen === 'home' && <TodayScreen {...shared} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} />}
@@ -2151,7 +2256,7 @@ function App() {
       </div>
 
       {active.screen !== 'claude' && (
-        <div style={{ position: 'fixed', bottom: 90, left: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
+        <div style={{ position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)', left: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
           <div style={{ maxWidth: 480, margin: '0 auto', position: 'relative', height: 0 }}>
             <button onClick={() => setShowCapture(true)} style={{ position: 'absolute', right: 18, bottom: 0, pointerEvents: 'auto', background: C.accent, color: '#171200', border: 'none', width: 52, height: 52, borderRadius: 16, cursor: 'pointer', boxShadow: '0 8px 24px rgba(230,180,80,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} /></button>
           </div>
@@ -2159,7 +2264,7 @@ function App() {
       )}
 
       <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(11,11,15,.9)', backdropFilter: 'blur(12px)', borderTop: `1px solid ${C.borderSoft}`, zIndex: 20 }}>
-        <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', justifyContent: 'space-around', padding: '9px 4px 12px' }}>
+        <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', justifyContent: 'space-around', padding: '9px 4px 12px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
           {dock.map((k) => {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
             const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
