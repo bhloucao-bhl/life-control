@@ -1,6 +1,7 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
 
 export const runtime = 'nodejs';
+export const revalidate = 0;
 
 const isoDay = (d) => d.toISOString().slice(0, 10);
 
@@ -94,6 +95,6 @@ export async function GET(req) {
   }
 
   return Response.json({ connected: true, events, messages, errors }, {
-    headers: { 'Cache-Control': 'private, s-maxage=300' },
+    headers: { 'Cache-Control': 'no-store' },
   });
 }
