@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 /* ============================================================
@@ -35,7 +35,12 @@ function installStorage() {
       const user_id = await currentUid(); if (!user_id) return null;
       kvCache.set(key, value);
       const { error } = await supabase.from('kv').upsert({ user_id, key, value, updated_at: new Date().toISOString() }, { onConflict: 'user_id,key' });
-      if (error) { console.error('storage.set', error); return null; }
+      if (error) {
+        console.error('storage.set', key, error);
+        if (typeof window !== 'undefined') window.__lccSaveError = (error.message || String(error));
+        return null;
+      }
+      if (typeof window !== 'undefined') window.__lccSaveError = null;
       return { key, value };
     },
     async delete(key) {
@@ -191,7 +196,9 @@ const S = {
   gmailEmpty: L('Nenhum e-mail não lido nas últimas 24 horas.', 'No unread email in the last 24 hours.'),
   gmailConnect: L('Conecte o Gmail em Ajustes → Conexões.', 'Connect Gmail in Settings → Connections.'),
   writing: L('Escrevendo…', 'Writing…'), openGmail: L('Abrir no Gmail', 'Open in Gmail'),
-  refresh: L('Atualizar', 'Refresh'), rainChance: L('Chance de chuva', 'Rain chance'), humidity: L('Umidade', 'Humidity'),
+  refresh: L('Atualizar', 'Refresh'), mapUnavailable: L('Mapa indisponível no momento.', 'Map unavailable right now.'),
+  deleteContactConfirm: L('Excluir este contato? Esta ação não pode ser desfeita.', 'Delete this contact? This cannot be undone.'),
+  compose: L('Escrever', 'Compose'), newEmail: L('Novo e-mail', 'New email'), to: L('Para', 'To'), subject: L('Assunto', 'Subject'), message: L('Mensagem', 'Message'), send: L('Enviar', 'Send'), rainChance: L('Chance de chuva', 'Rain chance'), humidity: L('Umidade', 'Humidity'),
   wind: L('Vento', 'Wind'), uvIndex: L('Índice UV', 'UV index'), sunriseL: L('Nascer do sol', 'Sunrise'), sunsetL: L('Pôr do sol', 'Sunset'),
   next12h: L('Próximas 12 horas', 'Next 12 hours'), weatherDetail: L('Detalhes do tempo', 'Weather detail'),
   sleepStages: L('Fases do sono', 'Sleep stages'), deepS: L('Profundo', 'Deep'), remS: L('REM', 'REM'), lightS: L('Leve', 'Light'), awakeS: L('Acordado', 'Awake'),
@@ -200,6 +207,9 @@ const S = {
   suggestions: L('Sugestões do seu e-mail', 'Suggestions from your email'), scanInbox: L('Buscar viagens no e-mail', 'Scan email for trips'),
   scanning: L('Lendo e-mails…', 'Reading email…'), noSuggestions: L('Nada novo encontrado.', 'Nothing new found.'),
   addPhoto: L('Foto', 'Photo'), photo: L('Foto', 'Photo'),
+  deleteConfirmGeneric: L('Tem certeza que deseja excluir? Esta ação não pode ser desfeita.', 'Delete this? This cannot be undone.'),
+  composeNew: L('Escrever e-mail', 'Compose'), toField: L('Para', 'To'), subjectField: L('Assunto', 'Subject'),
+  emailBody: L('Mensagem', 'Message'), sendingE: L('Enviando…', 'Sending…'), saveError: L('Erro ao salvar. Tente de novo.', 'Save failed. Try again.'),
   externalItem: L('Item externo — edite no app de origem.', 'External item — edit in the source app.'),
   openThere: L('Abrir no app de origem', 'Open in source app'),
   onlyCommitments: L('Compromissos', 'Commitments'), everything: L('Tudo', 'Everything'),
@@ -409,29 +419,30 @@ const DEFAULT_DEVICES = [
 ];
 
 /* ---------------- storage ---------------- */
+if (typeof window !== 'undefined') { try { installStorage(); } catch (e) {} }
 const STORE_KEY = 'lcc_items_v1', SETTINGS_KEY = 'lcc_settings_v1';
-const hasStore = typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function';
+const hasStore = () => typeof window !== 'undefined' && window.storage && typeof window.storage.get === 'function';
 const memAtt = {};
-async function persistSeeded() { if (hasStore) { try { await window.storage.set('lcc_seeded_v1', '1'); } catch (e) {} } }
+async function persistSeeded() { if (hasStore()) { try { await window.storage.set('lcc_seeded_v1', '1'); } catch (e) {} } }
 async function loadState() {
   let items = [], settings = null, seeded = false;
-  if (hasStore) {
+  if (hasStore()) {
     try { const r = await window.storage.get(STORE_KEY); if (r && r.value) items = JSON.parse(r.value); } catch (e) {}
     try { const r = await window.storage.get(SETTINGS_KEY); if (r && r.value) settings = JSON.parse(r.value); } catch (e) {}
     try { const r = await window.storage.get('lcc_seeded_v1'); if (r && r.value) seeded = true; } catch (e) {}
   }
   return { items, settings, seeded };
 }
-async function persistItems(x) { if (hasStore) { try { await window.storage.set(STORE_KEY, JSON.stringify(x)); } catch (e) {} } }
-async function persistSettings(x) { if (hasStore) { try { await window.storage.set(SETTINGS_KEY, JSON.stringify(x)); } catch (e) {} } }
+async function persistItems(x) { if (hasStore()) { try { await window.storage.set(STORE_KEY, JSON.stringify(x)); } catch (e) {} } }
+async function persistSettings(x) { if (hasStore()) { try { await window.storage.set(SETTINGS_KEY, JSON.stringify(x)); } catch (e) {} } }
 async function saveAttachment(dataUrl, name, kind) {
   const id = 'att_' + uid();
-  if (hasStore) { try { await window.storage.set('lcc_' + id, JSON.stringify({ dataUrl, name, kind })); } catch (e) { memAtt[id] = { dataUrl, name, kind }; } } else memAtt[id] = { dataUrl, name, kind };
+  if (hasStore()) { try { await window.storage.set('lcc_' + id, JSON.stringify({ dataUrl, name, kind })); } catch (e) { memAtt[id] = { dataUrl, name, kind }; } } else memAtt[id] = { dataUrl, name, kind };
   return { id, name, kind };
 }
 async function loadAttachment(id) {
   if (memAtt[id]) return memAtt[id];
-  if (hasStore) { try { const r = await window.storage.get('lcc_' + id); if (r && r.value) return JSON.parse(r.value); } catch (e) {} }
+  if (hasStore()) { try { const r = await window.storage.get('lcc_' + id); if (r && r.value) return JSON.parse(r.value); } catch (e) {} }
   return null;
 }
 function fileToDataUrl(file, maxDim = 1500) {
@@ -1177,7 +1188,8 @@ function NewsScreen({ lang, t, back }) {
 
 /* ---------------- Calendar ---------------- */
 const CAL_FILTERS = [['all', 'fAll', null], ['work', 'fWork', 'work'], ['personal', 'fPersonal', 'personal'], ['kids', 'fKids', 'kids'], ['house', 'fHouse', 'home'], ['health', 'fHealth', 'health']];
-function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh }) {
+function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount }) {
+  useEffect(() => { if (onMount) onMount(); }, []);
   const [mode, setMode] = useState('week'); const [spin, setSpin] = useState(false); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7)); const [filter, setFilter] = useState(null); const [scope, setScope] = useState('all');
   const dated = items.filter((i) => i.date && i.status !== 'done' && i.type !== 'account' && i.type !== 'person' && i.type !== 'message' && (scope === 'all' || ['event', 'appointment', 'flight', 'trip'].includes(i.type)) && (!filter || i.domain === filter));
   const onDay = (iso) => dated.filter((i) => i.date === iso);
@@ -1355,7 +1367,32 @@ function GmailThread({ m, lang, t, onClose, onAction, onReplied }) {
   );
 }
 
+function GmailCompose({ lang, t, onClose }) {
+  const [to, setTo] = useState(''); const [subject, setSubject] = useState(''); const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false); const [done, setDone] = useState('');
+  const send = async () => {
+    if (!to.trim() || !body.trim()) return;
+    setBusy(true);
+    try {
+      const r = await authFetch('/api/gmail', { method: 'POST', body: JSON.stringify({ compose: body.trim(), to: to.trim(), subject: subject.trim() }) });
+      const j = await r.json();
+      if (j.ok) { setDone(t('sent')); setTimeout(onClose, 900); } else alert(j.error || 'Erro');
+    } catch (e) { alert(String(e)); }
+    setBusy(false);
+  };
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={t('newEmail')} onClose={onClose} icon={Mail} />
+      <Field label={t('to')}><input type="email" value={to} onChange={(e) => setTo(e.target.value)} placeholder="alguem@email.com" style={inputStyle} /></Field>
+      <Field label={t('subject')}><input value={subject} onChange={(e) => setSubject(e.target.value)} style={inputStyle} /></Field>
+      <Field label={t('message')}><textarea rows={7} value={body} onChange={(e) => setBody(e.target.value)} style={{ ...inputStyle, resize: 'none' }} /></Field>
+      <Btn onClick={send} disabled={busy || !to.trim() || !body.trim()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>{busy ? <Loader2 size={15} className="spin" /> : <Send size={15} />}{done || t('send')}</Btn>
+    </Modal>
+  );
+}
+
 function GmailScreen({ module, lang, t, back, state, setState, load }) {
+  const [composing, setComposing] = useState(false);
   const [sel, setSel] = useState(null);
   const act = async (id, action) => {
     setState((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== id) }));
@@ -1367,9 +1404,12 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
       <ModuleHeader module={module} t={t} back={back} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <span style={{ fontSize: 12.5, color: C.text2 }}>{t('unread24')} · {state.messages.length}</span>
-        <button onClick={load} style={{ ...card, padding: '6px 10px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12 }}>
-          {state.loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => setComposing(true)} style={{ ...card, padding: '6px 12px', color: C.accent, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12, fontWeight: 600 }}><Plus size={13} />{t('compose')}</button>
+          <button onClick={load} style={{ ...card, padding: '6px 10px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12 }}>
+            {state.loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}
+          </button>
+        </div>
       </div>
       {!state.loading && !state.connected && <HintCard icon={Mail} text={t('gmailConnect')} />}
       {state.error && <HintCard icon={AlertTriangle} text={state.error} />}
@@ -1390,6 +1430,7 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
               </div>
             </div>
           ))}
+      {composing && <GmailCompose lang={lang} t={t} onClose={() => setComposing(false)} />}
       {current && <GmailThread m={current} lang={lang} t={t} onClose={() => setSel(null)} onAction={act} onReplied={(id) => setState((p) => ({ ...p, messages: p.messages.filter((x) => x.id !== id) }))} />}
     </div>
   );
@@ -1661,7 +1702,7 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const today = todayISO(); const w = health[today] || {};
   const hd = items.filter((i) => i.domain === 'health');
-  const consultas = hd.filter((i) => i.type === 'appointment' && i.date && i.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const consultas = hd.filter((i) => i.type === 'appointment' && i.date && i.date >= today).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const treat = hd.filter((i) => i.type === 'med');
   const pharm = hd.filter((i) => i.type === 'expense' && i.amount);
   const pharmTotal = pharm.reduce((a, b) => a + b.amount, 0);
@@ -1922,7 +1963,7 @@ function PersonDetail({ person, items, people, lang, t, back, backLabel, onOpen,
           </div>
         </>
       )}
-      {editing && <Modal onClose={() => setEditing(false)}><SheetHead title={person.title} onClose={() => setEditing(false)} icon={UserRound} /><ItemForm draft={person} allowedTypes={['person']} lang={lang} t={t} people={people} onCancel={() => setEditing(false)} onDelete={() => { delItem(person.id); setEditing(false); back(); }} onSave={(x) => { updateItem(person.id, x); setEditing(false); }} /></Modal>}
+      {editing && <Modal onClose={() => setEditing(false)}><SheetHead title={person.title} onClose={() => setEditing(false)} icon={UserRound} /><ItemForm draft={person} allowedTypes={['person']} lang={lang} t={t} people={people} onCancel={() => setEditing(false)} onDelete={() => { if (confirm(t('deleteContactConfirm'))) { delItem(person.id); setEditing(false); back(); } }} onSave={(x) => { updateItem(person.id, x); setEditing(false); }} /></Modal>}
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: kid ? 'kids' : 'docs', person: person.title, meta: { personId: person.id } }} allowedTypes={[adding]} lang={lang} t={t} people={people} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: kid ? 'kids' : 'docs', ...x, person: person.title, meta: { ...x.meta, personId: person.id } }); flash(t('savedOne')); setAdding(null); }} />}
     </div>
   );
@@ -1985,6 +2026,12 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
 }
 
 /* ---------------- Travel ---------------- */
+class ErrorBoundary extends React.Component {
+  constructor(p) { super(p); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  render() { if (this.state.err) return this.props.fallback || null; return this.props.children; }
+}
+
 function FlightMap({ flights, lang, t }) {
   const pts = {}; const routes = [];
   flights.forEach((f) => {
@@ -1994,11 +2041,12 @@ function FlightMap({ flights, lang, t }) {
   const keys = Object.keys(pts);
   if (routes.length === 0) return <div style={{ ...card, padding: 20, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('nothingHere')}</div>;
 
-  // --- Mercator ---
+  // --- Mercator (com trava de latitude p/ nao gerar Infinity) ---
   const W = 340, H = 220, TS = 256;
+  const clampLat = (lat) => Math.max(-85.05, Math.min(85.05, lat));
   const lon2x = (lon, z) => ((lon + 180) / 360) * Math.pow(2, z) * TS;
   const lat2y = (lat, z) => {
-    const r = (lat * Math.PI) / 180;
+    const r = (clampLat(lat) * Math.PI) / 180;
     return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * Math.pow(2, z) * TS;
   };
 
@@ -2006,27 +2054,30 @@ function FlightMap({ flights, lang, t }) {
   const minLon = Math.min(...lons), maxLon = Math.max(...lons);
   const minLat = Math.min(...lats), maxLat = Math.max(...lats);
 
-  // zoom que faz tudo caber (com folga)
+  // zoom que faz tudo caber (minimo 1 p/ nunca explodir em tiles)
   let z = 5;
-  for (let zz = 5; zz >= 0; zz--) {
+  for (let zz = 5; zz >= 1; zz--) {
     const w = Math.abs(lon2x(maxLon, zz) - lon2x(minLon, zz));
     const h = Math.abs(lat2y(minLat, zz) - lat2y(maxLat, zz));
     if (w <= W * 0.82 && h <= H * 0.72) { z = zz; break; }
-    z = 0;
+    z = 1;
   }
+  const n = Math.pow(2, z);
   const cx = lon2x((minLon + maxLon) / 2, z), cy = lat2y((minLat + maxLat) / 2, z);
-  const originX = cx - W / 2, originY = cy - H / 2;
+  let originX = cx - W / 2, originY = cy - H / 2;
+  // nao deixa a janela sair do mundo verticalmente
+  originY = Math.max(0, Math.min(originY, n * TS - H));
   const px = (lon) => lon2x(lon, z) - originX;
   const py = (lat) => lat2y(lat, z) - originY;
 
-  // tiles visiveis
-  const n = Math.pow(2, z);
+  // tiles visiveis (com teto de seguranca)
   const tiles = [];
   const x0 = Math.floor(originX / TS), x1 = Math.floor((originX + W) / TS);
   const y0 = Math.max(0, Math.floor(originY / TS)), y1 = Math.min(n - 1, Math.floor((originY + H) / TS));
-  for (let tx = x0; tx <= x1; tx++) {
-    for (let ty = y0; ty <= y1; ty++) {
+  for (let tx = x0; tx <= x1 && tiles.length < 40; tx++) {
+    for (let ty = y0; ty <= y1 && tiles.length < 40; ty++) {
       const wrapped = ((tx % n) + n) % n;
+      if (ty < 0 || ty >= n) continue;
       tiles.push({ key: tx + '_' + ty, x: tx * TS - originX, y: ty * TS - originY, url: `https://tile.openstreetmap.org/${z}/${wrapped}/${ty}.png` });
     }
   }
@@ -2092,7 +2143,7 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
       <SectionTitle icon={Paperclip} label={t('reservations')} color={C.accent} />
       {atts.length > 0 ? <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>{atts.map((a) => <AttachThumb key={a.id} att={a} />)}</div> : <Empty icon={Paperclip} text={t('nothingHere')} />}
       <Btn kind="soft" onClick={() => setEditing(true)} style={{ width: '100%', marginTop: 10, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={14} />{t('reservations')}</Btn>
-      {editing && <Modal onClose={() => setEditing(false)}><SheetHead title={mt.destination || trip.title} onClose={() => setEditing(false)} icon={Plane} /><ItemForm draft={trip} allowedTypes={['trip']} lang={lang} t={t} people={people} onCancel={() => setEditing(false)} onDelete={() => { delItem(trip.id); setEditing(false); back(); }} onSave={(x) => { updateItem(trip.id, x); setEditing(false); }} /></Modal>}
+      {editing && <Modal onClose={() => setEditing(false)}><SheetHead title={mt.destination || trip.title} onClose={() => setEditing(false)} icon={Plane} /><ItemForm draft={trip} allowedTypes={['trip']} lang={lang} t={t} people={people} onCancel={() => setEditing(false)} onDelete={() => { if (confirm(t('deleteConfirmGeneric'))) { delItem(trip.id); setEditing(false); back(); } }} onSave={(x) => { updateItem(trip.id, x); setEditing(false); }} /></Modal>}
     </div>
   );
 }
@@ -2101,7 +2152,7 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const flights = items.filter((i) => i.type === 'flight');
   const trips = items.filter((i) => i.type === 'trip').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const today = todayISO();
-  const upcoming = trips.filter((tr) => ((tr.meta && tr.meta.endDate) ? tr.meta.endDate : tr.date) >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const upcoming = trips.filter((tr) => ((tr.meta && tr.meta.endDate) ? tr.meta.endDate : tr.date) >= today).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const nextTrip = upcoming[0];
   const nextDays = nextTrip ? Math.ceil((new Date(nextTrip.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000) : null;
   const year = today.slice(0, 4);
@@ -2130,7 +2181,7 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       {view === 'flights' ? (
         <>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 10 }}><Chip active={period === 'year'} onClick={() => setPeriod('year')}>{t('thisYear')}</Chip><Chip active={period === 'all'} onClick={() => setPeriod('all')}>{t('allTime')}</Chip></div>
-          <FlightMap flights={yf} lang={lang} t={t} />
+          <ErrorBoundary fallback={<div style={{ ...card, padding: 18, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('mapUnavailable')}</div>}><FlightMap flights={yf} lang={lang} t={t} /></ErrorBoundary>
           <HintCard icon={Mail} text={t('travelCrawlNote')} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <MiniStat label={t('flightsCount')} value={yf.length} color={module.color} />
@@ -2221,7 +2272,7 @@ function VehicleDetail({ vehicle, items, people, lang, t, back, onOpen, toggleTa
       {exps.length > 0 && <><SectionTitle icon={Wallet} label={t('expenses')} color={C.green} />{exps.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       {docs.length > 0 && <><SectionTitle icon={FileText} label={t('documents')} color={C.blue} />{docs.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       {linked.length === 0 && <Empty icon={Car} text={t('nothingHere')} />}
-      {editing && <Modal onClose={() => setEditing(false)}><SheetHead title={vehicle.title} onClose={() => setEditing(false)} icon={Car} /><ItemForm draft={vehicle} allowedTypes={['vehicle']} lang={lang} t={t} people={people} onCancel={() => setEditing(false)} onDelete={() => { delItem(vehicle.id); setEditing(false); back(); }} onSave={(x) => { updateItem(vehicle.id, x); setEditing(false); }} /></Modal>}
+      {editing && <Modal onClose={() => setEditing(false)}><SheetHead title={vehicle.title} onClose={() => setEditing(false)} icon={Car} /><ItemForm draft={vehicle} allowedTypes={['vehicle']} lang={lang} t={t} people={people} onCancel={() => setEditing(false)} onDelete={() => { if (confirm(t('deleteConfirmGeneric'))) { delItem(vehicle.id); setEditing(false); back(); } }} onSave={(x) => { updateItem(vehicle.id, x); setEditing(false); }} /></Modal>}
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'cars', meta: { vehicleId: vehicle.id } }} allowedTypes={[adding]} lang={lang} t={t} people={people} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'cars', ...x, meta: { ...x.meta, vehicleId: vehicle.id } }); flash(t('savedOne')); setAdding(null); }} />}
     </div>
   );
@@ -2359,7 +2410,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       }} />
       <Btn kind="ghost" onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{lang === 'pt' ? 'Sair da conta' : 'Sign out'}</Btn>
       <Btn kind="danger" onClick={() => { if (confirm(t('clearConfirm'))) { setItems([]); persistSeeded(); onClose(); } }} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Trash2 size={15} />{t('clearData')}</Btn>
-      {!hasStore && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 14, textAlign: 'center' }}>{t('noPersist')}</div>}
+      {!hasStore() && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 14, textAlign: 'center' }}>{t('noPersist')}</div>}
     </Modal>
   );
 }
@@ -2459,7 +2510,15 @@ function App() {
   const people = items.filter((i) => i.type === 'person');
   const dock = settings.dock && settings.dock.length ? settings.dock : DEFAULT_DOCK;
 
-  useEffect(() => { (async () => { const s = await loadState(); if (s.items && s.items.length) setItems(s.items); else setItems(SEED()); if (s.settings) setSettings((p) => ({ ...p, ...s.settings, health: s.settings.health || {}, profile: s.settings.profile || {}, dock: s.settings.dock || DEFAULT_DOCK, devices: s.settings.devices || DEFAULT_DEVICES })); else setSettings((p) => ({ ...p, ...SEED_SETTINGS })); setReady(true); })(); }, []);
+  useEffect(() => { (async () => {
+    const s = await loadState();
+    if (s.items && s.items.length) setItems(s.items);
+    else if (!s.seeded) { setItems(SEED()); persistSeeded(); }
+    else setItems([]);
+    if (s.settings) setSettings((p) => ({ ...p, ...s.settings, health: s.settings.health || {}, profile: s.settings.profile || {}, dock: s.settings.dock || DEFAULT_DOCK, devices: s.settings.devices || DEFAULT_DEVICES }));
+    else setSettings((p) => ({ ...p, ...SEED_SETTINGS }));
+    setReady(true);
+  })(); }, []);
   useEffect(() => {
     if (!ready) return;
     let alive = true;
@@ -2473,7 +2532,16 @@ function App() {
     return () => { alive = false; };
   }, [ready]);
 
-  useEffect(() => { if (ready) persistItems(items); }, [items, ready]);
+  const saveTimer = useRef();
+  useEffect(() => {
+    if (!ready) return;
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      await persistItems(items);
+      if (typeof window !== 'undefined' && window.__lccSaveError) setToast('Erro ao salvar: ' + window.__lccSaveError);
+    }, 400);
+    return () => clearTimeout(saveTimer.current);
+  }, [items, ready]);
   useEffect(() => { if (ready) persistSettings(settings); }, [settings, ready]);
 
   const loadGmail = () => {
@@ -2482,7 +2550,7 @@ function App() {
       .then((j) => setGmail({ loading: false, connected: !!j.connected, messages: j.messages || [], error: j.error || null }))
       .catch((e) => setGmail({ loading: false, connected: false, messages: [], error: String(e) }));
   };
-  const refreshGoogle = () => authFetch('/api/google').then((r) => r.json()).then((j) => {
+  const refreshGoogle = () => authFetch('/api/google?ts=' + Date.now()).then((r) => r.json()).then((j) => {
     if (!j) return;
     if (Array.isArray(j.events)) setGEvents(j.events);
     if (Array.isArray(j.messages)) setGMsgs(j.messages);
@@ -2498,16 +2566,17 @@ function App() {
     setTimeout(() => setToast(null), 4000);
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
-  const addItems = (arr) => setItems((p) => [...arr.map((x) => ({ id: uid(), createdAt: Date.now(), status: 'planned', currency: 'BRL', meta: {}, ...x })), ...p]);
+  const persistNow = (next) => { persistItems(next).then(() => { if (typeof window !== 'undefined' && window.__lccSaveError) flash(t('saveError')); }); return next; };
+  const addItems = (arr) => setItems((p) => persistNow([...arr.map((x) => ({ id: uid(), createdAt: Date.now(), status: 'planned', currency: 'BRL', meta: {}, ...x })), ...p]));
   const addItem = (x) => addItems([x]);
-  const updateItem = (id, patch) => setItems((p) => p.map((i) => (i.id === id ? { ...i, ...patch } : i)));
+  const updateItem = (id, patch) => setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, ...patch } : i))));
   const toggleTask = (id) => {
     const it = items.find((i) => i.id === id);
-    setItems((p) => p.map((i) => (i.id === id ? { ...i, status: i.status === 'done' ? 'planned' : 'done' } : i)));
+    setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, status: i.status === 'done' ? 'planned' : 'done' } : i))));
     clearTimeout(undoRef.current);
     if (it && it.status !== 'done') { setUndo(id); undoRef.current = setTimeout(() => setUndo(null), 3200); } else setUndo(null);
   };
-  const delItem = (id) => setItems((p) => p.filter((i) => i.id !== id));
+  const delItem = (id) => setItems((p) => persistNow(p.filter((i) => i.id !== id)));
   const setHealth = (fn) => setSettings((s) => ({ ...s, health: typeof fn === 'function' ? fn(s.health || {}) : fn }));
   const setProfile = (fn) => setSettings((s) => ({ ...s, profile: typeof fn === 'function' ? fn(s.profile || {}) : fn }));
   const addWeight = (kg) => setSettings((s) => {
@@ -2553,7 +2622,7 @@ function App() {
         {active.screen === 'home' && <TodayScreen {...shared} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
-        {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} />}
+        {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
         {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} />)}
       </div>
