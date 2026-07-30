@@ -38,7 +38,35 @@ export async function GET(req) {
   await pull('daily_readiness', 'readiness');
   await pull('daily_sleep', 'sleep');
 
-  return Response.json({ connected: true, byDate, errors }, {
+  // Detalhe do sono mais recente: fases + movimento
+  let lastSleep = null;
+  try {
+    const r = await fetch(`https://api.ouraring.com/v2/usercollection/sleep?${q}`, { headers: h, cache: 'no-store' });
+    if (!r.ok) throw new Error('sleep HTTP ' + r.status);
+    const j = await r.json();
+    const rows = (j.data || []).filter((x) => (x.type === 'long_sleep' || x.type === 'sleep'));
+    const last = rows.sort((a, b) => String(a.bedtime_start).localeCompare(String(b.bedtime_start))).pop();
+    if (last) {
+      lastSleep = {
+        day: last.day,
+        start: last.bedtime_start,
+        end: last.bedtime_end,
+        total: last.total_sleep_duration || null,
+        deep: last.deep_sleep_duration || null,
+        rem: last.rem_sleep_duration || null,
+        light: last.light_sleep_duration || null,
+        awake: last.awake_time || null,
+        efficiency: last.efficiency || null,
+        hrLowest: last.lowest_heart_rate || null,
+        hrAvg: last.average_heart_rate || null,
+        hrv: last.average_hrv || null,
+        // hipnograma: 1=deep 2=light 3=rem 4=awake
+        phases: last.sleep_phase_5_min || null,
+      };
+    }
+  } catch (e) { errors.push(String(e.message || e)); }
+
+  return Response.json({ connected: true, byDate, lastSleep, errors }, {
     headers: { 'Cache-Control': 'private, s-maxage=900' },
   });
 }
