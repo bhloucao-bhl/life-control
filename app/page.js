@@ -61,6 +61,12 @@ async function importExportedJson(text) {
   return items.length;
 }
 
+async function authFetch(path, opts = {}) {
+  const { data: sess } = await supabase.auth.getSession();
+  const token = sess && sess.session ? sess.session.access_token : '';
+  return fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
+}
+
 /* ============================================================
    Login (e-mail + senha)
    ============================================================ */
@@ -168,7 +174,7 @@ const S = {
   tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
   people: L('Pessoas', 'People'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'),
   readiness: L('Prontidão', 'Readiness'), sleepScore: L('Sono', 'Sleep'),
-  connectOura: L('Conecte o Oura ou toque para registrar hoje.', 'Connect Oura or tap to log today.'),
+  connectOura: L('Conecte o Oura em Ajustes, ou toque para registrar.', 'Connect Oura in Settings, or tap to log.'),
   weather: L('Clima', 'Weather'), weatherSoon: L('Tempo real (open-meteo) na versão no celular.', 'Live weather in the phone version.'),
   news: L('Notícias', 'News'), newsSoon: L('5 principais dos seus temas — entra com o deploy.', 'Top 5 — arrives at deploy.'),
   seeAll: L('Ver todas', 'See all'), newsExample: L('Exemplos. No deploy vira feed real dos seus temas e a manchete abre no navegador.', 'Examples. At deploy this becomes a real feed and headlines open in the browser.'),
@@ -176,6 +182,11 @@ const S = {
   reloadSamples: L('Recarregar dados de exemplo', 'Reload sample data'), reloadConfirm: L('Substituir tudo pelos dados de exemplo?', 'Replace everything with sample data?'),
   weatherLive: L('Tempo real', 'Live'), feels: L('Sensação', 'Feels'),
   weatherOff: L('Clima indisponível agora.', 'Weather unavailable right now.'), fxOff: L('Cotação indisponível.', 'Rates unavailable.'),
+  connections: L('Conexões', 'Connections'), connect: L('Conectar', 'Connect'), disconnect: L('Desconectar', 'Disconnect'),
+  connected: L('Conectado', 'Connected'), notConfigured: L('Falta configurar na Vercel', 'Not configured on Vercel'),
+  ouraSynced: L('Oura sincronizado', 'Oura synced'), fromGoogle: L('Do Google', 'From Google'),
+  externalItem: L('Item externo — edite no app de origem.', 'External item — edit in the source app.'),
+  openThere: L('Abrir no app de origem', 'Open in source app'),
   onlyCommitments: L('Compromissos', 'Commitments'), everything: L('Tudo', 'Everything'),
   exams: L('Últimos exames', 'Recent exams'), support: L('Suporte (carteirinhas, vacinação)', 'Support (cards, vaccination)'),
   myKids: L('Minha prole', 'My kids'),
@@ -1852,6 +1863,13 @@ function ItemView({ item, lang, t, onAct }) {
         {item.person && <span style={{ ...card, padding: '7px 11px', fontSize: 12.5, display: 'inline-flex', gap: 6, alignItems: 'center' }}><UserRound size={13} style={{ color: C.text3 }} />{item.person}</span>}
         {done && <span style={{ ...card, padding: '7px 11px', fontSize: 12.5, color: C.green, display: 'inline-flex', gap: 5, alignItems: 'center' }}><CircleCheck size={13} />{t('doneLabel')}</span>}
       </div>
+      {mt.external && (
+        <div style={{ ...card, padding: 12, marginBottom: 12, background: C.bg2, display: 'flex', gap: 9, alignItems: 'center' }}>
+          <Globe size={14} style={{ color: C.text3, flexShrink: 0 }} />
+          <span style={{ fontSize: 11.5, color: C.text3, flex: 1, lineHeight: 1.45 }}>{t('externalItem')}</span>
+          {mt.link && <a href={mt.link} target="_blank" rel="noreferrer" style={{ fontSize: 11.5, color: C.accent, textDecoration: 'none', whiteSpace: 'nowrap' }}>{t('openThere')} →</a>}
+        </div>
+      )}
       {actions.length > 0 && <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>{actions.map((a, i) => <Btn key={i} kind={a.primary ? 'primary' : 'soft'} onClick={a.on} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><a.icon size={15} />{a.label}</Btn>)}</div>}
       {rows.length > 0 && <div style={{ ...card, padding: 4, marginBottom: 12 }}>{rows.map(([l, v], i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 12px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none' }}><span style={{ fontSize: 12.5, color: C.text3 }}>{l}</span><span style={{ fontSize: 13, textAlign: 'right' }}>{v}</span></div>)}</div>}
       {item.notes && <div style={{ ...card, padding: 14, marginBottom: 12, fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{item.notes}</div>}
@@ -1866,7 +1884,7 @@ function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct })
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{t('t_' + item.type)}</div>
         <div style={{ display: 'flex', gap: 6 }}>
-          {!editing && <button onClick={() => setEditing(true)} style={{ ...card, padding: 7, color: C.accent, cursor: 'pointer' }}><Pencil size={15} /></button>}
+          {!editing && !(item.meta && item.meta.external) && <button onClick={() => setEditing(true)} style={{ ...card, padding: 7, color: C.accent, cursor: 'pointer' }}><Pencil size={15} /></button>}
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer' }}><X size={20} /></button>
         </div>
       </div>
@@ -1878,6 +1896,50 @@ function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct })
 }
 
 /* ---------------- Settings ---------------- */
+function Connections({ lang, t }) {
+  const [st, setSt] = useState(null); const [busy, setBusy] = useState('');
+  const load = () => authFetch('/api/connect').then((r) => r.json()).then(setSt).catch(() => setSt({}));
+  useEffect(() => { load(); }, []);
+  const start = async (provider) => {
+    setBusy(provider);
+    try {
+      const r = await authFetch('/api/connect', { method: 'POST', body: JSON.stringify({ provider }) });
+      const j = await r.json();
+      if (j.url) window.location.href = j.url; else { alert(j.error || 'Erro'); setBusy(''); }
+    } catch (e) { alert(String(e)); setBusy(''); }
+  };
+  const stop = async (provider) => {
+    if (!confirm(t('disconnect') + '?')) return;
+    await authFetch('/api/connect?provider=' + provider, { method: 'DELETE' });
+    load();
+  };
+  const Row = ({ id, label, icon: Ic, color }) => {
+    const c = st && st[id];
+    const on = c && c.connected;
+    return (
+      <div style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 11, alignItems: 'center' }}>
+        <div style={{ width: 32, height: 32, borderRadius: 9, background: color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ic size={16} style={{ color }} /></div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{label}</div>
+          <div style={{ fontSize: 11, color: on ? C.green : C.text3, marginTop: 1 }}>
+            {on ? t('connected') : (c && c.configured === false ? t('notConfigured') : '—')}
+          </div>
+        </div>
+        {on
+          ? <Btn kind="ghost" onClick={() => stop(id)} style={{ padding: '6px 12px', fontSize: 12 }}>{t('disconnect')}</Btn>
+          : <Btn kind="soft" onClick={() => start(id)} disabled={busy === id} style={{ padding: '6px 12px', fontSize: 12 }}>{busy === id ? '…' : t('connect')}</Btn>}
+      </div>
+    );
+  };
+  if (!st) return <div style={{ ...card, padding: 14, marginBottom: 10, color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center' }}><Loader2 size={13} className="spin" />…</div>;
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
+      <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
+    </div>
+  );
+}
+
 function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClose }) {
   const [name, setName] = useState(settings.name);
   const dock = settings.dock || DEFAULT_DOCK;
@@ -1895,6 +1957,8 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
           <button key={k} onClick={() => toggleDock(k)} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '7px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, background: on ? C.accentSoft : 'transparent', color: on ? C.accent : C.text2, border: `1px solid ${on ? C.accent + '55' : C.border}` }}><Ic size={14} />{navLabel(k, t)}</button>
         ); })}
       </div>
+      <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 8px' }}>{t('connections')}</div>
+      <Connections lang={lang} t={t} />
       <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); onClose(); } }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
       <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
@@ -1999,15 +2063,39 @@ function App() {
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
   const [claudeSeed, setClaudeSeed] = useState(null); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
+  const [ouraByDate, setOuraByDate] = useState({});
+  const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
   const dock = settings.dock && settings.dock.length ? settings.dock : DEFAULT_DOCK;
 
   useEffect(() => { (async () => { const s = await loadState(); if (s.items && s.items.length) setItems(s.items); else setItems(SEED()); if (s.settings) setSettings((p) => ({ ...p, ...s.settings, health: s.settings.health || {}, profile: s.settings.profile || {}, dock: s.settings.dock || DEFAULT_DOCK, devices: s.settings.devices || DEFAULT_DEVICES })); else setSettings((p) => ({ ...p, ...SEED_SETTINGS })); setReady(true); })(); }, []);
+  useEffect(() => {
+    if (!ready) return;
+    let alive = true;
+    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (alive && j && j.byDate) setOuraByDate(j.byDate); }).catch(() => {});
+    authFetch('/api/google').then((r) => r.json()).then((j) => {
+      if (!alive || !j) return;
+      if (Array.isArray(j.events)) setGEvents(j.events);
+      if (Array.isArray(j.messages)) setGMsgs(j.messages);
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, [ready]);
+
   useEffect(() => { if (ready) persistItems(items); }, [items, ready]);
   useEffect(() => { if (ready) persistSettings(settings); }, [settings, ready]);
 
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2000); };
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const q = new URLSearchParams(window.location.search);
+    const conn = q.get('conn');
+    if (!conn) return;
+    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : 'Google conectado ✓';
+    setToast(q.get('ok') ? okMsg : 'Erro: ' + (q.get('erro') || ''));
+    setTimeout(() => setToast(null), 4000);
+    window.history.replaceState({}, '', window.location.pathname);
+  }, []);
   const addItems = (arr) => setItems((p) => [...arr.map((x) => ({ id: uid(), createdAt: Date.now(), status: 'planned', currency: 'BRL', meta: {}, ...x })), ...p]);
   const addItem = (x) => addItems([x]);
   const updateItem = (id, patch) => setItems((p) => p.map((i) => (i.id === id ? { ...i, ...patch } : i)));
@@ -2027,14 +2115,16 @@ function App() {
 
   if (!ready) return <div style={{ background: C.bg, color: C.text3, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="spin" size={22} /></div>;
 
-  const shared = { items, people, lang, t, toggleTask, onOpen: setDetail, addItem, updateItem, delItem, flash };
+  const allItems = (gEvents.length || gMsgs.length) ? [...items, ...gEvents, ...gMsgs] : items;
+  const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
+  const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, updateItem, delItem, flash };
   const renderModule = (mo) => {
     const back = () => setActive({ screen: 'dashboard', module: null });
     if (mo.custom === 'travel') return <TravelScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'cars') return <CarsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'people') return <PeopleScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
-    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={settings.health || {}} setHealth={setHealth} profile={settings.profile || {}} setProfile={setProfile} />;
+    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} profile={settings.profile || {}} setProfile={setProfile} />;
     if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} />;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -2052,11 +2142,11 @@ function App() {
         </div>
       </div>
       <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} greeting={greeting} name={settings.name} addItems={addItems} health={settings.health || {}} setHealth={setHealth} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+        {active.screen === 'home' && <TodayScreen {...shared} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} />}
-        {active.screen === 'claude' && <ClaudeScreen items={items} lang={lang} t={t} name={settings.name} />}
+        {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
         {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={items} lang={lang} t={t} open={(mo) => setActive({ screen: 'dashboard', module: mo })} />)}
       </div>
 
@@ -2073,7 +2163,7 @@ function App() {
           {dock.map((k) => {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
             const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
-            const badge = k === 'messages' ? items.filter((i) => i.type === 'message' && i.meta && i.meta.unread).length + items.filter((i) => i.status === 'inbox').length : 0;
+            const badge = k === 'messages' ? allItems.filter((i) => i.type === 'message' && i.meta && i.meta.unread).length + allItems.filter((i) => i.status === 'inbox').length : 0;
             return <button key={k} onClick={() => navTo(k)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, position: 'relative', padding: '2px 8px' }}>
               <Ic size={21} /><span style={{ fontSize: 10.5 }}>{navLabel(k, t)}</span>
               {badge > 0 && <span style={{ position: 'absolute', top: -3, right: 4, background: C.rose, color: '#fff', fontSize: 9, borderRadius: 999, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{badge}</span>}
@@ -2086,7 +2176,7 @@ function App() {
       {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} onClose={() => setShowSettings(false)} />}
       {detail && <ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} />}
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
-      {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={items} lang={lang} t={t} name={settings.name} />}
+      {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap' }}>{toast}</div>}
     </div>
   );
