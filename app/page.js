@@ -172,9 +172,10 @@ const S = {
   weather: L('Clima', 'Weather'), weatherSoon: L('Tempo real (open-meteo) na versão no celular.', 'Live weather in the phone version.'),
   news: L('Notícias', 'News'), newsSoon: L('5 principais dos seus temas — entra com o deploy.', 'Top 5 — arrives at deploy.'),
   seeAll: L('Ver todas', 'See all'), newsExample: L('Exemplos. No deploy vira feed real dos seus temas e a manchete abre no navegador.', 'Examples. At deploy this becomes a real feed and headlines open in the browser.'),
-  openBrowser: L('Abrir no navegador', 'Open in browser'), fxHint: L('Cotação estática (exemplo). Atualização automática entra no deploy.', 'Static sample rate. Live updates arrive at deploy.'),
+  openBrowser: L('Abrir no navegador', 'Open in browser'), fxHint: L('Cotação comercial, atualizada automaticamente.', 'Market rate, updated automatically.'),
   reloadSamples: L('Recarregar dados de exemplo', 'Reload sample data'), reloadConfirm: L('Substituir tudo pelos dados de exemplo?', 'Replace everything with sample data?'),
-  weatherLive: L('Exemplo · tempo real no deploy.', 'Example · live at deploy.'), feels: L('Sensação', 'Feels'),
+  weatherLive: L('Tempo real', 'Live'), feels: L('Sensação', 'Feels'),
+  weatherOff: L('Clima indisponível agora.', 'Weather unavailable right now.'), fxOff: L('Cotação indisponível.', 'Rates unavailable.'),
   onlyCommitments: L('Compromissos', 'Commitments'), everything: L('Tudo', 'Everything'),
   exams: L('Últimos exames', 'Recent exams'), support: L('Suporte (carteirinhas, vacinação)', 'Support (cards, vaccination)'),
   myKids: L('Minha prole', 'My kids'),
@@ -282,7 +283,6 @@ function resolveFlight(code) {
 const CAR_COLORS = [['#454545', 'Preto', 'Black'], ['#C7CBD1', 'Prata', 'Silver'], ['#E8E8EA', 'Branco', 'White'], ['#5B8DEF', 'Azul', 'Blue'], ['#E5544B', 'Vermelho', 'Red'], ['#8A8F98', 'Cinza', 'Gray'], ['#4CAF7D', 'Verde', 'Green'], ['#C9A227', 'Dourado', 'Gold']];
 const CHANNELS = { email: { icon: Mail, color: C.blue, label: 'E-mail' }, whatsapp: { icon: MessageCircle, color: C.green, label: 'WhatsApp' }, teams: { icon: Users, color: C.violet, label: 'Teams' }, sms: { icon: MessageSquare, color: C.text2, label: 'SMS' } };
 const ACCOUNT_KINDS = [['checking', 'Conta corrente', 'Checking'], ['credit', 'Cartão de crédito', 'Credit'], ['investment', 'Investimento', 'Investment'], ['benefit', 'Benefício', 'Benefit']];
-const CURRENCY = [{ code: 'USD', value: 5.42, delta: -0.4 }, { code: 'EUR', value: 5.87, delta: 0.2 }];
 const NEWS = [
   { source: 'G1', cat: 'Brasil', title: 'Manchete nacional em destaque do dia (exemplo)', url: 'https://g1.globo.com' },
   { source: 'Estadão', cat: 'Economia', title: 'Mercado: dólar e bolsa no radar dos investidores (exemplo)', url: 'https://www.estadao.com.br/economia' },
@@ -742,28 +742,63 @@ function ClaudeOverlay({ seed, onClose, ...rest }) {
 }
 
 /* ---------------- Weather (sample) ---------------- */
-const WX = { temp: 24, feels: 26, condPt: 'Parcialmente nublado', condEn: 'Partly cloudy', hi: 27, lo: 18, city: 'São Paulo', days: [['Qui', 27, 18, 'sun'], ['Sex', 25, 17, 'cloud'], ['Sáb', 22, 16, 'rain'], ['Dom', 24, 17, 'partly'], ['Seg', 26, 18, 'sun']] };
+/* Codigos WMO do open-meteo -> icone + descricao */
+const WMO = {
+  0: ['sun', 'Céu limpo', 'Clear sky'], 1: ['partly', 'Predominantemente limpo', 'Mainly clear'],
+  2: ['partly', 'Parcialmente nublado', 'Partly cloudy'], 3: ['cloud', 'Nublado', 'Overcast'],
+  45: ['cloud', 'Névoa', 'Fog'], 48: ['cloud', 'Névoa com geada', 'Rime fog'],
+  51: ['rain', 'Garoa leve', 'Light drizzle'], 53: ['rain', 'Garoa', 'Drizzle'], 55: ['rain', 'Garoa forte', 'Dense drizzle'],
+  56: ['rain', 'Garoa congelante', 'Freezing drizzle'], 57: ['rain', 'Garoa congelante', 'Freezing drizzle'],
+  61: ['rain', 'Chuva leve', 'Light rain'], 63: ['rain', 'Chuva', 'Rain'], 65: ['rain', 'Chuva forte', 'Heavy rain'],
+  66: ['rain', 'Chuva congelante', 'Freezing rain'], 67: ['rain', 'Chuva congelante', 'Freezing rain'],
+  71: ['cloud', 'Neve leve', 'Light snow'], 73: ['cloud', 'Neve', 'Snow'], 75: ['cloud', 'Neve forte', 'Heavy snow'],
+  77: ['cloud', 'Grãos de neve', 'Snow grains'],
+  80: ['rain', 'Pancadas leves', 'Light showers'], 81: ['rain', 'Pancadas', 'Showers'], 82: ['rain', 'Pancadas fortes', 'Violent showers'],
+  85: ['cloud', 'Pancadas de neve', 'Snow showers'], 86: ['cloud', 'Pancadas de neve', 'Snow showers'],
+  95: ['rain', 'Trovoada', 'Thunderstorm'], 96: ['rain', 'Trovoada com granizo', 'Thunderstorm, hail'], 99: ['rain', 'Trovoada com granizo', 'Thunderstorm, hail'],
+};
+function wmo(code, lang) { const e = WMO[code] || WMO[3]; return { kind: e[0], label: lang === 'pt' ? e[1] : e[2] }; }
 function wxIcon(k) { return k === 'sun' ? Sun : k === 'rain' ? CloudRain : k === 'cloud' ? Cloud : CloudSun; }
-function WeatherCard({ lang, t }) {
+
+function WeatherCard({ lang, t, wx, loading }) {
+  if (!wx) {
+    return (
+      <div style={{ ...card, padding: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, color: C.text3 }}>
+        {loading ? <Loader2 size={16} className="spin" /> : <CloudSun size={16} />}
+        <span style={{ fontSize: 12.5 }}>{loading ? t('thinking') : t('weatherOff')}</span>
+      </div>
+    );
+  }
+  const now = wmo(wx.code, lang);
+  const NowIcon = wxIcon(now.kind);
   return (
     <div style={{ ...card, padding: 14, marginBottom: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <CloudSun size={32} style={{ color: C.accent }} />
-          <div><div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{WX.temp}°</div><div style={{ fontSize: 12, color: C.text3, marginTop: 3 }}>{lang === 'pt' ? WX.condPt : WX.condEn} · {WX.city}</div></div>
+          <NowIcon size={32} style={{ color: C.accent }} />
+          <div>
+            <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{wx.temp}°</div>
+            <div style={{ fontSize: 12, color: C.text3, marginTop: 3 }}>{now.label}</div>
+          </div>
         </div>
-        <div style={{ textAlign: 'right', fontSize: 11.5, color: C.text3, lineHeight: 1.6 }}><div>{t('feels')} {WX.feels}°</div><div>↑{WX.hi}° ↓{WX.lo}°</div></div>
+        <div style={{ textAlign: 'right', fontSize: 11.5, color: C.text3, lineHeight: 1.6 }}>
+          {wx.feels != null && <div>{t('feels')} {wx.feels}°</div>}
+          <div>↑{wx.hi}° ↓{wx.lo}°</div>
+        </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-        {WX.days.map((d, i) => { const I = wxIcon(d[3]); return (
-          <div key={i} style={{ flex: 1, textAlign: 'center', background: C.bg2, borderRadius: 10, padding: '8px 2px' }}>
-            <div style={{ fontSize: 10, color: C.text3 }}>{d[0]}</div>
-            <I size={16} style={{ color: C.text2, margin: '5px auto' }} />
-            <div style={{ fontSize: 10.5 }}>{d[1]}°<span style={{ color: C.text3 }}> {d[2]}°</span></div>
-          </div>
-        ); })}
+        {(wx.days || []).slice(1, 6).map((d, i) => {
+          const I = wxIcon(wmo(d.code, lang).kind);
+          const wd = WD[lang][new Date(d.date + 'T00:00:00').getDay()];
+          return (
+            <div key={i} style={{ flex: 1, textAlign: 'center', background: C.bg2, borderRadius: 10, padding: '8px 2px' }}>
+              <div style={{ fontSize: 10, color: C.text3 }}>{wd}</div>
+              <I size={16} style={{ color: C.text2, margin: '5px auto' }} />
+              <div style={{ fontSize: 10.5 }}>{d.hi}°<span style={{ color: C.text3 }}> {d.lo}°</span></div>
+            </div>
+          );
+        })}
       </div>
-      <div style={{ fontSize: 10.5, color: C.text3, marginTop: 9, textAlign: 'center' }}>{t('weatherLive')}</div>
     </div>
   );
 }
@@ -802,6 +837,23 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
 }
 function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
+  const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
+  useEffect(() => {
+    let alive = true;
+    const load = (lat, lon) => {
+      const q = lat != null ? `?lat=${lat}&lon=${lon}` : '';
+      fetch('/api/live' + q).then((r) => r.json()).then((j) => { if (alive) { setLive(j); setLiveLoading(false); } })
+        .catch(() => { if (alive) setLiveLoading(false); });
+    };
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (p) => load(p.coords.latitude.toFixed(3), p.coords.longitude.toFixed(3)),
+        () => load(null, null),
+        { timeout: 4000, maximumAge: 600000 }
+      );
+    } else load(null, null);
+    return () => { alive = false; };
+  }, []);
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const attention = items.filter((i) => i.type === 'task' && i.status !== 'done' && (i.priority === 1 || (i.date && i.date < today)));
   const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
@@ -815,14 +867,18 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <div style={{ fontSize: 26, fontWeight: 300, letterSpacing: '-.02em' }}>{greeting()}, <span style={{ fontWeight: 600 }}>{name}</span>.</div>
           <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2, textTransform: 'capitalize' }}>{fmtLong(today, lang)}</div>
         </div>
-        <div title={t('fxHint')} style={{ ...card, padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-          {CURRENCY.map((fx) => (
+        <div title={t('fxHint')} style={{ ...card, padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, minWidth: 104 }}>
+          {live && live.fx ? live.fx.map((fx) => (
             <div key={fx.code} style={{ display: 'flex', gap: 7, alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: 10, color: C.text3, fontWeight: 600 }}>{fx.code}</span>
               <span style={{ fontSize: 12.5, fontWeight: 700 }}>{fmtMoney(fx.value, lang)}</span>
-              <span style={{ fontSize: 8.5, color: fx.delta < 0 ? C.rose : C.green }}>{fx.delta < 0 ? '▼' : '▲'}</span>
+              <span style={{ fontSize: 8.5, color: fx.pct < 0 ? C.rose : C.green }}>{fx.pct < 0 ? '▼' : '▲'}{Math.abs(fx.pct).toFixed(2)}%</span>
             </div>
-          ))}
+          )) : (
+            <div style={{ fontSize: 10, color: C.text3, display: 'flex', alignItems: 'center', gap: 5 }}>
+              {liveLoading ? <Loader2 size={11} className="spin" /> : null}{liveLoading ? 'USD · EUR' : t('fxOff')}
+            </div>
+          )}
         </div>
       </div>
       <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} />
@@ -831,7 +887,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => setLogOpen(true)} />
       </div>
       {w.readiness == null && w.sleep == null && <div style={{ fontSize: 11.5, color: C.text3, textAlign: 'center', margin: '-2px 0 12px' }}>{t('connectOura')}</div>}
-      <WeatherCard lang={lang} t={t} />
+      <WeatherCard lang={lang} t={t} wx={live && live.weather} loading={liveLoading} />
       {balances.length > 0 ? balances.map((b) => <InfoCard key={b.id} icon={CreditCard} title={b.title} sub={t('available')} onClick={() => onOpen(b)} accent right={<span style={{ fontSize: 18, fontWeight: 700, color: C.green }}>{fmtMoney(b.meta.balance, lang)}</span>} />) : <InfoCard icon={CreditCard} title={t('available')} sub={t('addBalance')} onClick={() => goModule('finance')} right={<Plus size={18} style={{ color: C.text3 }} />} />}
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
