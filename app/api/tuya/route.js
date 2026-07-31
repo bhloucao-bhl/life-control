@@ -108,8 +108,20 @@ async function irDiscover() {
 
 
 /** Lista as teclas disponiveis de um controle IR (TV/STB) */
+async function irRemoteMeta(infrared_id, remote_id) {
+  // acha category_id e remote_index do controle na lista de remotes do hub
+  try {
+    const rr = await tuya('GET', `/v2.0/infrareds/${infrared_id}/remotes`);
+    if (rr.success) {
+      const found = (rr.result || []).find((r) => r.remote_id === remote_id);
+      if (found) return { category_id: found.category_id, remote_index: found.remote_index, brand_id: found.brand_id };
+    }
+  } catch (e) {}
+  return {};
+}
+
 async function irKeys(infrared_id, remote_id) {
-  // tenta os formatos conhecidos da API Tuya, em ordem
+  const meta = await irRemoteMeta(infrared_id, remote_id);
   const tries = [
     `/v2.0/infrareds/${infrared_id}/remotes/${remote_id}/keys`,
     `/v2.0/infrareds/${infrared_id}/remotes/${remote_id}/learning-codes`,
@@ -121,7 +133,7 @@ async function irKeys(infrared_id, remote_id) {
       const j = await tuya('GET', path);
       if (j.success && j.result) {
         const list = j.result.key_list || j.result.keys || j.result;
-        if (Array.isArray(list) && list.length) return list;
+        if (Array.isArray(list) && list.length) return { keys: list, meta };
       }
       lastMsg = j.msg || lastMsg;
     } catch (e) { lastMsg = String(e.message || e); }
@@ -141,10 +153,18 @@ export async function GET(req) {
     const ir = await irDiscover();
     return Response.json({ configured: true, ...ir });
   }
+  if (sp.get('status')) {
+    try {
+      const j = await tuya('GET', `/v1.0/devices/${sp.get('status')}/status`);
+      return Response.json({ configured: true, status: j.result || j });
+    } catch (e) {
+      return Response.json({ configured: true, error: String(e.message || e) });
+    }
+  }
   if (sp.get('keys')) {
     try {
-      const keys = await irKeys(sp.get('infrared_id'), sp.get('remote_id'));
-      return Response.json({ configured: true, keys });
+      const r = await irKeys(sp.get('infrared_id'), sp.get('remote_id'));
+      return Response.json({ configured: true, keys: r.keys, meta: r.meta || {} });
     } catch (e) {
       return Response.json({ configured: true, keys: [], error: String(e.message || e) });
     }
@@ -175,13 +195,18 @@ export async function POST(req) {
   try {
     // ---- Comando IR de TV / set-top box: usa key ----
     if (body.ir === 'key') {
+      // comando padrao exige categoryId + remoteIndex + key
+      const std = {};
+      if (body.category_id != null) std.categoryId = body.category_id;
+      if (body.remote_index != null) std.remoteIndex = body.remote_index;
+      std.key = body.key;
       const attempts = [
-        ['POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/command`, body.key_id ? { key_id: body.key_id } : { key: body.key }],
-        ['POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/raw/command`, { key: body.key }],
+        ['POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/command`, std],
+        ['POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/raw/command`, body.key_id ? { key_id: body.key_id } : { key: body.key }],
       ];
       let last = 'falhou';
       for (const [m, p, b] of attempts) {
-        try { const j = await tuya(m, p, b); if (j.success) return Response.json({ ok: true }); last = j.msg || last; } catch (e) { last = String(e.message || e); }
+        try { const j = await tuya(m, p, b); if (j.success) return Response.json({ ok: true }); last = 'code ' + j.code + ': ' + (j.msg || ''); } catch (e) { last = String(e.message || e); }
       }
       return Response.json({ error: last }, { status: 500 });
     }
