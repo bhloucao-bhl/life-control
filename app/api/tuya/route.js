@@ -214,14 +214,12 @@ export async function POST(req) {
       const attempts = [
         ['POST', `${base}/command`, full],
         ['POST', `${base}/command`, cat != null ? { categoryId: cat, key: body.key } : { key: body.key }],
-        ['POST', `${base}/raw/command`, body.key_id ? { key_id: body.key_id } : { key: body.key }],
-        ['POST', `${base}/learning-codes/command`, { code: body.key_id || body.key }],
       ];
-      let last = 'falhou';
+      let firstErr = null;
       for (const [m, p, b] of attempts) {
-        try { const j = await tuya(m, p, b); if (j.success) return Response.json({ ok: true }); last = 'code ' + (j.code != null ? j.code : '?') + ': ' + (j.msg || ''); } catch (e) { last = String(e.message || e); }
+        try { const j = await tuya(m, p, b); if (j.success) return Response.json({ ok: true }); if (!firstErr) firstErr = 'code ' + (j.code != null ? j.code : '?') + ': ' + (j.msg || ''); } catch (e) { if (!firstErr) firstErr = String(e.message || e); }
       }
-      return Response.json({ error: last }, { status: 500 });
+      return Response.json({ error: firstErr || 'falhou', key: body.key, sentCategory: cat, sentIndex: idx }, { status: 500 });
     }
     // ---- Comando IR de ar-condicionado ----
     if (body.ir === 'ac') {
@@ -238,9 +236,18 @@ export async function POST(req) {
       return Response.json({ error: last }, { status: 500 });
     }
     // ---- Aparelho normal (tomada, luz) ----
-    const j = await tuya('POST', `/v1.0/devices/${body.deviceId}/commands`, { commands: [{ code: body.code, value: body.value }] });
-    if (!j.success) throw new Error(j.msg || 'comando falhou');
-    return Response.json({ ok: true });
+    // tenta o code informado; se for switch e falhar, tenta variantes comuns de lâmpada
+    const codeVariants = [body.code];
+    if (/^switch/.test(body.code || '')) { ['switch_led', 'switch_1', 'switch'].forEach((c) => { if (!codeVariants.includes(c)) codeVariants.push(c); }); }
+    let lastErr = 'comando falhou';
+    for (const code of codeVariants) {
+      try {
+        const j = await tuya('POST', `/v1.0/devices/${body.deviceId}/commands`, { commands: [{ code, value: body.value }] });
+        if (j.success) return Response.json({ ok: true, usedCode: code });
+        lastErr = 'code ' + (j.code != null ? j.code : '?') + ': ' + (j.msg || '');
+      } catch (e) { lastErr = String(e.message || e); }
+    }
+    return Response.json({ error: lastErr }, { status: 500 });
   } catch (e) {
     return Response.json({ error: String(e.message || e) }, { status: 500 });
   }
