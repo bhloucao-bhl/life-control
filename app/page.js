@@ -438,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v21 · 31jul';
+const APP_VERSION = 'v22 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -581,6 +581,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen }) {
           {item.meta && item.meta.attachments && item.meta.attachments.length > 0 && <Paperclip size={11} style={{ color: C.text3 }} />}
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
           {item.meta && item.meta.external === 'google' && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
+          {item.meta && item.meta.external === 'ticktick' && <span style={{ fontSize: 10, color: C.green, border: `1px solid ${C.green}44`, borderRadius: 999, padding: '1px 7px' }}>TickTick</span>}
         </div>
       </div>
       <ChevronRight size={16} style={{ color: C.text3, marginTop: 2 }} />
@@ -751,8 +752,8 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
     </div>
   );
 }
-function AddModal({ title, icon, draft, allowedTypes, lang, t, people, accounts = [], onClose, onSave }) {
-  return <Modal onClose={onClose}><SheetHead title={title} onClose={onClose} icon={icon} /><ItemForm draft={draft} allowedTypes={allowedTypes} lang={lang} t={t} people={people} accounts={accounts} onCancel={onClose} onSave={onSave} /></Modal>;
+function AddModal({ title, icon, draft, allowedTypes, lang, t, people, accounts = [], onClose, onSave, extraToggle }) {
+  return <Modal onClose={onClose}><SheetHead title={title} onClose={onClose} icon={icon} /><ItemForm draft={draft} allowedTypes={allowedTypes} lang={lang} t={t} people={people} accounts={accounts} onCancel={onClose} onSave={onSave} extraToggle={extraToggle} /></Modal>;
 }
 
 /* ---------------- capture ---------------- */
@@ -1333,8 +1334,8 @@ function ModuleHeader({ module, t, back }) {
   </>;
 }
 const TASK_FILTERS = [['fAll', () => true], ['fWork', (i) => i.domain === 'work'], ['fPersonal', (i) => !['work', 'home', 'kids'].includes(i.domain)], ['fHouse', (i) => i.domain === 'home'], ['fKids', (i) => i.domain === 'kids']];
-function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash }) {
-  const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0);
+function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick }) {
+  const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0); const [toTick, setToTick] = useState(true);
   const base = items.filter(module.filter);
   const list = (module.key === 'tasks' ? base.filter(TASK_FILTERS[tf][1]) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
@@ -1343,12 +1344,23 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
-      {module.key === 'tasks' && <HintCard icon={RefreshCw} text={t('tickHint')} />}
+      {module.key === 'tasks' && ttConnected && (
+        <div style={{ ...card, padding: 12, marginBottom: 12, display: 'flex', gap: 9, alignItems: 'center' }}>
+          <RefreshCw size={15} style={{ color: C.green, flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: 12, color: C.text2 }}>{lang === 'pt' ? 'Sincronizado com o TickTick' : 'Synced with TickTick'}</span>
+          <button onClick={() => reloadTick && reloadTick()} style={{ ...card, padding: '5px 10px', color: C.text2, cursor: 'pointer', fontSize: 11 }}>{t('refresh')}</button>
+        </div>
+      )}
+      {module.key === 'tasks' && !ttConnected && <HintCard icon={RefreshCw} text={t('tickHint')} />}
       {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
       {hi && <div style={{ ...card, padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{hi.label}</span><span style={{ fontSize: 22, fontWeight: 600, color: hi.color }}>{hi.value}</span></div>}
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
       {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
-      {adding && <AddModal title={`${t('quickAdd')} · ${t(module.key)}`} icon={Plus} draft={{ type: module.types[0], domain: moduleDomain(module.key) }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: moduleDomain(module.key), ...x }); flash(t('savedOne')); setAdding(false); }} />}
+      {adding && <AddModal title={`${t('quickAdd')} · ${t(module.key)}`} icon={Plus} draft={{ type: module.types[0], domain: moduleDomain(module.key) }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => {
+        if (module.key === 'tasks' && ttConnected && toTick && x.type === 'task') { onCreateTick && onCreateTick({ title: x.title, notes: x.notes, date: x.date, priority: x.priority === 1 ? 5 : x.priority === 2 ? 3 : 0 }); flash(lang === 'pt' ? 'Criado no TickTick ✓' : 'Created in TickTick ✓'); }
+        else { addItem({ domain: moduleDomain(module.key), ...x }); flash(t('savedOne')); }
+        setAdding(false);
+      }} extraToggle={module.key === 'tasks' && ttConnected ? { label: lang === 'pt' ? 'Criar no TickTick' : 'Create in TickTick', value: toTick, onChange: setToTick } : null} />}
     </div>
   );
 }
@@ -1919,20 +1931,51 @@ function tuyaLabel(device, prefs) {
   return (p && p.alias) ? p.alias : device.name;
 }
 
-function LgCard({ device, host, t, lang, flash }) {
-  const [remote, setRemote] = useState(false);
+function LgCard({ device, host, t, lang, flash, label }) {
+  const [remote, setRemote] = useState(false); const [wash, setWash] = useState(false);
   const isAc = device.type === 'DEVICE_AIR_CONDITIONER';
   const isWasher = device.type === 'DEVICE_WASHER' || device.type === 'DEVICE_DRYER';
   const Ic = isAc ? Wind : isWasher ? RefreshCw : Power;
   return (
     <>
-      <button onClick={() => (isAc && device.online) && setRemote(true)} disabled={!isAc || !device.online} style={{ ...card, padding: 13, textAlign: 'left', cursor: (isAc && device.online) ? 'pointer' : 'default', opacity: device.online ? 1 : 0.55, border: 'none', width: '100%', color: C.text }}>
+      <button onClick={() => { if (!device.online) return; if (isAc) setRemote(true); else setWash(true); }} disabled={!device.online} style={{ ...card, padding: 13, textAlign: 'left', cursor: device.online ? 'pointer' : 'default', opacity: device.online ? 1 : 0.55, border: 'none', width: '100%', color: C.text }}>
         <div style={{ width: 34, height: 34, borderRadius: 9, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: '#A50034' }} /></div>
-        <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{device.name}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label || device.name}</div>
         <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{device.online ? (isAc ? t('openRemote') : (isWasher ? (lang === 'pt' ? 'Ver status' : 'Status') : 'LG')) : t('offline')}</div>
       </button>
       {remote && isAc && <LgAcRemote device={device} host={host} t={t} lang={lang} flash={flash} onClose={() => setRemote(false)} />}
+      {wash && <LgWasherStatus device={device} host={host} label={label} t={t} lang={lang} onClose={() => setWash(false)} />}
     </>
+  );
+}
+
+function LgWasherStatus({ device, host, label, t, lang, onClose }) {
+  const [st, setSt] = useState(null); const [err, setErr] = useState(null);
+  useEffect(() => {
+    authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
+      .then((r) => r.json()).then((j) => { if (j.error) setErr(j.error); else setSt(j.state); }).catch((e) => setErr(String(e)));
+  }, []);
+  // extrai campos comuns de lavadora
+  const run = st && (st.runState || st.operation);
+  const cycle = st && st.cycle;
+  const remain = st && (st.timer || st.remainTime);
+  const rows = [];
+  if (st) {
+    const flat = JSON.stringify(st, null, 1);
+    return (
+      <Modal onClose={onClose}>
+        <SheetHead title={label || device.name} onClose={onClose} icon={RefreshCw} />
+        {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose }}>{err}</div>}
+        <div style={{ ...card, padding: 12, fontSize: 11, fontFamily: 'monospace', maxHeight: 320, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: C.text2 }}>{flat}</div>
+        <div style={{ fontSize: 10.5, color: C.text3, marginTop: 10, textAlign: 'center' }}>{lang === 'pt' ? 'Me diga o que quer ver aqui (tempo restante, ciclo, etc.) que eu formato bonito.' : 'Tell me what to show here.'}</div>
+      </Modal>
+    );
+  }
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={label || device.name} onClose={onClose} icon={RefreshCw} />
+      {err ? <div style={{ ...card, padding: 14, fontSize: 12, color: C.rose }}>{err}</div> : <div style={{ ...card, padding: 24, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center' }}><Loader2 size={15} className="spin" />…</div>}
+    </Modal>
   );
 }
 
@@ -2051,18 +2094,18 @@ function TuyaConfig({ devices, prefs, setPrefs, lang, t, onClose }) {
                 </button>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.alias || d.name}</div>
-                  <div style={{ fontSize: 10, color: C.text3 }}>{d.name} · {d.category}{d.online ? '' : ' · offline'}</div>
+                  <div style={{ fontSize: 10, color: C.text3 }}>{d.brand ? d.brand + ' · ' : ''}{d.name}</div>
                 </div>
               </div>
               {show && (
                 <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
                   <input value={p.alias || ''} onChange={(e) => patch(d.id, { alias: e.target.value })} placeholder={lang === 'pt' ? 'Apelido (ex.: Luz da sala)' : 'Nickname'} style={{ ...inputStyle, padding: '9px 11px', fontSize: 13 }} />
                   <input value={p.room || ''} onChange={(e) => patch(d.id, { room: e.target.value })} placeholder={lang === 'pt' ? 'Cômodo (ex.: Sala, Quarto)' : 'Room'} style={{ ...inputStyle, padding: '9px 11px', fontSize: 13 }} />
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                  {d.brand !== 'LG' && <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                     {kinds.map(([k, lab]) => (
                       <button key={k} onClick={() => patch(d.id, { kind: k })} style={{ padding: '5px 10px', borderRadius: 999, border: `1px solid ${(p.kind || 'auto') === k ? C.accent : C.border}`, background: (p.kind || 'auto') === k ? C.accentSoft : 'transparent', color: (p.kind || 'auto') === k ? C.accent : C.text3, fontSize: 11.5, cursor: 'pointer' }}>{lab}</button>
                     ))}
-                  </div>
+                  </div>}
                 </div>
               )}
             </div>
@@ -2357,36 +2400,50 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <SectionTitle icon={Power} label={t('devices')} color={C.accent} />
-        {tuya.configured && <div style={{ display: 'flex', gap: 6 }}>
-          <button onClick={() => setCfgDev(true)} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}><Cog size={11} />{t('choose')}</button>
-          <button onClick={loadTuya} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>{tuya.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}SmartLife</button>
-        </div>}
+        {(tuya.configured || lg.configured) && <button onClick={() => setCfgDev(true)} style={{ ...card, padding: '6px 11px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 11.5 }}><Cog size={12} />{t('choose')}</button>}
       </div>
-      {tuya.error && <HintCard icon={AlertTriangle} text={'SmartLife: ' + tuya.error} />}
-      {tuya.loading && !tuya.devices.length ? (
-        <div style={{ ...card, padding: 20, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={14} className="spin" />SmartLife…</div>
-      ) : tuya.connected && tuya.devices.length ? (
-        <TuyaDeviceGrid devices={tuya.devices} prefs={tuyaPrefs} t={t} lang={lang} onCmd={sendCmd} onConfig={() => setCfgDev(true)} />
-      ) : !tuya.configured ? (
-        <><HintCard icon={Power} text={t('deviceHint')} />
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{devices.map((d) => <DeviceCard key={d.id} device={d} onChange={upd} />)}</div></>
-      ) : (
-        <HintCard icon={Power} text={lang === 'pt' ? 'Nenhum aparelho SmartLife encontrado.' : 'No SmartLife devices found.'} />
-      )}
-      {lg.configured && lg.devices.length > 0 && (
-        <div style={{ marginTop: 6 }}>
+
+      {/* LG ThinQ primeiro */}
+      {lg.configured && (
+        <div style={{ marginBottom: 14 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <span style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>LG ThinQ</span>
             <button onClick={loadLg} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>{lg.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}</button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {lg.devices.map((d) => <LgCard key={d.id} device={d} host={lg.host} t={t} lang={lang} flash={flash} />)}
-          </div>
+          {lg.error && <HintCard icon={AlertTriangle} text={'LG: ' + lg.error} />}
+          {(() => {
+            const vis = lg.devices.filter((d) => { const p = tuyaPrefs['lg_' + d.id]; return p ? p.show !== false : true; });
+            if (!vis.length) return lg.loading ? <div style={{ ...card, padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />…</div> : <div style={{ ...card, padding: 14, textAlign: 'center', color: C.text3, fontSize: 12 }}>{lang === 'pt' ? 'Nenhum aparelho LG selecionado.' : 'No LG devices selected.'}</div>;
+            return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{vis.map((d) => <LgCard key={d.id} device={d} host={lg.host} label={(tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].alias) || d.name} t={t} lang={lang} flash={flash} />)}</div>;
+          })()}
         </div>
       )}
-      {lg.error && <HintCard icon={AlertTriangle} text={'LG: ' + lg.error} />}
+
+      {/* Tuya / SmartLife depois */}
+      {tuya.configured && (
+        <div style={{ marginBottom: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>SmartLife</span>
+            <button onClick={loadTuya} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>{tuya.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}</button>
+          </div>
+          {tuya.error && <HintCard icon={AlertTriangle} text={'SmartLife: ' + tuya.error} />}
+          {tuya.loading && !tuya.devices.length ? (
+            <div style={{ ...card, padding: 20, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={14} className="spin" />SmartLife…</div>
+          ) : tuya.connected && tuya.devices.length ? (
+            <TuyaDeviceGrid devices={tuya.devices} prefs={tuyaPrefs} t={t} lang={lang} onCmd={sendCmd} onConfig={() => setCfgDev(true)} />
+          ) : (
+            <HintCard icon={Power} text={lang === 'pt' ? 'Nenhum aparelho SmartLife encontrado.' : 'No SmartLife devices found.'} />
+          )}
+        </div>
+      )}
+
+      {!tuya.configured && !lg.configured && (
+        <><HintCard icon={Power} text={t('deviceHint')} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{devices.map((d) => <DeviceCard key={d.id} device={d} onChange={upd} />)}</div></>
+      )}
+
       <SectionTitle icon={Wallet} label={t('houseCosts')} color={C.green} />
       <div style={{ ...card, padding: 16, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div><div style={{ fontSize: 22, fontWeight: 700, color: C.green }}>{fmtMoney(cost, lang)}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{filterAll ? t('allTime') : t('thisMonth')}</div></div>
@@ -2402,7 +2459,9 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       <SectionTitle icon={Users} label={t('staff')} color={C.sky} />
       {staffMsgs.length === 0 ? <Empty icon={Users} text={t('nothingHere')} /> : staffMsgs.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {adding && <AddModal title={`${t('quickAdd')} · ${t('house')}`} icon={Plus} draft={{ type: 'task', domain: 'home' }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'home', ...x }); flash(t('savedOne')); setAdding(false); }} />}
-      {cfgDev && <TuyaConfig devices={tuya.devices} prefs={tuyaPrefs} setPrefs={setTuyaPrefs} lang={lang} t={t} onClose={() => setCfgDev(false)} />}
+      {cfgDev && <TuyaConfig
+        devices={[...lg.devices.map((d) => ({ id: 'lg_' + d.id, name: d.name, category: d.type, brand: 'LG' })), ...tuya.devices.map((d) => ({ ...d, brand: 'SmartLife' }))]}
+        prefs={tuyaPrefs} setPrefs={setTuyaPrefs} lang={lang} t={t} onClose={() => setCfgDev(false)} />}
     </div>
   );
 }
@@ -2943,6 +3002,7 @@ function Connections({ lang, t }) {
     <div style={{ marginBottom: 14 }}>
       <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
       <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
+      <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
     </div>
   );
 }
@@ -3079,6 +3139,7 @@ function App() {
   const [claudeSeed, setClaudeSeed] = useState(null); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
+  const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
   const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
@@ -3098,6 +3159,7 @@ function App() {
     let alive = true;
     authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
     loadGmail();
+    authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
     authFetch('/api/google').then((r) => r.json()).then((j) => {
       if (!alive || !j) return;
       if (Array.isArray(j.events)) setGEvents(j.events);
@@ -3118,6 +3180,14 @@ function App() {
   }, [items, ready]);
   useEffect(() => { if (ready) persistSettings(settings); }, [settings, ready]);
 
+  const reloadTicktick = () => authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => {});
+  const ttComplete = async (task) => {
+    setTicktick((p) => ({ ...p, tasks: p.tasks.map((x) => x.id === task.ttId ? { ...x, status: 'done' } : x) }));
+    try { await authFetch('/api/ticktick', { method: 'POST', body: JSON.stringify({ op: 'complete', id: task.ttId, projectId: task.ttProject }) }); } catch (e) {}
+  };
+  const ttCreate = async (payload) => {
+    try { await authFetch('/api/ticktick', { method: 'POST', body: JSON.stringify({ op: 'create', ...payload }) }); reloadTicktick(); } catch (e) {}
+  };
   const loadGmail = () => {
     setGmail((p) => ({ ...p, loading: true }));
     authFetch('/api/gmail').then((r) => r.json())
@@ -3163,7 +3233,7 @@ function App() {
     const q = new URLSearchParams(window.location.search);
     const conn = q.get('conn');
     if (!conn) return;
-    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : 'Google conectado ✓';
+    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : 'Google conectado ✓';
     setToast(q.get('ok') ? okMsg : 'Erro: ' + (q.get('erro') || ''));
     setTimeout(() => setToast(null), 4000);
     window.history.replaceState({}, '', window.location.pathname);
@@ -3173,6 +3243,7 @@ function App() {
   const addItem = (x) => addItems([x]);
   const updateItem = (id, patch) => setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, ...patch } : i))));
   const toggleTask = (id) => {
+    if (String(id).startsWith('tt_')) { const it = ttItems.find((x) => x.id === id); if (it && it.status !== 'done') ttComplete(it); return; }
     const it = items.find((i) => i.id === id);
     setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, status: i.status === 'done' ? 'planned' : 'done' } : i))));
     clearTimeout(undoRef.current);
@@ -3194,7 +3265,13 @@ function App() {
 
   if (!ready) return <div style={{ background: C.bg, color: C.text3, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="spin" size={22} /></div>;
 
-  const allItems = (gEvents.length || gMsgs.length) ? [...items, ...gEvents, ...gMsgs] : items;
+  const ttItems = (ticktick.tasks || []).map((t) => ({
+    id: 'tt_' + t.id, ttId: t.id, ttProject: t.projectId, type: 'task', domain: 'personal',
+    title: t.title, notes: t.notes, date: t.date, status: t.status,
+    priority: t.priority >= 5 ? 1 : t.priority >= 3 ? 2 : 3,
+    meta: { external: 'ticktick', project: t.projectName, link: 'https://ticktick.com' },
+  }));
+  const allItems = [...items, ...(gEvents || []), ...(gMsgs || []), ...ttItems];
   const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
   const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, updateItem, delItem, flash };
   const renderModule = (mo) => {
@@ -3208,7 +3285,7 @@ function App() {
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} state={gmail} setState={setGmail} load={loadGmail} />;
-    return <ModuleScreen module={mo} {...shared} back={back} />;
+    return <ModuleScreen module={mo} {...shared} back={back} ttConnected={ticktick.connected} ttProjects={ticktick.projects} onCreateTick={ttCreate} reloadTick={reloadTicktick} />;
   };
 
   return (
