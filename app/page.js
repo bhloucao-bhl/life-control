@@ -438,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v25 · 31jul';
+const APP_VERSION = 'v26 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -697,6 +697,15 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
         </>
       )}
       <Field label={type === 'person' ? t('name') : type === 'message' ? t('title') : t('title')}><input value={f.title || ''} onChange={(e) => up({ title: e.target.value })} style={inputStyle} placeholder={type === 'flight' ? 'GRU → LIS' : ''} /></Field>
+      {type === 'task' && (
+        <Field label={t('priorityL')}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <Chip active={f.priority === 1} onClick={() => up({ priority: 1 })} color={C.accent}>⭐ {t('important')}</Chip>
+            <Chip active={f.priority === 2} onClick={() => up({ priority: 2 })}>{t('prNormal')}</Chip>
+            <Chip active={f.priority === 3} onClick={() => up({ priority: 3 })}>{t('prLow')}</Chip>
+          </div>
+        </Field>
+      )}
       {!['person', 'account', 'message'].includes(type) && (
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}><Field label={t('date')}><input type="date" value={f.date || ''} onChange={(e) => up({ date: e.target.value || null })} style={{ ...inputStyle, colorScheme: 'dark' }} /></Field></div>
@@ -719,6 +728,14 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           <Field label={t('giftLink')}><input value={f.meta.link || ''} onChange={(e) => upMeta({ link: e.target.value })} placeholder="https://..." style={inputStyle} /></Field>
           <Field label={t('giftPrice')}><input type="number" step="0.01" value={f.amount || ''} onChange={(e) => setF((p) => ({ ...p, amount: Number(e.target.value) }))} style={inputStyle} /></Field>
         </>
+      )}
+      {type === 'document' && f.domain === 'health' && (
+        <div onClick={() => upMeta({ isExam: !f.meta.isExam })} style={{ ...card, padding: '11px 13px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <div style={{ width: 40, height: 24, borderRadius: 999, background: f.meta.isExam ? C.blue : C.surface2, position: 'relative', flexShrink: 0 }}>
+            <span style={{ position: 'absolute', top: 3, left: f.meta.isExam ? 19 : 3, width: 18, height: 18, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
+          </div>
+          <span style={{ fontSize: 13, color: C.text2 }}>{t('isExam')}</span>
+        </div>
       )}
       {type === 'vehicle' && (
         <Field label={t('color')}><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{CAR_COLORS.map(([hex, ptn, enn]) => <button key={hex} onClick={() => upMeta({ color: hex })} title={lang === 'pt' ? ptn : enn} style={{ width: 30, height: 30, borderRadius: 8, background: hex, cursor: 'pointer', border: f.meta.color === hex ? `2px solid ${C.accent}` : `1px solid ${C.border}` }} />)}</div></Field>
@@ -1121,6 +1138,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder={t('askClaude')} onKeyDown={(e) => { if (e.key === 'Enter' && ask.trim()) { openClaude(ask.trim()); setAsk(''); } }} style={{ ...inputStyle, background: 'transparent', border: 'none' }} />
         <Btn onClick={() => { if (ask.trim()) { openClaude(ask.trim()); setAsk(''); } }} disabled={!ask.trim()} style={{ padding: '9px 12px' }}><Send size={15} /></Btn>
       </div>
+      <div style={{ marginTop: 18 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
       {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
     </div>
   );
@@ -1276,11 +1294,10 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
           <Btn kind="soft" onClick={() => onSaveItem && onSaveItem(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Star size={14} /></Btn>
           <Btn kind="soft" onClick={() => onSendItem && onSendItem(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Send size={14} /></Btn>
         </div>
-        {/* leitor embutido */}
-        <div style={{ ...card, padding: 0, overflow: 'hidden', height: '62vh' }}>
-          <iframe src={reader.link} title="news" style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }} />
+        <div style={{ ...card, padding: 16, textAlign: 'center', color: C.text3 }}>
+          <Newspaper size={22} style={{ color: C.text3, marginBottom: 8 }} />
+          <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{lang === 'pt' ? 'Toque em “Abrir no site” para ler a matéria completa na fonte original.' : 'Tap “Open site” to read the full article.'}</div>
         </div>
-        <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', marginTop: 8 }}>{lang === 'pt' ? 'Alguns sites bloqueiam a leitura embutida. Se ficar em branco, use “Abrir no site”.' : 'Some sites block embedding.'}</div>
       </div>
     );
   }
@@ -1405,11 +1422,23 @@ function ModuleHeader({ module, t, back }) {
     </div>
   </>;
 }
-const TASK_FILTERS = [['fAll', () => true], ['fWork', (i) => i.domain === 'work'], ['fPersonal', (i) => !['work', 'home', 'kids'].includes(i.domain)], ['fHouse', (i) => i.domain === 'home'], ['fKids', (i) => i.domain === 'kids']];
+const TASK_FILTERS = [['fAll', (i) => i.status !== 'done'], ['fWork', (i) => i.domain === 'work' && i.status !== 'done'], ['fPersonal', (i) => !['work', 'home', 'kids'].includes(i.domain) && i.status !== 'done'], ['fHouse', (i) => i.domain === 'home' && i.status !== 'done'], ['fKids', (i) => i.domain === 'kids' && i.status !== 'done'], ['fDone', (i) => i.status === 'done']];
 function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick }) {
   const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0); const [toTick, setToTick] = useState(true);
+  const [grace, setGrace] = useState({}); // id -> true: recem concluida, ainda visivel por 5s
+  const graceToggle = (id) => {
+    const it = items.find((x) => x.id === id) || {};
+    const wasDone = it.status === 'done';
+    toggleTask(id);
+    if (!wasDone) {
+      setGrace((g) => ({ ...g, [id]: true }));
+      setTimeout(() => setGrace((g) => { const n = { ...g }; delete n[id]; return n; }), 5000);
+    } else {
+      setGrace((g) => { const n = { ...g }; delete n[id]; return n; });
+    }
+  };
   const base = items.filter(module.filter);
-  const list = (module.key === 'tasks' ? base.filter(TASK_FILTERS[tf][1]) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list = (module.key === 'tasks' ? base.filter((i) => TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
   if (module.key === 'docs') { const soon = items.filter((i) => i.type === 'document' && i.date && i.date <= addDays(todayISO(), 60)).length; hi = { label: `${t('expiring')} (60d)`, value: String(soon), color: soon ? C.rose : C.text2 }; }
   else if (module.key === 'tasks') hi = { label: t('open'), value: String(items.filter((i) => i.type === 'task' && i.status !== 'done').length), color: C.accent };
@@ -1417,19 +1446,18 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     <div>
       <ModuleHeader module={module} t={t} back={back} />
       {module.key === 'tasks' && ttConnected && (
-        <div style={{ ...card, padding: 12, marginBottom: 12, display: 'flex', gap: 9, alignItems: 'center' }}>
-          <RefreshCw size={15} style={{ color: C.green, flexShrink: 0 }} />
-          <span style={{ flex: 1, fontSize: 12, color: C.text2 }}>{lang === 'pt' ? 'Sincronizado com o TickTick' : 'Synced with TickTick'}</span>
-          <button onClick={() => reloadTick && reloadTick()} style={{ ...card, padding: '5px 10px', color: C.text2, cursor: 'pointer', fontSize: 11 }}>{t('refresh')}</button>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <button onClick={() => reloadTick && reloadTick()} style={{ ...card, padding: '5px 10px', color: C.text2, cursor: 'pointer', fontSize: 11, display: 'flex', gap: 5, alignItems: 'center' }}><RefreshCw size={11} />{t('refresh')}</button>
         </div>
       )}
       {module.key === 'tasks' && !ttConnected && <HintCard icon={RefreshCw} text={t('tickHint')} />}
       {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
       {hi && <div style={{ ...card, padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{hi.label}</span><span style={{ fontSize: 22, fontWeight: 600, color: hi.color }}>{hi.value}</span></div>}
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
-      {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={module.key === 'tasks' ? graceToggle : toggleTask} onOpen={onOpen} />)}
+      {module.key === 'tasks' && ttConnected && <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', marginTop: 16, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><RefreshCw size={10} style={{ color: C.green }} />{lang === 'pt' ? 'Sincronizado com o TickTick' : 'Synced with TickTick'}</div>}
       {adding && <AddModal title={`${t('quickAdd')} · ${t(module.key)}`} icon={Plus} draft={{ type: module.types[0], domain: moduleDomain(module.key) }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => {
-        if (module.key === 'tasks' && ttConnected && toTick && x.type === 'task') { onCreateTick && onCreateTick({ title: x.title, notes: x.notes, date: x.date, priority: x.priority === 1 ? 5 : x.priority === 2 ? 3 : 0 }); flash(lang === 'pt' ? 'Criado no TickTick ✓' : 'Created in TickTick ✓'); }
+        if (module.key === 'tasks' && ttConnected && toTick && x.type === 'task') { onCreateTick && onCreateTick({ title: x.title, notes: x.notes, date: x.date, priority: x.priority === 1 ? 5 : x.priority === 2 ? 3 : 0, tags: x.priority === 1 ? ['Importante'] : [] }); flash(lang === 'pt' ? 'Criado no TickTick ✓' : 'Created in TickTick ✓'); }
         else { addItem({ domain: moduleDomain(module.key), ...x }); flash(t('savedOne')); }
         setAdding(false);
       }} extraToggle={module.key === 'tasks' && ttConnected ? { label: lang === 'pt' ? 'Criar no TickTick' : 'Create in TickTick', value: toTick, onChange: setToTick } : null} />}
@@ -1877,7 +1905,6 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
         <Btn kind="soft" onClick={() => setAdding('document')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><FileText size={14} />{t('addDoc')}</Btn>
       </div>
       <WeightHistory weights={weights} lang={lang} t={t} />
-      <HintCard icon={Activity} text={t('appleHealth')} />
       {consultas.length > 0 && <><SectionTitle icon={Stethoscope} label={t('consultations')} color={C.rose} />{consultas.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       {treat.length > 0 && <><SectionTitle icon={Pill} label={t('treatments')} color={C.violet} />{treat.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       <SectionTitle icon={Wallet} label={`${t('pharmacy')} · ${fmtMoney(pharmTotal, lang)}`} color={C.green} />
@@ -1885,6 +1912,7 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       <SectionTitle icon={Activity} label={t('exams')} color={C.blue} />
       {exams.length === 0 ? <Empty icon={Activity} text={t('nothingHere')} /> : exams.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {support.length > 0 && <><SectionTitle icon={FileText} label={t('support')} color={C.text2} />{support.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
+      <div style={{ marginTop: 18 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
       {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
       {editP && <WeightLog lang={lang} t={t} current={profile.weight} onSave={(kg) => { addWeight(kg); setEditP(false); }} onClose={() => setEditP(false)} />}
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'health', meta: {} }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(null); }} />}
@@ -3034,9 +3062,54 @@ function ItemView({ item, lang, t, onAct }) {
       {rows.length > 0 && <div style={{ ...card, padding: 4, marginBottom: 12 }}>{rows.map(([l, v], i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 12px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none' }}><span style={{ fontSize: 12.5, color: C.text3 }}>{l}</span><span style={{ fontSize: 13, textAlign: 'right' }}>{v}</span></div>)}</div>}
       {item.notes && <div style={{ ...card, padding: 14, marginBottom: 12, fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{item.notes}</div>}
       {atts.length > 0 && <><div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>{t('attachments')}</div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{atts.map((a) => <AttachThumb key={a.id} att={a} />)}</div></>}
+      {mt.isExam && <ExamAnalysis item={item} lang={lang} t={t} onAct={onAct} />}
     </div>
   );
 }
+function ExamAnalysis({ item, lang, t, onAct }) {
+  const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
+  const saved = item.meta && item.meta.examAnalysis;
+  const atts = (item.meta && item.meta.attachments) || [];
+
+  const analyze = async () => {
+    setBusy(true); setErr(null);
+    try {
+      // montar conteudo: anexos (imagem/pdf) + instrucao
+      const content = [];
+      for (const a of atts) {
+        if (!a.dataUrl) continue;
+        const m = /^data:(.*?);base64,(.*)$/.exec(a.dataUrl);
+        if (!m) continue;
+        const media = m[1]; const data = m[2];
+        if (media.startsWith('image/')) content.push({ type: 'image', source: { type: 'base64', media_type: media, data } });
+        else if (media === 'application/pdf') content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } });
+      }
+      content.push({ type: 'text', text: lang === 'pt'
+        ? 'Você é um assistente de saúde cuidadoso. Analise este resultado de exame de forma clara e acessível para um leigo. Explique: (1) o que foi medido, (2) quais valores estão dentro ou fora da referência, (3) o que isso pode significar em linguagem simples, e (4) pontos que merecem atenção ou conversa com o médico. Seja informativo mas deixe claro que não substitui avaliação médica. Responda em português do Brasil, organizado e conciso.'
+        : 'Analyze this lab result for a layperson. Explain what was measured, what is in/out of range, what it may mean, and what to discuss with a doctor. Make clear it is not a substitute for medical advice.' });
+
+      const r = await authFetch('/api/claude', { method: 'POST', body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1400, messages: [{ role: 'user', content }] }) });
+      const j = await r.json();
+      const txt = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').trim();
+      if (!txt) throw new Error(j.error || 'Sem resposta.');
+      onAct({ meta: { examAnalysis: txt, examAnalyzedAt: new Date().toISOString() } });
+    } catch (e) { setErr(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ ...card, padding: 14, marginTop: 12, border: `1px solid ${C.blue}33` }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: saved ? 10 : 0 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: C.blue, display: 'flex', gap: 6, alignItems: 'center' }}><Sparkles size={14} />{t('examAnalysis')}</span>
+        <Btn kind="soft" onClick={analyze} disabled={busy || atts.length === 0} style={{ fontSize: 11.5, padding: '6px 11px', display: 'flex', gap: 5, alignItems: 'center' }}>{busy ? <><Loader2 size={12} className="spin" />{t('analyzing')}</> : (saved ? (lang === 'pt' ? 'Refazer' : 'Redo') : t('analyzeExam'))}</Btn>
+      </div>
+      {atts.length === 0 && <div style={{ fontSize: 11.5, color: C.text3 }}>{lang === 'pt' ? 'Anexe a foto ou PDF do exame para o Claude analisar.' : 'Attach the exam to analyze.'}</div>}
+      {err && <div style={{ fontSize: 11.5, color: C.rose, marginTop: 8 }}>{err}</div>}
+      {saved && <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: C.text }}>{saved}</div>}
+    </div>
+  );
+}
+
 function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct }) {
   const [editing, setEditing] = useState(false);
   return (
@@ -3353,25 +3426,25 @@ function App() {
   const doRefresh = async () => {
     setRefreshing(true);
     try {
-      const jobs = [refreshGoogle(), loadGmail()];
+      const jobs = [refreshGoogle(), loadGmail(), reloadTicktick(), loadNews(true)];
       await Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {})));
-      // recarrega Oura tambem
       try { const j = await (await authFetch('/api/oura')).json(); if (j) { if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); } } catch (e) {}
     } finally { setTimeout(() => setRefreshing(false), 300); }
   };
+  const scrollTop = () => (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0);
   const onTouchStart = (e) => {
-    const sc = document.scrollingElement || document.documentElement;
-    if (sc.scrollTop <= 0 && !refreshing) { pullRef.current = { y0: e.touches[0].clientY, active: true }; }
+    if (scrollTop() <= 2 && !refreshing) { pullRef.current = { y0: e.touches[0].clientY, active: true }; }
   };
   const onTouchMove = (e) => {
     if (!pullRef.current.active) return;
     const dy = e.touches[0].clientY - pullRef.current.y0;
-    if (dy > 0) { setPull(Math.min(90, dy * 0.5)); }
+    if (dy > 0 && scrollTop() <= 2) { setPull(Math.min(80, dy * 0.55)); }
+    else if (dy < 0) { pullRef.current.active = false; setPull(0); }
   };
   const onTouchEnd = () => {
     if (!pullRef.current.active) return;
     pullRef.current.active = false;
-    if (pull > 55) doRefresh();
+    if (pull > 50) doRefresh();
     setPull(0);
   };
   useEffect(() => {
