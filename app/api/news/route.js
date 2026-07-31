@@ -112,7 +112,7 @@ Responda APENAS com JSON válido, sem markdown, no formato:
   }
 }
 
-const MAX_AGE_MS = 60 * 60 * 1000; // 1 hora
+const MAX_AGE_MS = 20 * 60 * 1000; // 20 minutos
 
 export async function GET(req) {
   const user = await userFromRequest(req);
