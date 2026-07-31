@@ -61,26 +61,50 @@ export async function GET(req) {
   return Response.json({ configured: true, connected: false, devices: [], attempts });
 }
 
-/** POST { deviceId, action } -> controla o aparelho */
+/** GET status detalhado de um device */
+async function deviceState(host, deviceId) {
+  const r = await fetch(`${host}/devices/${deviceId}/state`, { headers: headers(), cache: 'no-store' });
+  const j = await r.json();
+  if (!r.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status));
+  return j.response || j;
+}
+
+async function control(host, deviceId, body) {
+  const r = await fetch(`${host}/devices/${deviceId}/control`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+  const j = await r.json();
+  if (!r.ok) throw new Error((j && j.error && j.error.message) || ('HTTP ' + r.status) + ' ' + JSON.stringify(j).slice(0, 200));
+  return j;
+}
+
+/**
+ * POST
+ *   { deviceId, op: 'status' }
+ *   { deviceId, op: 'power', value: true|false }        (ar-condicionado)
+ *   { deviceId, op: 'temp', value: 23 }
+ *   { deviceId, op: 'mode', value: 'COOL'|'HEAT'|'AIR_DRY'|'FAN'|'AIR_CLEAN' }
+ *   { deviceId, op: 'wind', value: 'LOW'|'MID'|'HIGH' }
+ */
 export async function POST(req) {
   const user = await userFromRequest(req);
   if (!user) return Response.json({ error: 'Sem sessão.' }, { status: 401 });
   if (!process.env.LG_PAT) return Response.json({ error: 'LG não configurado.' }, { status: 400 });
 
-  const { deviceId, action } = await req.json();
+  const b = await req.json();
+  const host = b.host || 'https://api-aic.lgthinq.com';
+
   try {
-    // status atual
-    if (action === 'status') {
-      const r = await fetch(`${BASE}/devices/${deviceId}/state`, { headers: headers(), cache: 'no-store' });
-      const j = await r.json();
-      if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
-      return Response.json({ ok: true, state: j.response || j });
+    if (b.op === 'status') {
+      const st = await deviceState(host, b.deviceId);
+      return Response.json({ ok: true, state: st });
     }
-    // liga/desliga (operação padrão para muitos aparelhos)
-    const body = { operation: { [action === 'off' ? 'airConOperationMode' : 'airConOperationMode']: action === 'off' ? 'POWER_OFF' : 'POWER_ON' } };
-    const r = await fetch(`${BASE}/devices/${deviceId}/control`, { method: 'POST', headers: headers(), body: JSON.stringify(body) });
-    const j = await r.json();
-    if (!r.ok) throw new Error((j.error && j.error.message) || ('HTTP ' + r.status));
+    let body = null;
+    if (b.op === 'power') body = { operation: { airConOperationMode: b.value ? 'POWER_ON' : 'POWER_OFF' } };
+    else if (b.op === 'temp') body = { temperature: { targetTemperature: Number(b.value), unit: 'C' } };
+    else if (b.op === 'mode') body = { airConJobMode: { currentJobMode: b.value } };
+    else if (b.op === 'wind') body = { airFlow: { windStrength: b.value } };
+    else return Response.json({ error: 'op inválida' }, { status: 400 });
+
+    await control(host, b.deviceId, body);
     return Response.json({ ok: true });
   } catch (e) {
     return Response.json({ error: String(e.message || e) }, { status: 500 });
