@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v34 · 31jul';
+const APP_VERSION = 'v35 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2255,7 +2255,7 @@ function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
         <div key={room || 'sem'} style={{ marginBottom: 12 }}>
           {room ? <div style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 2px 8px' }}>{room}</div> : (roomNames.length > 1 ? <div style={{ fontSize: 11.5, color: C.text3, margin: '2px 2px 8px' }}>{lang === 'pt' ? 'Outros' : 'Other'}</div> : null)}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} irId={(prefs && prefs[d.id] && prefs[d.id].ir) || null} t={t} onCmd={onCmd} />)}
+            {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} irId={(prefs && prefs[d.id] && prefs[d.id].ir) || null} t={t} lang={lang} onCmd={onCmd} />)}
           </div>
         </div>
       ))}
@@ -2351,7 +2351,7 @@ function IRBtn({ children, onClick, wide, accent }) {
 // Para controles IR "universais" da Tuya, os comandos vao pelo code padrao.
 // Como cada remoto aprendido pode variar, usamos os codes comuns e deixamos claro
 // que ajustamos caso algum botao nao responda.
-function TuyaRemote({ device, kind, label, irId, t, onClose }) {
+function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
   const [keys, setKeys] = useState(null); const [meta, setMeta] = useState({}); const [err, setErr] = useState(null); const [sending, setSending] = useState(''); const [showAll, setShowAll] = useState(false);
   const [temp, setTemp] = useState(23); const [mode, setMode] = useState('cold'); const [wind, setWind] = useState('auto'); const [power, setPower] = useState(true);
 
@@ -2481,7 +2481,7 @@ function tuyaSwitchCode(status) {
   // prioridade: switch_led (lâmpadas), switch_1 (tomadas), switch, qualquer switch*
   return keys.find((k) => k === 'switch_led') || keys.find((k) => k === 'switch_1') || keys.find((k) => k === 'switch') || keys.find((k) => k.startsWith('switch')) || null;
 }
-function TuyaCard({ device, t, onCmd, kind, label, irId }) {
+function TuyaCard({ device, t, lang, onCmd, kind, label, irId }) {
   const [remote, setRemote] = useState(false); const [light, setLight] = useState(false);
   const irKind = kind === 'tv' || kind === 'stb' || kind === 'ac' || kind === 'receiver';
   const st = device.status || {};
@@ -2500,7 +2500,7 @@ function TuyaCard({ device, t, onCmd, kind, label, irId }) {
           <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div>
           <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{device.online ? t('openRemote') : t('offline')}</div>
         </button>
-        {remote && <TuyaRemote device={device} kind={kind} label={nome} irId={irId} t={t} onClose={() => setRemote(false)} />}
+        {remote && <TuyaRemote device={device} kind={kind} label={nome} irId={irId} t={t} lang={lang} onClose={() => setRemote(false)} />}
       </>
     );
   }
