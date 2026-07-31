@@ -438,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v24 · 31jul';
+const APP_VERSION = 'v25 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1019,10 +1019,9 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [] }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
-  const [news, setNews] = useState(null);
-  useEffect(() => { authFetch('/api/news').then((r) => r.json()).then((j) => setNews(j.items || [])).catch(() => setNews([])); }, []);
+
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
   useEffect(() => {
     let alive = true;
@@ -1106,12 +1105,15 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <div style={{ padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
         ) : news.length === 0 ? (
           <div style={{ padding: 16, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Sem notícias agora.' : 'No news.'}</div>
-        ) : news.slice(0, 5).map((n, i) => (
+        ) : news.slice(0, 5).map((n, i) => {
+          const src = (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
+          return (
           <div key={i} onClick={goNews} style={{ padding: '11px 14px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, lineHeight: 1.35 }}>{n.title}</div>{n.why && <div style={{ fontSize: 11, color: C.accent, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.why}</div>}</div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, lineHeight: 1.35 }}>{n.title}</div><div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div></div>
             <ChevronRight size={15} style={{ color: C.text3, flexShrink: 0 }} />
           </div>
-        ))}
+          );
+        })}
       </div>
       <button onClick={goNews} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', fontSize: 12.5, padding: '8px 2px', display: 'flex', alignItems: 'center', gap: 4 }}>{t('seeAll')}<ChevronRight size={14} /></button>
       <div style={{ ...card, padding: 6, display: 'flex', gap: 6, alignItems: 'center', margin: '10px 0 8px', border: `1px solid ${C.accent}33` }}>
@@ -1250,15 +1252,8 @@ function timeAgo(pub, lang) {
   const d = Math.floor(h / 24); return (lang === 'pt' ? 'há ' : '') + d + 'd';
 }
 
-function NewsScreen({ lang, t, back, onSaveItem, onSendItem }) {
-  const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const [err, setErr] = useState(null);
-  const load = () => {
-    setLoading(true);
-    authFetch('/api/news').then((r) => r.json()).then((j) => { setData(j.items || []); if (j.error) setErr(j.error); setLoading(false); })
-      .catch((e) => { setErr(String(e)); setLoading(false); });
-  };
-  useEffect(() => { load(); }, []);
-
+function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSendItem }) {
+  const [reader, setReader] = useState(null); // noticia aberta no leitor interno
   const THEMES = {
     tech: { label: lang === 'pt' ? 'Tecnologia & IA' : 'Tech & AI', color: C.blue },
     financas: { label: lang === 'pt' ? 'Mercado financeiro' : 'Finance', color: C.green },
@@ -1267,42 +1262,60 @@ function NewsScreen({ lang, t, back, onSaveItem, onSendItem }) {
     espaco: { label: lang === 'pt' ? 'Espaço & foguetes' : 'Space', color: C.violet },
     aviacao: { label: lang === 'pt' ? 'Aviação' : 'Aviation', color: C.sky },
   };
+  const sourceName = (n) => (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
+
+  if (reader) {
+    return (
+      <div>
+        <button onClick={() => setReader(null)} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 10, padding: '4px 0' }}><ChevronLeft size={16} />{t('news')}</button>
+        <div style={{ fontSize: 10.5, color: (THEMES[reader.theme] || {}).color || C.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{sourceName(reader)}{reader.pub ? ' · ' + timeAgo(reader.pub, lang) : ''}</div>
+        <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.3, marginBottom: 12 }}>{reader.title}</div>
+        {reader.summary && <div style={{ ...card, padding: 15, fontSize: 14, lineHeight: 1.6, color: C.text, marginBottom: 12 }}>{reader.summary}</div>}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+          <a href={reader.link} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: 'none' }}><Btn style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><ArrowRight size={15} />{lang === 'pt' ? 'Abrir no site' : 'Open site'}</Btn></a>
+          <Btn kind="soft" onClick={() => onSaveItem && onSaveItem(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Star size={14} /></Btn>
+          <Btn kind="soft" onClick={() => onSendItem && onSendItem(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Send size={14} /></Btn>
+        </div>
+        {/* leitor embutido */}
+        <div style={{ ...card, padding: 0, overflow: 'hidden', height: '62vh' }}>
+          <iframe src={reader.link} title="news" style={{ width: '100%', height: '100%', border: 'none', background: '#fff' }} />
+        </div>
+        <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', marginTop: 8 }}>{lang === 'pt' ? 'Alguns sites bloqueiam a leitura embutida. Se ficar em branco, use “Abrir no site”.' : 'Some sites block embedding.'}</div>
+      </div>
+    );
+  }
 
   return (
     <div>
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{t('home')}</button>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <ScreenTitle title={t('news')} />
-        <button onClick={load} style={{ ...card, padding: '7px 11px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12 }}>{loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}{t('refresh')}</button>
+        <button onClick={onRefresh} style={{ ...card, padding: '7px 11px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12 }}>{loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}{t('refresh')}</button>
       </div>
-      {loading && !data ? (
-        <div style={{ ...card, padding: 30, textAlign: 'center', color: C.text3, display: 'flex', gap: 9, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={16} className="spin" />{lang === 'pt' ? 'Curando as melhores notícias para você…' : 'Curating…'}</div>
-      ) : (data && data.length === 0) ? (
-        <Empty icon={Newspaper} text={err || (lang === 'pt' ? 'Nenhuma notícia agora.' : 'No news.')} />
+      {(!news && loading) ? (
+        <div style={{ ...card, padding: 30, textAlign: 'center', color: C.text3, display: 'flex', gap: 9, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={16} className="spin" />{lang === 'pt' ? 'Curando as melhores para você…' : 'Curating…'}</div>
+      ) : (news && news.length === 0) ? (
+        <Empty icon={Newspaper} text={lang === 'pt' ? 'Nenhuma notícia agora.' : 'No news.'} />
       ) : (
-        (data || []).map((n, i) => {
+        (news || []).map((n, i) => {
           const th = THEMES[n.theme] || { label: n.theme, color: C.text3 };
           return (
-            <div key={i} style={{ ...card, padding: 15, marginBottom: 10 }}>
+            <div key={i} onClick={() => setReader(n)} style={{ ...card, padding: 15, marginBottom: 10, cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-                <span style={{ fontSize: 10.5, color: th.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{th.label}</span>
+                <span style={{ fontSize: 10.5, color: th.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{sourceName(n)}</span>
                 {n.pub && <span style={{ fontSize: 10, color: C.text3 }}>{timeAgo(n.pub, lang)}</span>}
               </div>
-              <a href={n.link} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: C.text }}>
-                <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.35 }}>{n.title}</div>
-              </a>
+              <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.35 }}>{n.title}</div>
               {n.summary && <div style={{ fontSize: 12.5, color: C.text2, marginTop: 6, lineHeight: 1.5 }}>{n.summary}</div>}
-              {n.why && <div style={{ fontSize: 11.5, color: C.accent, marginTop: 6, display: 'flex', gap: 5, alignItems: 'flex-start' }}><Sparkles size={12} style={{ marginTop: 2, flexShrink: 0 }} />{n.why}</div>}
-              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                <a href={n.link} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: 'none' }}><Btn kind="soft" style={{ width: '100%', fontSize: 12, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><ArrowRight size={13} />{lang === 'pt' ? 'Ler' : 'Read'}</Btn></a>
-                <Btn kind="soft" onClick={() => onSaveItem && onSaveItem(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Star size={13} />{lang === 'pt' ? 'Salvar' : 'Save'}</Btn>
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
+                <Btn kind="soft" onClick={() => setReader(n)} style={{ flex: 1, fontSize: 12, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><ArrowRight size={13} />{lang === 'pt' ? 'Ler' : 'Read'}</Btn>
+                <Btn kind="soft" onClick={() => onSaveItem && onSaveItem(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Star size={13} /></Btn>
                 <Btn kind="soft" onClick={() => onSendItem && onSendItem(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Send size={13} /></Btn>
               </div>
             </div>
           );
         })
       )}
-      {err && data && data.length > 0 && <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', marginTop: 6 }}>{lang === 'pt' ? 'Curadoria parcial (IA indisponível).' : 'Partial curation.'}</div>}
     </div>
   );
 }
@@ -1992,15 +2005,29 @@ function tuyaLabel(device, prefs) {
 
 function LgCard({ device, host, t, lang, flash, label }) {
   const [remote, setRemote] = useState(false); const [wash, setWash] = useState(false);
+  const [quick, setQuick] = useState(null); // {on, temp, mode}
   const isAc = device.type === 'DEVICE_AIR_CONDITIONER';
   const isWasher = device.type === 'DEVICE_WASHER' || device.type === 'DEVICE_DRYER';
-  const Ic = isAc ? Wind : isWasher ? RefreshCw : Power;
+  const Ic = isAc ? Wind : isWasher ? Waves : Power;
+  // busca status resumido do ar para exibir no proprio card
+  useEffect(() => {
+    if (!isAc || !device.online) return;
+    let alive = true;
+    authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
+      .then((r) => r.json()).then((j) => { if (!alive || !j.state) return; const st = j.state;
+        setQuick({ on: st.operation && st.operation.airConOperationMode === 'POWER_ON', temp: st.temperature && st.temperature.targetTemperature, cur: st.temperature && st.temperature.currentTemperature }); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [device.id]);
   return (
     <>
       <button onClick={() => { if (!device.online) return; if (isAc) setRemote(true); else setWash(true); }} disabled={!device.online} style={{ ...card, padding: 13, textAlign: 'left', cursor: device.online ? 'pointer' : 'default', opacity: device.online ? 1 : 0.55, border: 'none', width: '100%', color: C.text }}>
-        <div style={{ width: 34, height: 34, borderRadius: 9, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: '#A50034' }} /></div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: (isAc && quick && quick.on) ? '#A50034' + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: (isAc && quick && quick.on) ? '#FF3B6B' : '#A50034' }} /></div>
+          {isAc && quick && <span style={{ fontSize: 9.5, fontWeight: 700, color: quick.on ? C.green : C.text3, border: `1px solid ${quick.on ? C.green : C.text3}44`, borderRadius: 999, padding: '2px 7px' }}>{quick.on ? (lang === 'pt' ? 'LIGADO' : 'ON') : (lang === 'pt' ? 'DESL.' : 'OFF')}</span>}
+        </div>
         <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label || device.name}</div>
-        <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{device.online ? (isAc ? t('openRemote') : (isWasher ? (lang === 'pt' ? 'Ver status' : 'Status') : 'LG')) : t('offline')}</div>
+        <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{!device.online ? t('offline') : isAc ? (quick ? (quick.on ? `${quick.temp}°${quick.cur != null ? ' · amb ' + quick.cur + '°' : ''}` : t('openRemote')) : t('openRemote')) : (isWasher ? (lang === 'pt' ? 'Ver status' : 'Status') : 'LG')}</div>
       </button>
       {remote && isAc && <LgAcRemote device={device} host={host} t={t} lang={lang} flash={flash} onClose={() => setRemote(false)} />}
       {wash && <LgWasherStatus device={device} host={host} label={label} t={t} lang={lang} onClose={() => setWash(false)} />}
@@ -3245,7 +3272,8 @@ function App() {
   const [settings, setSettings] = useState({ lang: 'pt', name: 'Bruno', health: {}, profile: {}, dock: DEFAULT_DOCK, devices: DEFAULT_DEVICES });
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
-  const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
+  const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null);
+  const [newsData, setNewsData] = useState(null); const [newsLoading, setNewsLoading] = useState(false); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
@@ -3268,6 +3296,7 @@ function App() {
     let alive = true;
     authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
     loadGmail();
+    loadNews();
     authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
     authFetch('/api/google').then((r) => r.json()).then((j) => {
       if (!alive || !j) return;
@@ -3289,6 +3318,14 @@ function App() {
   }, [items, ready]);
   useEffect(() => { if (ready) persistSettings(settings); }, [settings, ready]);
 
+  const loadNews = (force) => {
+    if (newsLoading) return;
+    if (newsData && !force) return; // ja temos, nao recarrega ao navegar
+    setNewsLoading(true);
+    authFetch('/api/news' + (force ? '?force=1' : '')).then((r) => r.json())
+      .then((j) => { setNewsData(j.items || []); setNewsLoading(false); })
+      .catch(() => setNewsLoading(false));
+  };
   const reloadTicktick = () => authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => {});
   const ttComplete = async (task) => {
     setTicktick((p) => ({ ...p, tasks: p.tasks.map((x) => x.id === task.ttId ? { ...x, status: 'done' } : x) }));
@@ -3412,8 +3449,9 @@ function App() {
         </div>
       </div>
       <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
+          news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
           onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news' } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
