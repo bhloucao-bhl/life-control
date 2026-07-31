@@ -209,6 +209,7 @@ const S = {
   addPhoto: L('Foto', 'Photo'), photo: L('Foto', 'Photo'),
   deleteConfirmGeneric: L('Tem certeza que deseja excluir? Esta ação não pode ser desfeita.', 'Delete this? This cannot be undone.'),
   on: L('Ligado', 'On'), off: L('Desligado', 'Off'), offline: L('Offline', 'Offline'),
+  choose: L('Escolher', 'Choose'), configDevices: L('Aparelhos da Casa', 'Home devices'),
   screenError: L('Algo deu errado nesta tela', 'Something went wrong on this screen'),
   screenErrorHint: L('O resto do app continua funcionando. Tente voltar e abrir de novo.', 'The rest of the app still works. Go back and reopen.'),
   composeNew: L('Escrever e-mail', 'Compose'), toField: L('Para', 'To'), subjectField: L('Assunto', 'Subject'),
@@ -1845,17 +1846,114 @@ function WeightHistory({ weights, lang, t }) {
   );
 }
 
+function tuyaKind(device, prefs) {
+  const p = prefs && prefs[device.id];
+  if (p && p.kind && p.kind !== 'auto') return p.kind;
+  const c = device.category || '';
+  if (/dj|dc|dd|xdd|fwd|tgq|tyndj|fsd|tgkg/.test(c)) return 'light';
+  if (/cz|pc/.test(c)) return 'plug';
+  if (/kg|tdq/.test(c)) return 'switch';
+  if (/kt|ktkzq|qn|wk|wkf/.test(c)) return 'climate';
+  return 'switch';
+}
+function tuyaLabel(device, prefs) {
+  const p = prefs && prefs[device.id];
+  return (p && p.alias) ? p.alias : device.name;
+}
+
+function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
+  // decide quais mostrar: se ha alguma preferencia salva, respeita "show";
+  // se nao ha NENHUMA pref ainda, mostra todos (primeiro uso).
+  const hasPrefs = prefs && Object.keys(prefs).length > 0;
+  const visible = devices.filter((d) => {
+    const p = prefs && prefs[d.id];
+    if (!hasPrefs) return true;
+    return p ? p.show !== false : false; // sem pref = escondido depois que o usuario ja configurou algo
+  });
+  if (visible.length === 0) {
+    return (
+      <div style={{ ...card, padding: 18, marginBottom: 10, textAlign: 'center' }}>
+        <div style={{ fontSize: 12.5, color: C.text3, marginBottom: 10 }}>{lang === 'pt' ? 'Nenhum aparelho selecionado para a Casa.' : 'No devices selected for Home.'}</div>
+        <Btn kind="soft" onClick={onConfig} style={{ display: 'inline-flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}><Cog size={14} />{t('choose')}</Btn>
+      </div>
+    );
+  }
+  // agrupar por comodo
+  const groups = {};
+  visible.forEach((d) => { const room = (prefs && prefs[d.id] && prefs[d.id].room) || ''; (groups[room] = groups[room] || []).push(d); });
+  const roomNames = Object.keys(groups).sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)));
+  return (
+    <div style={{ marginBottom: 4 }}>
+      {roomNames.map((room) => (
+        <div key={room || 'sem'} style={{ marginBottom: 12 }}>
+          {room ? <div style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 2px 8px' }}>{room}</div> : (roomNames.length > 1 ? <div style={{ fontSize: 11.5, color: C.text3, margin: '2px 2px 8px' }}>{lang === 'pt' ? 'Outros' : 'Other'}</div> : null)}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} t={t} onCmd={onCmd} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TuyaConfig({ devices, prefs, setPrefs, lang, t, onClose }) {
+  const kinds = [['auto', lang === 'pt' ? 'Automático' : 'Auto'], ['light', lang === 'pt' ? 'Luz' : 'Light'], ['plug', lang === 'pt' ? 'Tomada' : 'Plug'], ['switch', lang === 'pt' ? 'Interruptor' : 'Switch'], ['climate', lang === 'pt' ? 'Clima' : 'Climate']];
+  const get = (id) => (prefs && prefs[id]) || {};
+  const patch = (id, p) => setPrefs((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...p } }));
+  const allShown = devices.every((d) => get(d.id).show !== false);
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={t('configDevices')} onClose={onClose} icon={Power} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <span style={{ fontSize: 12, color: C.text3 }}>{devices.length} {lang === 'pt' ? 'aparelhos' : 'devices'}</span>
+        <button onClick={() => devices.forEach((d) => patch(d.id, { show: !allShown }))} style={{ ...card, padding: '5px 10px', color: C.accent, cursor: 'pointer', fontSize: 11.5 }}>{allShown ? (lang === 'pt' ? 'Ocultar todos' : 'Hide all') : (lang === 'pt' ? 'Mostrar todos' : 'Show all')}</button>
+      </div>
+      <div style={{ maxHeight: '60vh', overflowY: 'auto', margin: '0 -4px', padding: '0 4px' }}>
+        {devices.map((d) => {
+          const p = get(d.id); const show = p.show !== false;
+          return (
+            <div key={d.id} style={{ ...card, padding: 12, marginBottom: 8, opacity: show ? 1 : 0.6 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <button onClick={() => patch(d.id, { show: !show })} style={{ width: 40, height: 24, borderRadius: 999, border: 'none', background: show ? C.green : C.surface2, position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
+                  <span style={{ position: 'absolute', top: 3, left: show ? 19 : 3, width: 18, height: 18, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
+                </button>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.alias || d.name}</div>
+                  <div style={{ fontSize: 10, color: C.text3 }}>{d.name} · {d.category}{d.online ? '' : ' · offline'}</div>
+                </div>
+              </div>
+              {show && (
+                <div style={{ marginTop: 10, display: 'grid', gap: 8 }}>
+                  <input value={p.alias || ''} onChange={(e) => patch(d.id, { alias: e.target.value })} placeholder={lang === 'pt' ? 'Apelido (ex.: Luz da sala)' : 'Nickname'} style={{ ...inputStyle, padding: '9px 11px', fontSize: 13 }} />
+                  <input value={p.room || ''} onChange={(e) => patch(d.id, { room: e.target.value })} placeholder={lang === 'pt' ? 'Cômodo (ex.: Sala, Quarto)' : 'Room'} style={{ ...inputStyle, padding: '9px 11px', fontSize: 13 }} />
+                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                    {kinds.map(([k, lab]) => (
+                      <button key={k} onClick={() => patch(d.id, { kind: k })} style={{ padding: '5px 10px', borderRadius: 999, border: `1px solid ${(p.kind || 'auto') === k ? C.accent : C.border}`, background: (p.kind || 'auto') === k ? C.accentSoft : 'transparent', color: (p.kind || 'auto') === k ? C.accent : C.text3, fontSize: 11.5, cursor: 'pointer' }}>{lab}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <Btn onClick={onClose} style={{ width: '100%', marginTop: 12 }}>{t('done')}</Btn>
+    </Modal>
+  );
+}
+
 function tuyaSwitchCode(status) {
   const keys = Object.keys(status || {});
   return keys.find((k) => /^switch(_1|_led)?$|^switch$/.test(k)) || keys.find((k) => k.startsWith('switch')) || null;
 }
-function TuyaCard({ device, t, onCmd }) {
+function TuyaCard({ device, t, onCmd, kind, label }) {
   const sw = tuyaSwitchCode(device.status);
   const on = sw ? !!device.status[sw] : null;
   const bright = device.status.bright_value_v2 != null ? device.status.bright_value_v2 : device.status.bright_value;
   const temp = device.status.temp_current != null ? device.status.temp_current : (device.status.va_temperature != null ? device.status.va_temperature / 10 : null);
-  const catIcon = (c) => (/dj|dc|dd|xdd|fwd|tgq|tyndj/.test(c || '') ? Lightbulb : /cz|pc|kg/.test(c || '') ? Power : /wk|wkf|ms/.test(c || '') ? Home : /kt|ktkzq/.test(c || '') ? Wind : Power);
-  const Ic = catIcon(device.category);
+  const kindIcon = { light: Lightbulb, plug: Power, switch: Power, climate: Wind };
+  const Ic = kindIcon[kind] || Power;
+  const nome = label || device.name;
   return (
     <div style={{ ...card, padding: 13, opacity: device.online ? 1 : 0.55 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1869,7 +1967,7 @@ function TuyaCard({ device, t, onCmd }) {
           </button>
         )}
       </div>
-      <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{device.name}</div>
+      <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div>
       <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>
         {device.online ? (sw ? (on ? t('on') : t('off')) : (temp != null ? temp + '°' : '—')) : t('offline')}
         {bright != null && device.online ? ` · ${Math.round((bright / 1000) * 100)}%` : ''}
@@ -1906,9 +2004,9 @@ function DeviceCard({ device, onChange }) {
     </div>
   );
 }
-function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, devices, setDevices }) {
+function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
-  const [tuya, setTuya] = useState({ loading: true, configured: false, connected: false, devices: [], error: null });
+  const [tuya, setTuya] = useState({ loading: true, configured: false, connected: false, devices: [], error: null }); const [cfgDev, setCfgDev] = useState(false);
   const loadTuya = () => {
     setTuya((p) => ({ ...p, loading: true }));
     authFetch('/api/tuya').then((r) => r.json())
@@ -1937,15 +2035,16 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       <ModuleHeader module={module} t={t} back={back} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
         <SectionTitle icon={Power} label={t('devices')} color={C.accent} />
-        {tuya.configured && <button onClick={loadTuya} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>{tuya.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}SmartLife</button>}
+        {tuya.configured && <div style={{ display: 'flex', gap: 6 }}>
+          <button onClick={() => setCfgDev(true)} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}><Cog size={11} />{t('choose')}</button>
+          <button onClick={loadTuya} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>{tuya.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}SmartLife</button>
+        </div>}
       </div>
       {tuya.error && <HintCard icon={AlertTriangle} text={'SmartLife: ' + tuya.error} />}
       {tuya.loading && !tuya.devices.length ? (
         <div style={{ ...card, padding: 20, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={14} className="spin" />SmartLife…</div>
       ) : tuya.connected && tuya.devices.length ? (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
-          {tuya.devices.map((d) => <TuyaCard key={d.id} device={d} t={t} onCmd={sendCmd} />)}
-        </div>
+        <TuyaDeviceGrid devices={tuya.devices} prefs={tuyaPrefs} t={t} lang={lang} onCmd={sendCmd} onConfig={() => setCfgDev(true)} />
       ) : !tuya.configured ? (
         <><HintCard icon={Power} text={t('deviceHint')} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{devices.map((d) => <DeviceCard key={d.id} device={d} onChange={upd} />)}</div></>
@@ -1967,6 +2066,7 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       <SectionTitle icon={Users} label={t('staff')} color={C.sky} />
       {staffMsgs.length === 0 ? <Empty icon={Users} text={t('nothingHere')} /> : staffMsgs.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {adding && <AddModal title={`${t('quickAdd')} · ${t('house')}`} icon={Plus} draft={{ type: 'task', domain: 'home' }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'home', ...x }); flash(t('savedOne')); setAdding(false); }} />}
+      {cfgDev && <TuyaConfig devices={tuya.devices} prefs={tuyaPrefs} setPrefs={setTuyaPrefs} lang={lang} t={t} onClose={() => setCfgDev(false)} />}
     </div>
   );
 }
@@ -2114,82 +2214,56 @@ class ErrorBoundary extends React.Component {
 }
 
 function FlightMap({ flights, lang, t }) {
+  // Versao simples e a prova de falhas: mundo estilizado + rotas.
+  // Sem tiles de rede (que podiam falhar/bloquear e derrubar a tela).
   const pts = {}; const routes = [];
-  flights.forEach((f) => {
-    const a = ((f.meta && f.meta.from) || '').toUpperCase(), b = ((f.meta && f.meta.to) || '').toUpperCase();
+  (flights || []).forEach((f) => {
+    const a = ((f && f.meta && f.meta.from) || '').toUpperCase();
+    const b = ((f && f.meta && f.meta.to) || '').toUpperCase();
     if (AIRPORTS[a] && AIRPORTS[b]) { pts[a] = AIRPORTS[a]; pts[b] = AIRPORTS[b]; routes.push([a, b]); }
   });
   const keys = Object.keys(pts);
-  if (routes.length === 0) return <div style={{ ...card, padding: 20, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('nothingHere')}</div>;
-  // se qualquer coordenada estiver invalida, nao arrisca o mapa
-  const badPt = keys.some((k) => !Array.isArray(pts[k]) || pts[k].length < 2 || isNaN(pts[k][0]) || isNaN(pts[k][1]));
-  if (badPt) return <div style={{ ...card, padding: 18, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('mapUnavailable')}</div>;
-
-  // --- Mercator (com trava de latitude p/ nao gerar Infinity) ---
-  const W = 340, H = 220, TS = 256;
-  const clampLat = (lat) => Math.max(-85.05, Math.min(85.05, lat));
-  const lon2x = (lon, z) => ((lon + 180) / 360) * Math.pow(2, z) * TS;
-  const lat2y = (lat, z) => {
-    const r = (clampLat(lat) * Math.PI) / 180;
-    return ((1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2) * Math.pow(2, z) * TS;
-  };
-
+  if (routes.length === 0) {
+    return <div style={{ ...card, padding: 20, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('nothingHere')}</div>;
+  }
+  // projecao equiretangular simples (lon/lat -> x/y), sem Mercator, sem Infinity possivel
+  const W = 340, H = 180, pad = 24;
   const lons = keys.map((k) => pts[k][0]), lats = keys.map((k) => pts[k][1]);
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-
-  // zoom que faz tudo caber (minimo 1 p/ nunca explodir em tiles)
-  let z = 5;
-  for (let zz = 5; zz >= 1; zz--) {
-    const w = Math.abs(lon2x(maxLon, zz) - lon2x(minLon, zz));
-    const h = Math.abs(lat2y(minLat, zz) - lat2y(maxLat, zz));
-    if (w <= W * 0.82 && h <= H * 0.72) { z = zz; break; }
-    z = 1;
-  }
-  const n = Math.pow(2, z);
-  const cx = lon2x((minLon + maxLon) / 2, z), cy = lat2y((minLat + maxLat) / 2, z);
-  let originX = cx - W / 2, originY = cy - H / 2;
-  // nao deixa a janela sair do mundo verticalmente
-  originY = Math.max(0, Math.min(originY, n * TS - H));
-  const px = (lon) => lon2x(lon, z) - originX;
-  const py = (lat) => lat2y(lat, z) - originY;
-
-  // tiles visiveis (com teto de seguranca)
-  const tiles = [];
-  const x0 = Math.floor(originX / TS), x1 = Math.floor((originX + W) / TS);
-  const y0 = Math.max(0, Math.floor(originY / TS)), y1 = Math.min(n - 1, Math.floor((originY + H) / TS));
-  for (let tx = x0; tx <= x1 && tiles.length < 40; tx++) {
-    for (let ty = y0; ty <= y1 && tiles.length < 40; ty++) {
-      const wrapped = ((tx % n) + n) % n;
-      if (ty < 0 || ty >= n) continue;
-      tiles.push({ key: tx + '_' + ty, x: tx * TS - originX, y: ty * TS - originY, url: `https://tile.openstreetmap.org/${z}/${wrapped}/${ty}.png` });
-    }
-  }
+  let minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  let minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  if (maxLon - minLon < 8) { minLon -= 4; maxLon += 4; }
+  if (maxLat - minLat < 8) { minLat -= 4; maxLat += 4; }
+  const sx = (W - pad * 2) / ((maxLon - minLon) || 1);
+  const sy = (H - pad * 2) / ((maxLat - minLat) || 1);
+  const sc = Math.min(sx, sy);
+  const cxWorld = (minLon + maxLon) / 2, cyWorld = (minLat + maxLat) / 2;
+  const px = (lon) => W / 2 + (lon - cxWorld) * sc;
+  const py = (lat) => H / 2 - (lat - cyWorld) * sc;
 
   return (
     <div style={{ ...card, padding: 10, marginBottom: 10, overflow: 'hidden' }}>
-      <div style={{ position: 'relative', width: '100%', aspectRatio: `${W} / ${H}`, borderRadius: 10, overflow: 'hidden', background: '#0d1420' }}>
-        <div style={{ position: 'absolute', inset: 0, filter: 'grayscale(1) brightness(0.62) contrast(1.12)' }}>
-          {tiles.map((tl) => (
-            <img key={tl.key} src={tl.url} alt="" loading="lazy" referrerPolicy="no-referrer"
-              style={{ position: 'absolute', left: (tl.x / W) * 100 + '%', top: (tl.y / H) * 100 + '%', width: (TS / W) * 100 + '%', height: (TS / H) * 100 + '%' }} />
-          ))}
-        </div>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+      <div style={{ borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(160deg,#101826,#0b1018)' }}>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }}>
+          <defs>
+            <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
+              <path d="M28 0H0V28" fill="none" stroke="#ffffff10" strokeWidth="0.6" />
+            </pattern>
+          </defs>
+          <rect x="0" y="0" width={W} height={H} fill="url(#grid)" />
           {routes.map(([a, b], i) => {
-            const x1p = px(pts[a][0]), y1p = py(pts[a][1]), x2p = px(pts[b][0]), y2p = py(pts[b][1]);
-            const mx = (x1p + x2p) / 2, my = (y1p + y2p) / 2 - Math.abs(x2p - x1p) * 0.18 - 6;
-            return <path key={i} d={`M${x1p},${y1p} Q${mx},${my} ${x2p},${y2p}`} fill="none" stroke={C.accent} strokeWidth="1.6" opacity="0.9" />;
+            const x1 = px(pts[a][0]), y1 = py(pts[a][1]), x2 = px(pts[b][0]), y2 = py(pts[b][1]);
+            const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.22 - 8;
+            return <path key={i} d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke={C.accent} strokeWidth="1.5" opacity="0.85" />;
           })}
           {keys.map((k) => (
             <g key={k}>
-              <circle cx={px(pts[k][0])} cy={py(pts[k][1])} r="3.2" fill={C.accent} stroke="#000" strokeWidth="0.8" />
-              <text x={px(pts[k][0]) + 5} y={py(pts[k][1]) + 3} fill="#fff" fontSize="8" fontWeight="700" style={{ paintOrder: 'stroke', stroke: '#000', strokeWidth: 2 }}>{k}</text>
+              <circle cx={px(pts[k][0])} cy={py(pts[k][1])} r="3.4" fill={C.accent} />
+              <text x={px(pts[k][0]) + 5} y={py(pts[k][1]) + 3} fill="#E8E8EE" fontSize="8.5" fontWeight="700">{k}</text>
             </g>
           ))}
         </svg>
       </div>
-      <div style={{ fontSize: 9.5, color: C.text3, marginTop: 7, textAlign: 'center' }}>© OpenStreetMap · {t('routeMapNote')}</div>
+      <div style={{ fontSize: 9.5, color: C.text3, marginTop: 7, textAlign: 'center' }}>{t('routeMapNote')}</div>
     </div>
   );
 }
@@ -2669,6 +2743,7 @@ function App() {
     return { ...s, weights: list.slice(-120), profile: { ...(s.profile || {}), weight: kg } };
   });
   const setDevices = (fn) => setSettings((s) => ({ ...s, devices: typeof fn === 'function' ? fn(s.devices || DEFAULT_DEVICES) : fn }));
+  const setTuyaPrefs = (fn) => setSettings((s) => ({ ...s, tuyaPrefs: typeof fn === 'function' ? fn(s.tuyaPrefs || {}) : fn }));
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
   const greeting = () => { const h = new Date().getHours(); return h < 12 ? t('goodMorning') : h < 18 ? t('goodAfternoon') : t('goodEvening'); };
   const navTo = (k) => { if (SCREEN_ICONS[k]) setActive({ screen: k, module: k === 'dashboard' ? null : null }); else setActive({ screen: 'dashboard', module: moduleByKey(k) }); };
@@ -2685,7 +2760,7 @@ function App() {
     if (mo.custom === 'people') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PeopleScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
-    if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} />;
+    if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} />;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} state={gmail} setState={setGmail} load={loadGmail} />;
