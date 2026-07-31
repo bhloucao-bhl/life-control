@@ -210,6 +210,7 @@ const S = {
   deleteConfirmGeneric: L('Tem certeza que deseja excluir? Esta ação não pode ser desfeita.', 'Delete this? This cannot be undone.'),
   on: L('Ligado', 'On'), off: L('Desligado', 'Off'), offline: L('Offline', 'Offline'),
   choose: L('Escolher', 'Choose'), configDevices: L('Aparelhos da Casa', 'Home devices'),
+  giftLink: L('Link da compra', 'Purchase link'), giftPrice: L('Preço', 'Price'),
   pullRefresh: L('Puxe para atualizar', 'Pull to refresh'), releaseRefresh: L('Solte para atualizar', 'Release to refresh'), refreshing: L('Atualizando…', 'Refreshing…'),
   openRemote: L('Abrir controle', 'Open remote'), brightness: L('Brilho', 'Brightness'), color: L('Cor', 'Color'), whiteLight: L('Luz branca', 'White'), turnOff: L('Desligar', 'Turn off'),
   acMode: L('Modo', 'Mode'), cold: L('Frio', 'Cool'), hot: L('Quente', 'Heat'), fan: L('Ventilar', 'Fan'), fanSpeed: L('Velocidade', 'Fan speed'),
@@ -436,7 +437,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v18 · 31jul';
+const APP_VERSION = 'v19 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -515,6 +516,7 @@ function buildContext(items) {
 /* ---------------- primitives ---------------- */
 const card = { background: C.surface, border: `1px solid ${C.borderSoft}`, borderRadius: 16, boxShadow: '0 1px 0 rgba(255,255,255,0.03) inset' };
 const inputStyle = { width: '100%', background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
+const inputStyleBig = { ...inputStyle, padding: '14px 15px', fontSize: 16, borderRadius: 12 };
 function Btn({ children, onClick, kind = 'primary', style, disabled }) {
   const kinds = { primary: { background: C.accent, color: '#171200', border: 'none', fontWeight: 600 }, ghost: { background: 'transparent', color: C.text2, border: `1px solid ${C.border}` }, soft: { background: C.surface2, color: C.text, border: `1px solid ${C.border}` }, danger: { background: 'transparent', color: C.rose, border: `1px solid ${C.rose}55` } };
   return <button onClick={onClick} disabled={disabled} style={{ padding: '10px 14px', borderRadius: 12, fontSize: 14, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, ...kinds[kind], ...style }}>{children}</button>;
@@ -523,7 +525,7 @@ function Chip({ children, active, onClick, color }) {
   return <button onClick={onClick} style={{ padding: '6px 11px', borderRadius: 999, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap', background: active ? (color ? color + '22' : C.accentSoft) : 'transparent', color: active ? (color || C.accent) : C.text2, border: `1px solid ${active ? (color || C.accent) + '55' : C.border}` }}>{children}</button>;
 }
 function Field({ label, children }) {
-  return <label style={{ display: 'block', marginBottom: 10 }}><div style={{ fontSize: 11.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 5, fontWeight: 600 }}>{label}</div>{children}</label>;
+  return <label style={{ display: 'block', marginBottom: 16 }}><div style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 7, fontWeight: 600 }}>{label}</div>{children}</label>;
 }
 function Empty({ icon: Icon, text }) {
   return <div style={{ ...card, padding: '26px 18px', textAlign: 'center', color: C.text3 }}>{Icon && <Icon size={22} style={{ opacity: 0.6, marginBottom: 8 }} />}<div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{text}</div></div>;
@@ -545,11 +547,13 @@ function SectionTitle({ icon: Icon, label, color }) {
 function ScreenTitle({ title, sub }) {
   return <div style={{ margin: '4px 2px 16px' }}><div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</div>{sub && <div style={{ fontSize: 13, color: C.text3, marginTop: 3 }}>{sub}</div>}</div>;
 }
-function MiniStat({ label, value, color, small }) {
-  return <div style={{ ...card, padding: '10px 12px', flex: 1, minWidth: 0 }}>
-    <div style={{ fontSize: small ? 15 : 19, fontWeight: 700, color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{value}</div>
-    <div style={{ fontSize: 10.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{label}</div>
-  </div>;
+function MiniStat({ label, value, color, small, onClick }) {
+  return (
+    <div onClick={onClick} style={{ flex: 1, background: C.bg2, borderRadius: 12, padding: '11px 8px', textAlign: 'center', cursor: onClick ? 'pointer' : 'default', border: `1px solid ${onClick ? C.borderSoft : 'transparent'}` }}>
+      <div style={{ fontSize: small ? 14 : 19, fontWeight: 700, color: color || C.text }}>{value}</div>
+      <div style={{ fontSize: 10.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{label}</div>
+    </div>
+  );
 }
 function HintCard({ icon: Icon, text }) {
   return <div style={{ ...card, padding: 12, marginBottom: 10, display: 'flex', gap: 9, alignItems: 'flex-start', background: C.bg2 }}><Icon size={14} style={{ color: C.text3, marginTop: 1, flexShrink: 0 }} /><div style={{ fontSize: 11.5, color: C.text3, lineHeight: 1.5 }}>{text}</div></div>;
@@ -703,10 +707,16 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           {metaFields.map(([k, ptL, enL, it]) => <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type={it === 'number' ? 'number' : it === 'date' ? 'date' : 'text'} value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: 'dark' }} /></Field></div>)}
         </div>
       )}
-      {(type === 'person' || type === 'vehicle') && (
+      {(type === 'person' || type === 'vehicle' || type === 'gift' || type === 'shopping') && (
         <Field label={t('photo')}>
           <PhotoPicker value={f.meta.photo} t={t} onChange={(att) => upMeta({ photo: att })} />
         </Field>
+      )}
+      {(type === 'gift' || type === 'shopping') && (
+        <>
+          <Field label={t('giftLink')}><input value={f.meta.link || ''} onChange={(e) => upMeta({ link: e.target.value })} placeholder="https://..." style={inputStyle} /></Field>
+          <Field label={t('giftPrice')}><input type="number" step="0.01" value={f.amount || ''} onChange={(e) => setF((p) => ({ ...p, amount: Number(e.target.value) }))} style={inputStyle} /></Field>
+        </>
       )}
       {type === 'vehicle' && (
         <Field label={t('color')}><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{CAR_COLORS.map(([hex, ptn, enn]) => <button key={hex} onClick={() => upMeta({ color: hex })} title={lang === 'pt' ? ptn : enn} style={{ width: 30, height: 30, borderRadius: 8, background: hex, cursor: 'pointer', border: f.meta.color === hex ? `2px solid ${C.accent}` : `1px solid ${C.border}` }} />)}</div></Field>
@@ -859,43 +869,68 @@ function wmo(code, lang) { const e = WMO[code] || WMO[3]; return { kind: e[0], l
 function wxIcon(k) { return k === 'sun' ? Sun : k === 'rain' ? CloudRain : k === 'cloud' ? Cloud : CloudSun; }
 
 function WeatherDetail({ wx, lang, t, onClose }) {
-  const d0 = (wx.days && wx.days[0]) || {};
+  const days = wx.days || [];
+  const [di, setDi] = useState(0);
+  const d0 = days[di] || {};
+  const hourly = (wx.hourlyByDay && wx.hourlyByDay[d0.date]) || (di === 0 ? wx.hours : null) || [];
   const rows = [
     [t('rainChance'), d0.rainProb != null ? d0.rainProb + '%' : '—', CloudRain, C.blue],
     [lang === 'pt' ? 'Chuva prevista' : 'Rain', d0.rainMm != null ? String(d0.rainMm).replace('.', ',') + ' mm' : '—', CloudRain, C.sky],
-    [t('humidity'), wx.humidity != null ? wx.humidity + '%' : '—', Cloud, C.teal],
-    [t('wind'), wx.wind != null ? wx.wind + ' km/h' : '—', Wind, C.text2],
     [t('uvIndex'), d0.uv != null ? String(d0.uv) : '—', Sun, C.accent],
+    [t('wind'), d0.windMax != null ? d0.windMax + ' km/h' : (wx.wind != null ? wx.wind + ' km/h' : '—'), Wind, C.text2],
     [t('sunriseL'), d0.sunrise || '—', Sun, C.accent],
     [t('sunsetL'), d0.sunset || '—', CloudSun, C.violet],
   ];
-  const hours = wx.hours || [];
-  const maxRain = Math.max(10, ...hours.map((h) => h.rain || 0));
+  if (di === 0 && wx.humidity != null) rows.splice(2, 0, [t('humidity'), wx.humidity + '%', Cloud, C.teal]);
+
+  // grafico de temperatura por hora
+  const temps = hourly.filter((h) => h.temp != null);
+  let chart = null;
+  if (temps.length > 1) {
+    const vals = temps.map((h) => h.temp); const min = Math.min(...vals), max = Math.max(...vals); const span = (max - min) || 1;
+    const W = 300, H = 60;
+    const pts = temps.map((h, i) => [temps.length === 1 ? W / 2 : (i / (temps.length - 1)) * W, H - ((h.temp - min) / span) * (H - 16) - 8]);
+    const dPath = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    chart = (
+      <div style={{ ...card, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Temperatura ao longo do dia' : 'Temperature through the day'}</div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 66, display: 'block' }} preserveAspectRatio="none">
+          <path d={dPath} fill="none" stroke={C.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+          {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2" fill={C.accent} />)}
+        </svg>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: C.text3, marginTop: 4 }}>
+          {temps.filter((_, i) => i % Math.ceil(temps.length / 6) === 0).map((h, i) => <span key={i}>{h.h}</span>)}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Modal onClose={onClose}>
       <SheetHead title={t('weatherDetail')} onClose={onClose} icon={CloudSun} />
-      <div style={{ ...card, padding: 16, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 14 }}>
-        <div style={{ fontSize: 34, fontWeight: 800 }}>{wx.temp}°</div>
-        <div><div style={{ fontSize: 13.5 }}>{wmo(wx.code, lang).label}</div><div style={{ fontSize: 11.5, color: C.text2, marginTop: 2 }}>↑{d0.hi}° ↓{d0.lo}° · {t('feels')} {wx.feels}°</div></div>
+      {/* seletor de dia */}
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 12, paddingBottom: 4 }}>
+        {days.map((d, i) => {
+          const wd = i === 0 ? (lang === 'pt' ? 'Hoje' : 'Today') : WD[lang][new Date(d.date + 'T00:00:00').getDay()];
+          const on = i === di; const kind = wmo(d.code, lang).kind;
+          const Ic = wxIcon(kind);
+          return (
+            <button key={i} onClick={() => setDi(i)} style={{ flex: '0 0 auto', minWidth: 58, padding: '9px 6px', borderRadius: 12, border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accentSoft : 'transparent', cursor: 'pointer', textAlign: 'center' }}>
+              <div style={{ fontSize: 10.5, color: on ? C.accent : C.text2, fontWeight: 600 }}>{wd}</div>
+              <Ic size={16} style={{ color: kind === 'sun' ? '#F5C263' : kind === 'rain' ? C.sky : C.text2, margin: '5px auto 4px' }} />
+              <div style={{ fontSize: 10 }}><span style={{ color: C.rose }}>{d.hi}°</span> <span style={{ color: C.sky }}>{d.lo}°</span></div>
+            </button>
+          );
+        })}
       </div>
-      {hours.length > 0 && (
-        <>
-          <div style={{ fontSize: 11.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 2px 8px', fontWeight: 600 }}>{t('next12h')}</div>
-          <div style={{ ...card, padding: 14, marginBottom: 12, display: 'flex', gap: 4, alignItems: 'flex-end', height: 108, overflowX: 'auto' }}>
-            {hours.map((h, i) => (
-              <div key={i} style={{ flex: '1 0 26px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                <span style={{ fontSize: 9, color: C.text2 }}>{h.rain != null ? h.rain + '%' : ''}</span>
-                <div style={{ width: 12, height: Math.max(3, ((h.rain || 0) / maxRain) * 46), background: C.blue, borderRadius: 3 }} />
-                <span style={{ fontSize: 9.5, color: C.text3 }}>{h.temp != null ? h.temp + '°' : ''}</span>
-                <span style={{ fontSize: 9, color: C.text3 }}>{h.h}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+      <div style={{ ...card, padding: 16, marginBottom: 12, textAlign: 'center' }}>
+        <div style={{ fontSize: 13.5 }}>{wmo(d0.code, lang).label}</div>
+        <div style={{ fontSize: 12, color: C.text2, marginTop: 3 }}><span style={{ color: C.rose, fontWeight: 700 }}>↑{d0.hi}°</span> <span style={{ color: C.sky, fontWeight: 700 }}>↓{d0.lo}°</span></div>
+      </div>
+      {chart}
       <div style={{ ...card, padding: 4 }}>
         {rows.map(([l, v, Ic, col], i) => (
-          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none' }}>
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '11px 12px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none' }}>
             <span style={{ fontSize: 12.5, color: C.text2, display: 'flex', gap: 8, alignItems: 'center' }}><Ic size={13} style={{ color: col }} />{l}</span>
             <span style={{ fontSize: 13.5, fontWeight: 600 }}>{v}</span>
           </div>
@@ -916,13 +951,13 @@ function WeatherCard({ lang, t, wx, loading }) {
     );
   }
   const now = wmo(wx.code, lang);
-  const NowIcon = wxIcon(now.kind);
+  const NowIcon = wxIcon(now.kind); const nowColor = now.kind === 'sun' ? '#F5C263' : now.kind === 'rain' ? C.sky : now.kind === 'cloud' ? C.text2 : '#F5C263';
   return (
     <div onClick={() => setOpen(true)} style={{ ...card, padding: 14, marginBottom: 10, cursor: 'pointer' }}>
       {open && <WeatherDetail wx={wx} lang={lang} t={t} onClose={() => setOpen(false)} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <NowIcon size={32} style={{ color: C.accent }} />
+          <NowIcon size={32} style={{ color: nowColor }} />
           <div>
             <div style={{ fontSize: 24, fontWeight: 700, lineHeight: 1 }}>{wx.temp}°</div>
             <div style={{ fontSize: 12, color: C.text3, marginTop: 3 }}>{now.label}</div>
@@ -930,7 +965,7 @@ function WeatherCard({ lang, t, wx, loading }) {
         </div>
         <div style={{ textAlign: 'right', fontSize: 11.5, color: C.text3, lineHeight: 1.6 }}>
           {wx.feels != null && <div>{t('feels')} {wx.feels}°</div>}
-          <div>↑{wx.hi}° ↓{wx.lo}° <ChevronRight size={11} style={{ verticalAlign: 'middle', color: C.text3 }} /></div>
+          <div><span style={{ color: C.rose, fontWeight: 700 }}>↑{wx.hi}°</span> <span style={{ color: C.sky, fontWeight: 700 }}>↓{wx.lo}°</span> <ChevronRight size={11} style={{ verticalAlign: 'middle', color: C.text3 }} /></div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
@@ -940,8 +975,8 @@ function WeatherCard({ lang, t, wx, loading }) {
           return (
             <div key={i} style={{ flex: 1, textAlign: 'center', background: C.bg2, borderRadius: 10, padding: '8px 2px' }}>
               <div style={{ fontSize: 10, color: C.text3 }}>{wd}</div>
-              <I size={16} style={{ color: C.text2, margin: '5px auto' }} />
-              <div style={{ fontSize: 10.5 }}>{d.hi}°<span style={{ color: C.text3 }}> {d.lo}°</span></div>
+              <I size={16} style={{ color: wmo(d.code, lang).kind === 'sun' ? '#F5C263' : wmo(d.code, lang).kind === 'rain' ? C.sky : C.text2, margin: '5px auto' }} />
+              <div style={{ fontSize: 10.5 }}><span style={{ color: C.rose }}>{d.hi}°</span><span style={{ color: C.sky }}> {d.lo}°</span></div>
             </div>
           );
         })}
@@ -1216,7 +1251,7 @@ const CAL_FILTERS = [['all', 'fAll', null], ['work', 'fWork', 'work'], ['persona
 function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount }) {
   useEffect(() => { if (onMount) onMount(); }, []);
   const [mode, setMode] = useState('week'); const [spin, setSpin] = useState(false); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7)); const [filter, setFilter] = useState(null); const [scope, setScope] = useState('all');
-  const dated = items.filter((i) => i.date && i.status !== 'done' && i.type !== 'account' && i.type !== 'person' && i.type !== 'message' && (scope === 'all' || ['event', 'appointment', 'flight', 'trip'].includes(i.type)) && (!filter || i.domain === filter));
+  const dated = items.filter((i) => i.date && i.status !== 'done' && i.type !== 'account' && i.type !== 'person' && i.type !== 'message' && (scope === 'all' || ['event', 'appointment', 'flight', 'trip', 'document', 'bill'].includes(i.type)) && (!filter || i.domain === filter));
   const onDay = (iso) => dated.filter((i) => i.date === iso);
   const [y, m] = vm.split('-').map(Number);
   const shiftMonth = (d) => { let nm = m + d, ny = y; if (nm < 1) { nm = 12; ny--; } if (nm > 12) { nm = 1; ny++; } setVm(`${ny}-${pad2(nm)}`); };
@@ -2013,9 +2048,11 @@ function TuyaRemote({ device, kind, label, irId, t, onClose }) {
   useEffect(() => {
     if (!irId) { setErr('Sem hub IR configurado.'); return; }
     if (kind === 'ac') return; // ar usa comandos proprios
-    authFetch(`/api/tuya?keys=1&infrared_id=${irId}&remote_id=${device.id}`).then((r) => r.json())
-      .then((j) => { if (j.keys) setKeys(j.keys); if (j.error) setErr(j.error); })
-      .catch((e) => setErr(String(e)));
+    const ctrl = new AbortController();
+    const to = setTimeout(() => ctrl.abort(), 12000);
+    authFetch(`/api/tuya?keys=1&infrared_id=${irId}&remote_id=${device.id}`, { signal: ctrl.signal }).then((r) => r.json())
+      .then((j) => { clearTimeout(to); setKeys(j.keys || []); if (j.error) setErr(j.error); })
+      .catch((e) => { clearTimeout(to); setKeys([]); setErr(e.name === 'AbortError' ? 'Tempo esgotado ao buscar teclas.' : String(e)); });
   }, [irId, device.id, kind]);
 
   const sendKey = async (keyObj) => {
@@ -2298,19 +2335,19 @@ function PersonDetail({ person, items, people, lang, t, back, backLabel, onOpen,
       {kid ? (
         <>
           <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
-            <MiniStat label={t('open')} value={school.filter((x) => x.type === 'task' && x.status !== 'done').length} color={C.accent} />
-            <MiniStat label={t('gifts')} value={giftsL.length} color={C.violet} />
-            <MiniStat label={t('documents')} value={docs.length} color={C.blue} />
+            <MiniStat label={t('open')} value={school.filter((x) => x.type === 'task' && x.status !== 'done').length} color={C.accent} onClick={() => { const el = document.getElementById('sec-school'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
+            <MiniStat label={t('gifts')} value={giftsL.length} color={C.violet} onClick={() => { const el = document.getElementById('sec-gifts'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
+            <MiniStat label={t('documents')} value={docs.length} color={C.blue} onClick={() => { const el = document.getElementById('sec-docs'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }} />
           </div>
           <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
             <Btn kind="soft" onClick={() => setAdding('task')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><GraduationCap size={14} />{t('school')}</Btn>
             <Btn kind="soft" onClick={() => setAdding('gift')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Gift size={14} />{t('gifts')}</Btn>
             <Btn kind="soft" onClick={() => setAdding('document')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Syringe size={14} />{t('healthDocs')}</Btn>
           </div>
-          <Section icon={GraduationCap} label={t('school')} color={C.accent} list={school} />
-          <Section icon={Heart} label={t('health')} color={C.rose} list={healthL} />
-          <Section icon={Gift} label={t('gifts')} color={C.violet} list={giftsL} />
-          <Section icon={FileText} label={t('documents')} color={C.blue} list={docs} />
+          <div id="sec-school"><Section icon={GraduationCap} label={t('school')} color={C.accent} list={school} /></div>
+          <div id="sec-health"><Section icon={Heart} label={t('health')} color={C.rose} list={healthL} /></div>
+          <div id="sec-gifts"><Section icon={Gift} label={t('gifts')} color={C.violet} list={giftsL} /></div>
+          <div id="sec-docs"><Section icon={FileText} label={t('documents')} color={C.blue} list={docs} /></div>
         </>
       ) : (
         <>
@@ -2343,6 +2380,13 @@ function PeopleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const [adding, setAdding] = useState(false); const [sel, setSel] = useState(null);
   const persons = items.filter((i) => i.type === 'person').sort((a, b) => a.title.localeCompare(b.title));
   const current = sel && items.find((i) => i.id === sel);
+  if (drill) return (
+    <div>
+      <ModuleHeader module={module} t={t} back={() => setDrill(null)} />
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{drill.title} · {drill.list.length}</div>
+      {drill.list.length === 0 ? <Empty icon={Sparkles} text={t('nothingHere')} /> : drill.list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onOpen={onOpen} toggleTask={toggleTask} />)}
+    </div>
+  );
   if (current) return <PersonDetail person={current} items={items} people={people} lang={lang} t={t} back={() => setSel(null)} backLabel={t('people')} onOpen={onOpen} toggleTask={toggleTask} addItem={addItem} updateItem={updateItem} delItem={delItem} flash={flash} />;
   return (
     <div>
@@ -2361,11 +2405,19 @@ function PeopleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
 }
 function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
   const [sel, setSel] = useState(null);
+  const [drill, setDrill] = useState(null); // {title, list}
   const kids = items.filter((i) => i.type === 'person' && isKid(i)).sort((a, b) => a.title.localeCompare(b.title));
   const current = sel && items.find((i) => i.id === sel);
   const linkedOf = (p) => items.filter((i) => i.id !== p.id && ((i.meta && i.meta.personId === p.id) || (i.person && i.person.toLowerCase() === p.title.toLowerCase())));
   let sumOpen = 0, sumEv = 0, sumGift = 0, sumSpent = 0;
   kids.forEach((p) => { const l = linkedOf(p); sumOpen += l.filter((i) => i.type === 'task' && i.status !== 'done').length; sumEv += l.filter((i) => i.date && ['event', 'appointment'].includes(i.type) && i.date >= todayISO()).length; sumGift += l.filter((i) => ['gift', 'shopping'].includes(i.type)).length; sumSpent += l.filter((i) => isMoney(i.type) && i.amount).reduce((a, b) => a + b.amount, 0); });
+  if (drill) return (
+    <div>
+      <ModuleHeader module={module} t={t} back={() => setDrill(null)} />
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>{drill.title} · {drill.list.length}</div>
+      {drill.list.length === 0 ? <Empty icon={Sparkles} text={t('nothingHere')} /> : drill.list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onOpen={onOpen} toggleTask={toggleTask} />)}
+    </div>
+  );
   if (current) return <PersonDetail person={current} items={items} people={people} lang={lang} t={t} kid back={() => setSel(null)} backLabel={t('kids')} onOpen={onOpen} toggleTask={toggleTask} addItem={addItem} updateItem={updateItem} delItem={delItem} flash={flash} />;
   return (
     <div>
@@ -2374,10 +2426,10 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
         <div style={{ ...card, padding: 16, marginBottom: 14 }}>
           <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, display: 'flex', gap: 7, alignItems: 'center' }}><Users size={15} style={{ color: C.violet }} />{t('myKids')} · {kids.length}</div>
           <div style={{ display: 'flex', gap: 10 }}>
-            <MiniStat label={t('open')} value={sumOpen} color={C.accent} />
-            <MiniStat label={t('agenda')} value={sumEv} color={C.blue} />
-            <MiniStat label={t('gifts')} value={sumGift} color={C.violet} />
-            <MiniStat label={t('spent')} value={fmtMoney(sumSpent, lang)} color={C.green} small />
+            <MiniStat label={t('open')} value={sumOpen} color={C.accent} onClick={() => setDrill({ title: t('open'), list: kids.flatMap(linkedOf).filter((i) => i.type === 'task' && i.status !== 'done') })} />
+            <MiniStat label={t('agenda')} value={sumEv} color={C.blue} onClick={() => setDrill({ title: t('agenda'), list: kids.flatMap(linkedOf).filter((i) => i.date && ['event', 'appointment'].includes(i.type) && i.date >= todayISO()) })} />
+            <MiniStat label={t('gifts')} value={sumGift} color={C.violet} onClick={() => setDrill({ title: t('gifts'), list: kids.flatMap(linkedOf).filter((i) => ['gift', 'shopping'].includes(i.type)) })} />
+            <MiniStat label={t('spent')} value={fmtMoney(sumSpent, lang)} color={C.green} small onClick={() => setDrill({ title: t('spent'), list: kids.flatMap(linkedOf).filter((i) => isMoney(i.type) && i.amount) })} />
           </div>
         </div>
       )}
@@ -2787,20 +2839,23 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
   return (
     <Modal onClose={onClose}>
       <SheetHead title={t('settings')} onClose={onClose} icon={Cog} />
-      <Field label={t('name')}><input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setSettings((s) => ({ ...s, name }))} style={inputStyle} /></Field>
-      <Field label={t('height') + ' (cm)'}><input type="number" value={settings.profile && settings.profile.height || ''} onChange={(e) => setSettings((s) => ({ ...s, profile: { ...(s.profile || {}), height: e.target.value } }))} style={inputStyle} /></Field>
+      <Field label={t('name')}><input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setSettings((s) => ({ ...s, name }))} style={inputStyleBig} /></Field>
+      <Field label={t('height') + ' (cm)'}><input type="number" value={settings.profile && settings.profile.height || ''} onChange={(e) => setSettings((s) => ({ ...s, profile: { ...(s.profile || {}), height: e.target.value } }))} style={inputStyleBig} /></Field>
       <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{t('editDock')}</div>
       <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 16 }}>
         {DOCKABLE.map((k) => { const on = dock.includes(k); const Ic = navIcon(k); return (
-          <button key={k} onClick={() => toggleDock(k)} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '7px 11px', borderRadius: 999, cursor: 'pointer', fontSize: 12.5, background: on ? C.accentSoft : 'transparent', color: on ? C.accent : C.text2, border: `1px solid ${on ? C.accent + '55' : C.border}` }}><Ic size={14} />{navLabel(k, t)}</button>
+          <button key={k} onClick={() => toggleDock(k)} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '10px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 13, background: on ? C.accentSoft : 'transparent', color: on ? C.accent : C.text2, border: `1px solid ${on ? C.accent + '55' : C.border}` }}><Ic size={14} />{navLabel(k, t)}</button>
         ); })}
       </div>
-      <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 8px' }}>{t('connections')}</div>
+      <div style={{ height: 1, background: C.borderSoft, margin: '8px 0 20px' }} />
+      <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{t('connections')}</div>
       <Connections lang={lang} t={t} />
       <TuyaIrDiag t={t} lang={lang} />
-      <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); persistSeeded(); onClose(); } }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
+      <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
+      <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
+      <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); persistSeeded(); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
       <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
       <input id="lcc-import" type="file" accept="application/json" style={{ display: 'none' }} onChange={async (e) => {
