@@ -78,6 +78,7 @@ export async function POST(req) {
       if (b.notes) body.content = b.notes;
       if (b.date) body.dueDate = b.date + 'T00:00:00+0000';
       if (b.priority) body.priority = b.priority;
+      if (b.tags && b.tags.length) body.tags = b.tags;
       if (b.projectId && b.projectId !== 'inbox') body.projectId = b.projectId;
       const j = await tt(token, 'POST', '/task', body);
       return Response.json({ ok: true, id: j.id, task: j });
