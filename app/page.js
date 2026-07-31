@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v28 · 31jul';
+const APP_VERSION = 'v29 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2468,13 +2468,14 @@ function TuyaRemote({ device, kind, label, irId, t, onClose }) {
 
 function tuyaSwitchCode(status) {
   const keys = Object.keys(status || {});
-  return keys.find((k) => /^switch(_1|_led)?$|^switch$/.test(k)) || keys.find((k) => k.startsWith('switch')) || null;
+  // prioridade: switch_led (lâmpadas), switch_1 (tomadas), switch, qualquer switch*
+  return keys.find((k) => k === 'switch_led') || keys.find((k) => k === 'switch_1') || keys.find((k) => k === 'switch') || keys.find((k) => k.startsWith('switch')) || null;
 }
 function TuyaCard({ device, t, onCmd, kind, label, irId }) {
   const [remote, setRemote] = useState(false); const [light, setLight] = useState(false);
   const irKind = kind === 'tv' || kind === 'stb' || kind === 'ac' || kind === 'receiver';
-  const sw = tuyaSwitchCode(device.status);
-  const on = sw ? !!device.status[sw] : null;
+  const sw = tuyaSwitchCode(device.status) || (kind === 'light' ? 'switch_led' : null);
+  const on = sw && device.status[sw] != null ? !!device.status[sw] : (sw ? false : null);
   const bright = device.status.bright_value_v2 != null ? device.status.bright_value_v2 : device.status.bright_value;
   const temp = device.status.temp_current != null ? device.status.temp_current : (device.status.va_temperature != null ? device.status.va_temperature / 10 : null);
   const kindIcon = { light: Lightbulb, plug: Power, switch: Power, climate: Wind, ac: Wind, tv: Tv, stb: Tv, receiver: Radio };
@@ -2558,7 +2559,15 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
         if (j.devices && j.devices.length) {
           setTuyaPrefs((prev) => {
             const next = { ...prev }; let changed = false;
-            j.devices.forEach((d) => { if (!next[d.id] && TUYA_SEED[d.id]) { next[d.id] = TUYA_SEED[d.id]; changed = true; } });
+            j.devices.forEach((d) => {
+              const seed = TUYA_SEED[d.id];
+              if (!next[d.id] && seed) { next[d.id] = seed; changed = true; }
+              else if (next[d.id] && seed) {
+                // completa campos que faltam nas prefs antigas (ex.: hub IR e kind), sem apagar apelido/cômodo do usuário
+                if (seed.ir && !next[d.id].ir) { next[d.id] = { ...next[d.id], ir: seed.ir }; changed = true; }
+                if (seed.kind && (!next[d.id].kind || next[d.id].kind === 'auto')) { next[d.id] = { ...next[d.id], kind: seed.kind }; changed = true; }
+              }
+            });
             return changed ? next : prev;
           });
         }
