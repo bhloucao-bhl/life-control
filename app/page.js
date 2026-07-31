@@ -150,7 +150,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -438,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v23 · 31jul';
+const APP_VERSION = 'v24 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1019,8 +1019,10 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [] }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
+  const [news, setNews] = useState(null);
+  useEffect(() => { authFetch('/api/news').then((r) => r.json()).then((j) => setNews(j.items || [])).catch(() => setNews([])); }, []);
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
   useEffect(() => {
     let alive = true;
@@ -1039,11 +1041,15 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
     return () => { alive = false; };
   }, []);
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
-  const attention = items.filter((i) => i.type === 'task' && i.status !== 'done' && (i.priority === 1 || (i.date && i.date < today)));
+  const isImportant = (tags) => (tags || []).some((tg) => String(tg).toLowerCase() === 'importante' || String(tg).toLowerCase() === 'important');
+  const ttImportant = ttItems.filter((i) => i.status !== 'done' && isImportant(i._tags));
+  const localAttention = items.filter((i) => i.type === 'task' && i.status !== 'done' && (i.priority === 1 || (i.date && i.date < today)) && !String(i.id).startsWith('tt_'));
+  // Prioriza tarefas 'Importante' do TickTick; completa com locais urgentes ate 5
+  const attention = [...ttImportant, ...localAttention].slice(0, 5);
   const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   const next5 = todayItems.filter((i) => !i.time || i.time >= hm).slice(0, 5);
   const balances = items.filter((i) => i.type === 'account' && i.meta && i.meta.showOnToday);
-  const longTerm = items.filter((i) => i.date && i.date > today && ((i.meta && i.meta.milestone) || i.type === 'trip')).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
+  const longTerm = items.filter((i) => i.date && i.date > today && ((i.meta && i.meta.milestone) || i.type === 'trip')).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
@@ -1076,6 +1082,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       <WeatherCard lang={lang} t={t} wx={live && live.weather} loading={liveLoading} />
       {balances.length > 0 ? balances.map((b) => <InfoCard key={b.id} icon={CreditCard} title={b.title} sub={t('available')} onClick={() => onOpen(b)} accent right={<span style={{ fontSize: 18, fontWeight: 700, color: C.green }}>{fmtMoney(b.meta.balance, lang)}</span>} />) : <InfoCard icon={CreditCard} title={t('available')} sub={t('addBalance')} onClick={() => goModule('finance')} right={<Plus size={18} style={{ color: C.text3 }} />} />}
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
+      {ttItems.length > 0 && attention.length === 0 && <HintCard icon={Star} text={lang === 'pt' ? 'Marque tarefas com a etiqueta “Importante” no TickTick para elas aparecerem aqui.' : 'Tag tasks “Importante” in TickTick to surface them here.'} />}
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       <SectionTitle icon={Clock} label={t('todayPlan')} color={C.accent} />
       {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : next5.map((i) => (
@@ -1095,9 +1102,13 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       ))}
       <SectionTitle icon={Newspaper} label={t('news')} color={C.blue} />
       <div style={{ ...card, overflow: 'hidden' }}>
-        {NEWS.slice(0, 5).map((n, i) => (
+        {news === null ? (
+          <div style={{ padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
+        ) : news.length === 0 ? (
+          <div style={{ padding: 16, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Sem notícias agora.' : 'No news.'}</div>
+        ) : news.slice(0, 5).map((n, i) => (
           <div key={i} onClick={goNews} style={{ padding: '11px 14px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 10.5, color: C.accent, fontWeight: 600 }}>{n.source} · {n.cat}</div><div style={{ fontSize: 13.5, marginTop: 2, lineHeight: 1.35 }}>{n.title}</div></div>
+            <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, lineHeight: 1.35 }}>{n.title}</div>{n.why && <div style={{ fontSize: 11, color: C.accent, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.why}</div>}</div>
             <ChevronRight size={15} style={{ color: C.text3, flexShrink: 0 }} />
           </div>
         ))}
@@ -1231,19 +1242,67 @@ function MessagesScreen({ items, people, lang, t, setItems, onOpen, toggleTask, 
 }
 
 /* ---------------- News ---------------- */
-function NewsScreen({ lang, t, back }) {
+function timeAgo(pub, lang) {
+  const t = Date.parse(pub); if (!t) return '';
+  const min = Math.floor((Date.now() - t) / 60000);
+  if (min < 60) return (lang === 'pt' ? 'há ' : '') + min + 'min';
+  const h = Math.floor(min / 60); if (h < 24) return (lang === 'pt' ? 'há ' : '') + h + 'h';
+  const d = Math.floor(h / 24); return (lang === 'pt' ? 'há ' : '') + d + 'd';
+}
+
+function NewsScreen({ lang, t, back, onSaveItem, onSendItem }) {
+  const [data, setData] = useState(null); const [loading, setLoading] = useState(true); const [err, setErr] = useState(null);
+  const load = () => {
+    setLoading(true);
+    authFetch('/api/news').then((r) => r.json()).then((j) => { setData(j.items || []); if (j.error) setErr(j.error); setLoading(false); })
+      .catch((e) => { setErr(String(e)); setLoading(false); });
+  };
+  useEffect(() => { load(); }, []);
+
+  const THEMES = {
+    tech: { label: lang === 'pt' ? 'Tecnologia & IA' : 'Tech & AI', color: C.blue },
+    financas: { label: lang === 'pt' ? 'Mercado financeiro' : 'Finance', color: C.green },
+    negocios: { label: lang === 'pt' ? 'Negócios & M&A' : 'Business & M&A', color: C.accent },
+    carros: { label: lang === 'pt' ? 'Carros' : 'Cars', color: C.rose },
+    espaco: { label: lang === 'pt' ? 'Espaço & foguetes' : 'Space', color: C.violet },
+    aviacao: { label: lang === 'pt' ? 'Aviação' : 'Aviation', color: C.sky },
+  };
+
   return (
     <div>
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{t('home')}</button>
-      <ScreenTitle title={t('news')} />
-      <HintCard icon={Newspaper} text={t('newsExample')} />
-      {NEWS.map((n, i) => (
-        <a key={i} href={n.url} target="_blank" rel="noreferrer" style={{ ...card, textDecoration: 'none', color: C.text, padding: 14, marginBottom: 8, display: 'block' }}>
-          <div style={{ fontSize: 11.5, color: C.accent, fontWeight: 600, marginBottom: 4 }}>{n.source} · {n.cat}</div>
-          <div style={{ fontSize: 14.5, fontWeight: 600, lineHeight: 1.4 }}>{n.title}</div>
-          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 6, display: 'flex', alignItems: 'center', gap: 4 }}>{t('openBrowser')}<ArrowRight size={12} /></div>
-        </a>
-      ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <ScreenTitle title={t('news')} />
+        <button onClick={load} style={{ ...card, padding: '7px 11px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12 }}>{loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}{t('refresh')}</button>
+      </div>
+      {loading && !data ? (
+        <div style={{ ...card, padding: 30, textAlign: 'center', color: C.text3, display: 'flex', gap: 9, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={16} className="spin" />{lang === 'pt' ? 'Curando as melhores notícias para você…' : 'Curating…'}</div>
+      ) : (data && data.length === 0) ? (
+        <Empty icon={Newspaper} text={err || (lang === 'pt' ? 'Nenhuma notícia agora.' : 'No news.')} />
+      ) : (
+        (data || []).map((n, i) => {
+          const th = THEMES[n.theme] || { label: n.theme, color: C.text3 };
+          return (
+            <div key={i} style={{ ...card, padding: 15, marginBottom: 10 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+                <span style={{ fontSize: 10.5, color: th.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{th.label}</span>
+                {n.pub && <span style={{ fontSize: 10, color: C.text3 }}>{timeAgo(n.pub, lang)}</span>}
+              </div>
+              <a href={n.link} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', color: C.text }}>
+                <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.35 }}>{n.title}</div>
+              </a>
+              {n.summary && <div style={{ fontSize: 12.5, color: C.text2, marginTop: 6, lineHeight: 1.5 }}>{n.summary}</div>}
+              {n.why && <div style={{ fontSize: 11.5, color: C.accent, marginTop: 6, display: 'flex', gap: 5, alignItems: 'flex-start' }}><Sparkles size={12} style={{ marginTop: 2, flexShrink: 0 }} />{n.why}</div>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                <a href={n.link} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: 'none' }}><Btn kind="soft" style={{ width: '100%', fontSize: 12, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><ArrowRight size={13} />{lang === 'pt' ? 'Ler' : 'Read'}</Btn></a>
+                <Btn kind="soft" onClick={() => onSaveItem && onSaveItem(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Star size={13} />{lang === 'pt' ? 'Salvar' : 'Save'}</Btn>
+                <Btn kind="soft" onClick={() => onSendItem && onSendItem(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Send size={13} /></Btn>
+              </div>
+            </div>
+          );
+        })
+      )}
+      {err && data && data.length > 0 && <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', marginTop: 6 }}>{lang === 'pt' ? 'Curadoria parcial (IA indisponível).' : 'Partial curation.'}</div>}
     </div>
   );
 }
@@ -1441,8 +1500,8 @@ function GmailThread({ m, lang, t, onClose, onAction, onReplied }) {
   );
 }
 
-function GmailCompose({ lang, t, onClose }) {
-  const [to, setTo] = useState(''); const [subject, setSubject] = useState(''); const [body, setBody] = useState('');
+function GmailCompose({ lang, t, onClose, initial }) {
+  const [to, setTo] = useState((initial && initial.to) || ''); const [subject, setSubject] = useState((initial && initial.subject) || ''); const [body, setBody] = useState((initial && initial.body) || '');
   const [busy, setBusy] = useState(false); const [done, setDone] = useState('');
   const send = async () => {
     if (!to.trim() || !body.trim()) return;
@@ -1950,48 +2009,81 @@ function LgCard({ device, host, t, lang, flash, label }) {
 }
 
 function LgWasherStatus({ device, host, label, t, lang, onClose }) {
-  const [st, setSt] = useState(null); const [err, setErr] = useState(null);
-  const load = () => authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
-    .then((r) => r.json()).then((j) => { if (j.error) setErr(j.error); else setSt(j.state); }).catch((e) => setErr(String(e)));
+  const [st, setSt] = useState(null); const [err, setErr] = useState(null); const [loading, setLoading] = useState(true);
+  const load = () => {
+    setLoading(true);
+    authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
+      .then((r) => r.json()).then((j) => { if (j.error) setErr(j.error); else { setSt(j.state); setErr(null); } setLoading(false); }).catch((e) => { setErr(String(e)); setLoading(false); });
+  };
   useEffect(() => { load(); }, []);
 
+  const pt = lang === 'pt';
+  // dicionario de estados
+  const STATE = {
+    POWER_OFF: pt ? 'Desligada' : 'Off', INITIAL: pt ? 'Pronta' : 'Ready', RUNNING: pt ? 'Lavando' : 'Running',
+    PAUSE: pt ? 'Pausada' : 'Paused', END: pt ? 'Concluída' : 'Done', DETECTING: pt ? 'Detectando carga' : 'Detecting',
+    RINSING: pt ? 'Enxaguando' : 'Rinsing', SPINNING: pt ? 'Centrifugando' : 'Spinning', DRYING: pt ? 'Secando' : 'Drying',
+    SOAKING: pt ? 'De molho' : 'Soaking', RESERVED: pt ? 'Agendada' : 'Reserved', ERROR: pt ? 'Erro' : 'Error',
+    STEAM_SOFTENING: pt ? 'Vapor' : 'Steam', COOL_DOWN: pt ? 'Resfriando' : 'Cooling', RINSE_HOLD: pt ? 'Enxágue em espera' : 'Rinse hold',
+    REFRESHING: pt ? 'Refrescando' : 'Refreshing', SLEEP: pt ? 'Repouso' : 'Sleep', PREWASH: pt ? 'Pré-lavagem' : 'Prewash',
+    ADD_DRAIN: pt ? 'Drenando' : 'Draining', DISPENSING: pt ? 'Dosando' : 'Dispensing',
+  };
   const run = st && st.runState && st.runState.currentState;
+  const running = run && !['POWER_OFF', 'END', 'INITIAL', 'ERROR', 'SLEEP'].includes(run);
   const timer = (st && st.timer) || {};
   const remainH = timer.remainHour || 0, remainM = timer.remainMinute || 0;
   const totalH = timer.totalHour || 0, totalM = timer.totalMinute || 0;
-  const running = run && run !== 'POWER_OFF' && run !== 'END' && (remainH > 0 || remainM > 0);
+  const hasRemain = remainH > 0 || remainM > 0;
   const cycles = st && st.cycle && st.cycle.cycleCount;
   const remoteOn = st && st.remoteControlEnable && st.remoteControlEnable.remoteControlEnabled;
+  const loc = st && st.location && st.location.locationName;
+  const detergent = st && st.detergent && (st.detergent.detergentSetting);
+  const doorState = st && (st.door && (st.door.doorState)) ;
+  const errState = st && st.error && (typeof st.error === 'string' ? st.error : st.error.code);
 
-  const stateLabel = (r) => {
-    const map = { POWER_OFF: lang === 'pt' ? 'Desligada' : 'Off', RUNNING: lang === 'pt' ? 'Lavando' : 'Running', PAUSE: lang === 'pt' ? 'Pausada' : 'Paused', END: lang === 'pt' ? 'Concluída' : 'Done', INITIAL: lang === 'pt' ? 'Pronta' : 'Ready', DETECTING: lang === 'pt' ? 'Detectando' : 'Detecting', RINSING: lang === 'pt' ? 'Enxaguando' : 'Rinsing', SPINNING: lang === 'pt' ? 'Centrifugando' : 'Spinning', DRYING: lang === 'pt' ? 'Secando' : 'Drying', SOAKING: lang === 'pt' ? 'De molho' : 'Soaking' };
-    return map[r] || r || '—';
-  };
+  const fmtHM = (h, m) => (h > 0 ? h + 'h' : '') + (h > 0 ? String(m).padStart(2, '0') : m) + 'min';
+
+  // linha de indicador
+  const Ind = ({ icon: Ic, label, value, color }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '13px 14px', borderTop: `1px solid ${C.borderSoft}` }}>
+      <span style={{ fontSize: 12.5, color: C.text2, display: 'flex', gap: 9, alignItems: 'center' }}><Ic size={14} style={{ color: color || C.text3 }} />{label}</span>
+      <span style={{ fontSize: 13.5, fontWeight: 600, color: color || C.text }}>{value}</span>
+    </div>
+  );
 
   return (
     <Modal onClose={onClose}>
-      <SheetHead title={label || device.name} onClose={onClose} icon={RefreshCw} />
+      <SheetHead title={label || device.name} onClose={onClose} icon={Waves} />
       {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, wordBreak: 'break-word' }}>{err}</div>}
-      {!st ? (
-        <div style={{ ...card, padding: 24, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={15} className="spin" />…</div>
-      ) : (
+
+      {!st && loading ? (
+        <div style={{ ...card, padding: 26, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={15} className="spin" />…</div>
+      ) : st ? (
         <div style={{ display: 'grid', gap: 12 }}>
-          <div style={{ ...card, padding: 18, textAlign: 'center' }}>
-            <div style={{ width: 54, height: 54, borderRadius: 999, background: running ? C.blue + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
-              <RefreshCw size={26} style={{ color: running ? C.blue : C.text3 }} className={running ? 'spin' : ''} />
+          {/* Estado grande */}
+          <div style={{ ...card, padding: 20, textAlign: 'center' }}>
+            <div style={{ width: 58, height: 58, borderRadius: 999, background: running ? C.blue + '22' : (run === 'END' ? C.green + '22' : C.surface2), display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
+              <Waves size={27} style={{ color: running ? C.blue : (run === 'END' ? C.green : C.text3) }} className={running ? 'spin' : ''} />
             </div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{stateLabel(run)}</div>
-            {running && <div style={{ fontSize: 13, color: C.text2, marginTop: 4 }}>{lang === 'pt' ? 'Faltam' : 'Remaining'} {remainH > 0 ? remainH + 'h' : ''}{String(remainM).padStart(2, '0')}min</div>}
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{STATE[run] || run || '—'}</div>
+            {hasRemain && <div style={{ fontSize: 14, color: C.blue, marginTop: 6, fontWeight: 600 }}>{pt ? 'Faltam ' : ''}{fmtHM(remainH, remainM)}{pt ? '' : ' left'}</div>}
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {(totalH > 0 || totalM > 0) && <MiniStat label={lang === 'pt' ? 'Duração' : 'Total'} value={`${totalH}h${String(totalM).padStart(2, '0')}`} color={C.blue} small />}
-            {cycles != null && <MiniStat label={lang === 'pt' ? 'Ciclos' : 'Cycles'} value={cycles} color={C.violet} />}
-            <MiniStat label={lang === 'pt' ? 'Controle' : 'Remote'} value={remoteOn ? (lang === 'pt' ? 'Sim' : 'On') : (lang === 'pt' ? 'Não' : 'Off')} color={remoteOn ? C.green : C.text3} small />
+
+          {/* Todos os indicadores disponíveis */}
+          <div style={{ ...card, padding: '2px 0' }}>
+            {(totalH > 0 || totalM > 0) && <Ind icon={Clock} label={pt ? 'Duração do ciclo' : 'Cycle length'} value={fmtHM(totalH, totalM)} color={C.text} />}
+            {hasRemain && <Ind icon={Clock} label={pt ? 'Tempo restante' : 'Remaining'} value={fmtHM(remainH, remainM)} color={C.blue} />}
+            {cycles != null && <Ind icon={RefreshCw} label={pt ? 'Ciclos realizados' : 'Cycles run'} value={cycles} color={C.violet} />}
+            <Ind icon={remoteOn ? Wifi : WifiOff} label={pt ? 'Controle remoto' : 'Remote control'} value={remoteOn ? (pt ? 'Ativo' : 'On') : (pt ? 'Desativado' : 'Off')} color={remoteOn ? C.green : C.text3} />
+            {loc && <Ind icon={MapPin} label={pt ? 'Local' : 'Location'} value={loc} color={C.text2} />}
+            {detergent && <Ind icon={Droplet} label={pt ? 'Detergente' : 'Detergent'} value={detergent} color={C.sky} />}
+            {doorState && <Ind icon={Lock} label={pt ? 'Porta' : 'Door'} value={doorState} color={C.text2} />}
+            {errState && errState !== 'ERROR_NO' && <Ind icon={AlertTriangle} label={pt ? 'Erro' : 'Error'} value={errState} color={C.rose} />}
           </div>
-          <button onClick={load} style={{ ...card, padding: '11px', color: C.text2, cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', fontSize: 12.5, border: 'none', width: '100%' }}><RefreshCw size={13} />{t('refresh')}</button>
-          {!remoteOn && <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5 }}>{lang === 'pt' ? 'Para comandar a lavadora à distância, ative o Controle Remoto no painel da máquina.' : 'Enable Remote Control on the machine to command it remotely.'}</div>}
+
+          <button onClick={load} style={{ ...card, padding: '13px', color: C.text2, cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center', fontSize: 13, border: 'none', width: '100%' }}>{loading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}{t('refresh')}</button>
         </div>
-      )}
+      ) : null}
     </Modal>
   );
 }
@@ -3153,7 +3245,7 @@ function App() {
   const [settings, setSettings] = useState({ lang: 'pt', name: 'Bruno', health: {}, profile: {}, dock: DEFAULT_DOCK, devices: DEFAULT_DEVICES });
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
-  const [claudeSeed, setClaudeSeed] = useState(null); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
+  const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
@@ -3287,6 +3379,7 @@ function App() {
     title: t.title, notes: t.notes, date: t.date, status: t.status,
     priority: t.priority >= 5 ? 1 : t.priority >= 3 ? 2 : 3,
     meta: { external: 'ticktick', project: t.projectName, link: 'https://ticktick.com' },
+    _tags: t.tags || [],
   }));
   const allItems = [...items, ...(gEvents || []), ...(gMsgs || []), ...ttItems];
   const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
@@ -3319,8 +3412,10 @@ function App() {
         </div>
       </div>
       <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
-        {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })} />}
+        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+        {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
+          onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news' } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
+          onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
@@ -3349,6 +3444,7 @@ function App() {
         </div>
       </div>
 
+      {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
       {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} onClose={() => setShowSettings(false)} />}
       {detail && <ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} />}
