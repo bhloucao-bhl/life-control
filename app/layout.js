@@ -25,6 +25,8 @@ export default function RootLayout({ children }) {
           html, body { margin: 0; padding: 0; background: #0B0B0F; color: #ECECEF; }
           body { -webkit-font-smoothing: antialiased; overscroll-behavior-y: none; }
           input, textarea, select, button { font-family: inherit; }
+          @keyframes lccPulse { 0%,100% { opacity: .35; transform: scale(0.97); } 50% { opacity: 1; transform: scale(1.03); } }
+          .lcc-pulse { animation: lccPulse 1.4s ease-in-out infinite; }
         `}</style>
       </head>
       <body>{children}</body>
