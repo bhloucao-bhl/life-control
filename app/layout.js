@@ -2,6 +2,10 @@ export const metadata = {
   title: 'Life Control',
   description: 'Centro de controle da vida',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Life Control' },
+  icons: {
+    icon: [{ url: '/icon?v=3', sizes: '192x192', type: 'image/png' }],
+    apple: [{ url: '/apple-icon?v=3', sizes: '180x180', type: 'image/png' }],
+  },
 };
 
 export const viewport = {
