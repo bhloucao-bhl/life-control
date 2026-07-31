@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v33 · 31jul';
+const APP_VERSION = 'v34 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2484,10 +2484,11 @@ function tuyaSwitchCode(status) {
 function TuyaCard({ device, t, onCmd, kind, label, irId }) {
   const [remote, setRemote] = useState(false); const [light, setLight] = useState(false);
   const irKind = kind === 'tv' || kind === 'stb' || kind === 'ac' || kind === 'receiver';
-  const sw = tuyaSwitchCode(device.status) || (kind === 'light' ? 'switch_led' : null);
-  const on = sw && device.status[sw] != null ? !!device.status[sw] : (sw ? false : null);
-  const bright = device.status.bright_value_v2 != null ? device.status.bright_value_v2 : device.status.bright_value;
-  const temp = device.status.temp_current != null ? device.status.temp_current : (device.status.va_temperature != null ? device.status.va_temperature / 10 : null);
+  const st = device.status || {};
+  const sw = tuyaSwitchCode(st) || (kind === 'light' ? 'switch_led' : null);
+  const on = sw && st[sw] != null ? !!st[sw] : (sw ? false : null);
+  const bright = st.bright_value_v2 != null ? st.bright_value_v2 : st.bright_value;
+  const temp = st.temp_current != null ? st.temp_current : (st.va_temperature != null ? st.va_temperature / 10 : null);
   const kindIcon = { light: Lightbulb, plug: Power, switch: Power, climate: Wind, ac: Wind, tv: Tv, stb: Tv, receiver: Radio };
   const Ic = kindIcon[kind] || Power;
   const nome = label || device.name;
@@ -3555,7 +3556,7 @@ function App() {
     if (mo.custom === 'people') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PeopleScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
-    if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} />;
+    if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} state={gmail} setState={setGmail} load={loadGmail} />;
