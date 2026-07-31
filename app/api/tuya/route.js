@@ -88,18 +88,19 @@ async function irDiscover() {
     // hub IR: categoria wnykq (universal remote) ou infrared_id presente
     const hubs = all.filter((d) => d.category === 'wnykq' || d.category === 'infrared');
     for (const hub of hubs) {
-      out.hubs.push({ id: hub.id, name: hub.name });
-      // remotes sob o hub
-      const rr = await tuya('GET', `/v2.0/infrareds/${hub.id}/remotes`);
-      (rr.result || []).forEach((rem) => {
-        out.remotes.push({
-          infrared_id: hub.id,
-          remote_id: rem.remote_id,
-          name: rem.remote_name || rem.name,
-          category_id: rem.category_id,
-          brand_id: rem.brand_id,
-        });
-      });
+      const hubInfo = { id: hub.id, name: hub.name, online: hub.online };
+      try {
+        const rr = await tuya('GET', `/v2.0/infrareds/${hub.id}/remotes`);
+        if (rr.success) {
+          hubInfo.remotesCount = (rr.result || []).length;
+          (rr.result || []).forEach((rem) => {
+            out.remotes.push({ infrared_id: hub.id, remote_id: rem.remote_id, name: rem.remote_name || rem.name, category_id: rem.category_id });
+          });
+        } else {
+          hubInfo.error = 'code ' + rr.code + ': ' + (rr.msg || '');
+        }
+      } catch (e) { hubInfo.error = String(e.message || e); }
+      out.hubs.push(hubInfo);
     }
   } catch (e) { out.error = String(e.message || e); }
   return out;
