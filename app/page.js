@@ -438,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v20 · 31jul';
+const APP_VERSION = 'v21 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1919,6 +1919,80 @@ function tuyaLabel(device, prefs) {
   return (p && p.alias) ? p.alias : device.name;
 }
 
+function LgCard({ device, host, t, lang, flash }) {
+  const [remote, setRemote] = useState(false);
+  const isAc = device.type === 'DEVICE_AIR_CONDITIONER';
+  const isWasher = device.type === 'DEVICE_WASHER' || device.type === 'DEVICE_DRYER';
+  const Ic = isAc ? Wind : isWasher ? RefreshCw : Power;
+  return (
+    <>
+      <button onClick={() => (isAc && device.online) && setRemote(true)} disabled={!isAc || !device.online} style={{ ...card, padding: 13, textAlign: 'left', cursor: (isAc && device.online) ? 'pointer' : 'default', opacity: device.online ? 1 : 0.55, border: 'none', width: '100%', color: C.text }}>
+        <div style={{ width: 34, height: 34, borderRadius: 9, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: '#A50034' }} /></div>
+        <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{device.name}</div>
+        <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{device.online ? (isAc ? t('openRemote') : (isWasher ? (lang === 'pt' ? 'Ver status' : 'Status') : 'LG')) : t('offline')}</div>
+      </button>
+      {remote && isAc && <LgAcRemote device={device} host={host} t={t} lang={lang} flash={flash} onClose={() => setRemote(false)} />}
+    </>
+  );
+}
+
+function LgAcRemote({ device, host, t, lang, flash, onClose }) {
+  const [st, setSt] = useState(null); const [err, setErr] = useState(null); const [temp, setTemp] = useState(23);
+  const load = () => authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
+    .then((r) => r.json()).then((j) => {
+      if (j.error) { setErr(j.error); return; }
+      setSt(j.state);
+      const tt = j.state && j.state.temperature && j.state.temperature.targetTemperature;
+      if (tt) setTemp(tt);
+    }).catch((e) => setErr(String(e)));
+  useEffect(() => { load(); }, []);
+  const cmd = async (op, value) => {
+    setErr(null);
+    try { const r = await authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op, value }) }); const j = await r.json(); if (!j.ok) setErr(j.error || 'falhou'); else setTimeout(load, 800); }
+    catch (e) { setErr(String(e)); }
+  };
+  const cur = st && st.temperature && (st.temperature.currentTemperature);
+  const power = st && st.operation && st.operation.airConOperationMode;
+  const mode = st && st.airConJobMode && st.airConJobMode.currentJobMode;
+  const wind = st && st.airFlow && st.airFlow.windStrength;
+  const isOn = power === 'POWER_ON';
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={device.name} onClose={onClose} icon={Wind} />
+      {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word' }}>{err}</div>}
+      {!st ? <div style={{ ...card, padding: 24, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={15} className="spin" />…</div> : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div style={{ ...card, padding: 16, textAlign: 'center' }}>
+            {cur != null && <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 4 }}>{lang === 'pt' ? 'Ambiente' : 'Room'}: {cur}°</div>}
+            <div style={{ fontSize: 40, fontWeight: 800, color: C.accent }}>{temp}°</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 10 }}>
+              <IRBtn onClick={() => { const v = Math.max(16, temp - 1); setTemp(v); cmd('temp', v); }} wide>−</IRBtn>
+              <IRBtn onClick={() => { const v = Math.min(30, temp + 1); setTemp(v); cmd('temp', v); }} wide>＋</IRBtn>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('acMode')}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <IRBtn onClick={() => cmd('mode', 'COOL')} accent={mode === 'COOL'}>❄ {t('cold')}</IRBtn>
+              <IRBtn onClick={() => cmd('mode', 'HEAT')} accent={mode === 'HEAT'}>☀ {t('hot')}</IRBtn>
+              <IRBtn onClick={() => cmd('mode', 'FAN')} accent={mode === 'FAN'}>💨 {t('fan')}</IRBtn>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('fanSpeed')}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <IRBtn onClick={() => cmd('wind', 'LOW')} accent={wind === 'LOW'}>1</IRBtn>
+              <IRBtn onClick={() => cmd('wind', 'MID')} accent={wind === 'MID'}>2</IRBtn>
+              <IRBtn onClick={() => cmd('wind', 'HIGH')} accent={wind === 'HIGH'}>3</IRBtn>
+            </div>
+          </div>
+          <IRBtn onClick={() => cmd('power', !isOn)} accent>{isOn ? '⏻ ' + t('turnOff') : '⏻ ' + t('power')}</IRBtn>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
   // decide quais mostrar: se ha alguma preferencia salva, respeita "show";
   // se nao ha NENHUMA pref ainda, mostra todos (primeiro uso).
@@ -2256,7 +2330,14 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       })
       .catch((e) => setTuya({ loading: false, configured: false, connected: false, devices: [], error: String(e) }));
   };
-  useEffect(() => { loadTuya(); }, []);
+  const [lg, setLg] = useState({ loading: true, configured: false, devices: [], host: null });
+  const loadLg = () => {
+    setLg((p) => ({ ...p, loading: true }));
+    authFetch('/api/lg').then((r) => r.json())
+      .then((j) => setLg({ loading: false, configured: !!j.configured, connected: !!j.connected, devices: j.devices || [], host: j.host || null, error: j.error }))
+      .catch((e) => setLg({ loading: false, configured: false, devices: [], error: String(e) }));
+  };
+  useEffect(() => { loadTuya(); loadLg(); }, []);
   const sendCmd = async (deviceId, code, value) => {
     // otimista
     setTuya((p) => ({ ...p, devices: p.devices.map((d) => d.id === deviceId ? { ...d, status: { ...d.status, [code]: value } } : d) }));
@@ -2294,6 +2375,18 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       ) : (
         <HintCard icon={Power} text={lang === 'pt' ? 'Nenhum aparelho SmartLife encontrado.' : 'No SmartLife devices found.'} />
       )}
+      {lg.configured && lg.devices.length > 0 && (
+        <div style={{ marginTop: 6 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <span style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>LG ThinQ</span>
+            <button onClick={loadLg} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>{lg.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {lg.devices.map((d) => <LgCard key={d.id} device={d} host={lg.host} t={t} lang={lang} flash={flash} />)}
+          </div>
+        </div>
+      )}
+      {lg.error && <HintCard icon={AlertTriangle} text={'LG: ' + lg.error} />}
       <SectionTitle icon={Wallet} label={t('houseCosts')} color={C.green} />
       <div style={{ ...card, padding: 16, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div><div style={{ fontSize: 22, fontWeight: 700, color: C.green }}>{fmtMoney(cost, lang)}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{filterAll ? t('allTime') : t('thisMonth')}</div></div>
