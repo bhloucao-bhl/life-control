@@ -434,7 +434,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac' },
 };
-const APP_VERSION = 'v16 · 31jul';
+const APP_VERSION = 'v17 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2389,6 +2389,23 @@ class ErrorBoundary extends React.Component {
   render() { if (this.state.err) return this.props.fallback || null; return this.props.children; }
 }
 
+function FlightRow({ f, lang, t, onOpen }) {
+  const m = f.meta || {};
+  const route = (m.from || '?') + ' → ' + (m.to || '?');
+  return (
+    <button onClick={() => onOpen && onOpen(f)} style={{ ...card, padding: '12px 14px', marginBottom: 8, width: '100%', textAlign: 'left', cursor: 'pointer', color: C.text, border: `1px solid ${C.borderSoft}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+      <div style={{ width: 34, height: 34, borderRadius: 9, background: C.accent + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ticket size={16} style={{ color: C.accent }} /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{route}</div>
+        <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>
+          {[m.airline, m.flightNumber, f.date ? fmtDate(f.date, lang) : null].filter(Boolean).join(' · ') || t('t_flight')}
+        </div>
+      </div>
+      {m.locator && <span style={{ fontSize: 10.5, color: C.text3, fontFamily: 'monospace' }}>{m.locator}</span>}
+    </button>
+  );
+}
+
 function FlightMap({ flights, lang, t }) {
   // Versao simples e a prova de falhas: mundo estilizado + rotas.
   // Sem tiles de rede (que podiam falhar/bloquear e derrubar a tela).
@@ -2669,6 +2686,27 @@ function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct })
 }
 
 /* ---------------- Settings ---------------- */
+function TuyaIrDiag({ t, lang }) {
+  const [data, setData] = useState(null); const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try { const r = await authFetch('/api/tuya?ir=1'); setData(await r.json()); } catch (e) { setData({ error: String(e) }); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <Btn kind="soft" onClick={run} disabled={busy} style={{ width: '100%', marginBottom: 8, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
+        {busy ? <Loader2 size={14} className="spin" /> : <Power size={14} />}{lang === 'pt' ? 'Diagnóstico dos controles IR' : 'IR remotes diagnostic'}
+      </Btn>
+      {data && (
+        <div style={{ ...card, padding: 12, fontSize: 11, fontFamily: 'monospace', maxHeight: 260, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: C.text2 }}>
+          {data.error ? 'Erro: ' + data.error : JSON.stringify({ hubs: data.hubs, remotes: data.remotes }, null, 1)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Connections({ lang, t }) {
   const [st, setSt] = useState(null); const [busy, setBusy] = useState('');
   const load = () => authFetch('/api/connect').then((r) => r.json()).then(setSt).catch(() => setSt({}));
@@ -2733,6 +2771,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       </div>
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 8px' }}>{t('connections')}</div>
       <Connections lang={lang} t={t} />
+      <TuyaIrDiag t={t} lang={lang} />
       <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); persistSeeded(); onClose(); } }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
       <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
