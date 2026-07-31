@@ -13,6 +13,7 @@ export async function GET(req) {
     oura: map.oura || { connected: false, configured: !!process.env.OURA_CLIENT_ID },
     google: map.google || { connected: false, configured: !!process.env.GOOGLE_CLIENT_ID },
     ticktick: map.ticktick || { connected: false, configured: !!process.env.TICKTICK_CLIENT_ID },
+    microsoft: map.microsoft || { connected: false, configured: !!process.env.MS_CLIENT_ID },
   });
 }
 
