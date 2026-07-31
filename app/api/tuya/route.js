@@ -98,6 +98,19 @@ async function irDiscover() {
   return out;
 }
 
+
+/** Lista as teclas disponiveis de um controle IR (TV/STB) */
+async function irKeys(infrared_id, remote_id) {
+  // tenta o endpoint de teclas do controle ja adicionado
+  const j = await tuya('GET', `/v2.0/infrareds/${infrared_id}/remotes/${remote_id}/keys`);
+  if (j.success && j.result) {
+    // result pode ter key_list ou ser array
+    const list = j.result.key_list || j.result;
+    return Array.isArray(list) ? list : [];
+  }
+  throw new Error(j.msg || 'sem teclas');
+}
+
 /** GET -> lista de aparelhos com estado */
 export async function GET(req) {
   const user = await userFromRequest(req);
@@ -105,10 +118,18 @@ export async function GET(req) {
   if (!process.env.TUYA_CLIENT_ID) return Response.json({ configured: false, devices: [] });
 
   const uid = process.env.TUYA_UID;
-  const wantIr = new URL(req.url).searchParams.get('ir');
-  if (wantIr) {
+  const sp = new URL(req.url).searchParams;
+  if (sp.get('ir')) {
     const ir = await irDiscover();
     return Response.json({ configured: true, ...ir });
+  }
+  if (sp.get('keys')) {
+    try {
+      const keys = await irKeys(sp.get('infrared_id'), sp.get('remote_id'));
+      return Response.json({ configured: true, keys });
+    } catch (e) {
+      return Response.json({ configured: true, keys: [], error: String(e.message || e) });
+    }
   }
   try {
     const j = await tuya('GET', `/v1.0/users/${uid}/devices`);
