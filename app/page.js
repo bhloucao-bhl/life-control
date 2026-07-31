@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v32 · 31jul';
+const APP_VERSION = 'v33 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2195,7 +2195,6 @@ function LgAcRemote({ device, host, t, lang, flash, onClose }) {
     <Modal onClose={onClose}>
       <SheetHead title={device.name} onClose={onClose} icon={Wind} />
       {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word' }}>{err}</div>}
-      {keys && keys.length > 0 && meta && meta.category_id == null && kind !== 'ac' && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.accent }}>{lang === 'pt' ? 'Aviso: este controle não retornou categoria. Use "Todos os botões" — se ainda falhar, me avise que ajusto.' : 'No category returned for this remote.'}</div>}
       {!st ? <div style={{ ...card, padding: 24, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={15} className="spin" />…</div> : (
         <div style={{ display: 'grid', gap: 12 }}>
           <div style={{ ...card, padding: 16, textAlign: 'center' }}>
