@@ -438,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v22 · 31jul';
+const APP_VERSION = 'v23 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1951,30 +1951,47 @@ function LgCard({ device, host, t, lang, flash, label }) {
 
 function LgWasherStatus({ device, host, label, t, lang, onClose }) {
   const [st, setSt] = useState(null); const [err, setErr] = useState(null);
-  useEffect(() => {
-    authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
-      .then((r) => r.json()).then((j) => { if (j.error) setErr(j.error); else setSt(j.state); }).catch((e) => setErr(String(e)));
-  }, []);
-  // extrai campos comuns de lavadora
-  const run = st && (st.runState || st.operation);
-  const cycle = st && st.cycle;
-  const remain = st && (st.timer || st.remainTime);
-  const rows = [];
-  if (st) {
-    const flat = JSON.stringify(st, null, 1);
-    return (
-      <Modal onClose={onClose}>
-        <SheetHead title={label || device.name} onClose={onClose} icon={RefreshCw} />
-        {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose }}>{err}</div>}
-        <div style={{ ...card, padding: 12, fontSize: 11, fontFamily: 'monospace', maxHeight: 320, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: C.text2 }}>{flat}</div>
-        <div style={{ fontSize: 10.5, color: C.text3, marginTop: 10, textAlign: 'center' }}>{lang === 'pt' ? 'Me diga o que quer ver aqui (tempo restante, ciclo, etc.) que eu formato bonito.' : 'Tell me what to show here.'}</div>
-      </Modal>
-    );
-  }
+  const load = () => authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
+    .then((r) => r.json()).then((j) => { if (j.error) setErr(j.error); else setSt(j.state); }).catch((e) => setErr(String(e)));
+  useEffect(() => { load(); }, []);
+
+  const run = st && st.runState && st.runState.currentState;
+  const timer = (st && st.timer) || {};
+  const remainH = timer.remainHour || 0, remainM = timer.remainMinute || 0;
+  const totalH = timer.totalHour || 0, totalM = timer.totalMinute || 0;
+  const running = run && run !== 'POWER_OFF' && run !== 'END' && (remainH > 0 || remainM > 0);
+  const cycles = st && st.cycle && st.cycle.cycleCount;
+  const remoteOn = st && st.remoteControlEnable && st.remoteControlEnable.remoteControlEnabled;
+
+  const stateLabel = (r) => {
+    const map = { POWER_OFF: lang === 'pt' ? 'Desligada' : 'Off', RUNNING: lang === 'pt' ? 'Lavando' : 'Running', PAUSE: lang === 'pt' ? 'Pausada' : 'Paused', END: lang === 'pt' ? 'Concluída' : 'Done', INITIAL: lang === 'pt' ? 'Pronta' : 'Ready', DETECTING: lang === 'pt' ? 'Detectando' : 'Detecting', RINSING: lang === 'pt' ? 'Enxaguando' : 'Rinsing', SPINNING: lang === 'pt' ? 'Centrifugando' : 'Spinning', DRYING: lang === 'pt' ? 'Secando' : 'Drying', SOAKING: lang === 'pt' ? 'De molho' : 'Soaking' };
+    return map[r] || r || '—';
+  };
+
   return (
     <Modal onClose={onClose}>
       <SheetHead title={label || device.name} onClose={onClose} icon={RefreshCw} />
-      {err ? <div style={{ ...card, padding: 14, fontSize: 12, color: C.rose }}>{err}</div> : <div style={{ ...card, padding: 24, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center' }}><Loader2 size={15} className="spin" />…</div>}
+      {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, wordBreak: 'break-word' }}>{err}</div>}
+      {!st ? (
+        <div style={{ ...card, padding: 24, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={15} className="spin" />…</div>
+      ) : (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div style={{ ...card, padding: 18, textAlign: 'center' }}>
+            <div style={{ width: 54, height: 54, borderRadius: 999, background: running ? C.blue + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 10px' }}>
+              <RefreshCw size={26} style={{ color: running ? C.blue : C.text3 }} className={running ? 'spin' : ''} />
+            </div>
+            <div style={{ fontSize: 18, fontWeight: 700 }}>{stateLabel(run)}</div>
+            {running && <div style={{ fontSize: 13, color: C.text2, marginTop: 4 }}>{lang === 'pt' ? 'Faltam' : 'Remaining'} {remainH > 0 ? remainH + 'h' : ''}{String(remainM).padStart(2, '0')}min</div>}
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {(totalH > 0 || totalM > 0) && <MiniStat label={lang === 'pt' ? 'Duração' : 'Total'} value={`${totalH}h${String(totalM).padStart(2, '0')}`} color={C.blue} small />}
+            {cycles != null && <MiniStat label={lang === 'pt' ? 'Ciclos' : 'Cycles'} value={cycles} color={C.violet} />}
+            <MiniStat label={lang === 'pt' ? 'Controle' : 'Remote'} value={remoteOn ? (lang === 'pt' ? 'Sim' : 'On') : (lang === 'pt' ? 'Não' : 'Off')} color={remoteOn ? C.green : C.text3} small />
+          </div>
+          <button onClick={load} style={{ ...card, padding: '11px', color: C.text2, cursor: 'pointer', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', fontSize: 12.5, border: 'none', width: '100%' }}><RefreshCw size={13} />{t('refresh')}</button>
+          {!remoteOn && <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5 }}>{lang === 'pt' ? 'Para comandar a lavadora à distância, ative o Controle Remoto no painel da máquina.' : 'Enable Remote Control on the machine to command it remotely.'}</div>}
+        </div>
+      )}
     </Modal>
   );
 }
