@@ -78,7 +78,7 @@ export async function GET(req) {
     const wxUrl =
       `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
       `&current=temperature_2m,apparent_temperature,weather_code,relative_humidity_2m,wind_speed_10m,precipitation` +
-      `&hourly=precipitation_probability,temperature_2m` +
+      `&hourly=precipitation_probability,temperature_2m,weather_code` +
       `&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset,wind_speed_10m_max` +
       `&timezone=auto&forecast_days=6`;
     const r = await fetch(wxUrl, { next: { revalidate: 900 } });
@@ -109,6 +109,12 @@ export async function GET(req) {
       rain: hh.precipitation_probability ? hh.precipitation_probability[idx + k] : null,
       temp: hh.temperature_2m ? Math.round(hh.temperature_2m[idx + k]) : null,
     }));
+    // temperatura por hora agrupada por dia (para o grafico de cada dia)
+    const hourlyByDay = {};
+    (hh.time || []).forEach((x, k) => {
+      const day = String(x).slice(0, 10); const hr = String(x).slice(11, 16);
+      (hourlyByDay[day] = hourlyByDay[day] || []).push({ h: hr, temp: hh.temperature_2m ? Math.round(hh.temperature_2m[k]) : null, rain: hh.precipitation_probability ? hh.precipitation_probability[k] : null, code: hh.weather_code ? hh.weather_code[k] : 0 });
+    });
     out.weather = {
       temp: cur.temperature_2m != null ? Math.round(cur.temperature_2m) : null,
       feels: cur.apparent_temperature != null ? Math.round(cur.apparent_temperature) : null,
@@ -118,7 +124,7 @@ export async function GET(req) {
       humidity: cur.relative_humidity_2m != null ? Math.round(cur.relative_humidity_2m) : null,
       wind: cur.wind_speed_10m != null ? Math.round(cur.wind_speed_10m) : null,
       precipitation: cur.precipitation != null ? cur.precipitation : null,
-      days, hours,
+      days, hours, hourlyByDay,
       tz: j.timezone || null,
     };
   } catch (e) {
