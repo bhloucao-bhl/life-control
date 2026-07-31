@@ -101,14 +101,24 @@ async function irDiscover() {
 
 /** Lista as teclas disponiveis de um controle IR (TV/STB) */
 async function irKeys(infrared_id, remote_id) {
-  // tenta o endpoint de teclas do controle ja adicionado
-  const j = await tuya('GET', `/v2.0/infrareds/${infrared_id}/remotes/${remote_id}/keys`);
-  if (j.success && j.result) {
-    // result pode ter key_list ou ser array
-    const list = j.result.key_list || j.result;
-    return Array.isArray(list) ? list : [];
+  // tenta os formatos conhecidos da API Tuya, em ordem
+  const tries = [
+    `/v2.0/infrareds/${infrared_id}/remotes/${remote_id}/keys`,
+    `/v2.0/infrareds/${infrared_id}/remotes/${remote_id}/learning-codes`,
+    `/v1.0/infrareds/${infrared_id}/remotes/${remote_id}/keys`,
+  ];
+  let lastMsg = 'sem teclas';
+  for (const path of tries) {
+    try {
+      const j = await tuya('GET', path);
+      if (j.success && j.result) {
+        const list = j.result.key_list || j.result.keys || j.result;
+        if (Array.isArray(list) && list.length) return list;
+      }
+      lastMsg = j.msg || lastMsg;
+    } catch (e) { lastMsg = String(e.message || e); }
   }
-  throw new Error(j.msg || 'sem teclas');
+  throw new Error(lastMsg);
 }
 
 /** GET -> lista de aparelhos com estado */
@@ -157,17 +167,29 @@ export async function POST(req) {
   try {
     // ---- Comando IR de TV / set-top box: usa key ----
     if (body.ir === 'key') {
-      const j = await tuya('POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/command`, { key: body.key });
-      if (!j.success) throw new Error(j.msg || 'IR falhou');
-      return Response.json({ ok: true });
+      const attempts = [
+        ['POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/command`, body.key_id ? { key_id: body.key_id } : { key: body.key }],
+        ['POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/raw/command`, { key: body.key }],
+      ];
+      let last = 'falhou';
+      for (const [m, p, b] of attempts) {
+        try { const j = await tuya(m, p, b); if (j.success) return Response.json({ ok: true }); last = j.msg || last; } catch (e) { last = String(e.message || e); }
+      }
+      return Response.json({ error: last }, { status: 500 });
     }
-    // ---- Comando IR de ar-condicionado: usa power/mode/temp/wind ----
+    // ---- Comando IR de ar-condicionado ----
     if (body.ir === 'ac') {
-      const j = await tuya('POST', `/v2.0/infrareds/${body.infrared_id}/air-conditioners/${body.remote_id}/command`, {
-        code: body.acCode, value: body.acValue,
-      });
-      if (!j.success) throw new Error(j.msg || 'IR A/C falhou');
-      return Response.json({ ok: true });
+      const v = body.acValue || {};
+      // formato multi-condicao: power, mode, temp, wind de uma vez
+      const attempts = [
+        ['POST', `/v2.0/infrareds/${body.infrared_id}/air-conditioners/${body.remote_id}/scenes/command`, { power: v.power, mode: v.mode, temp: v.temp, wind: v.wind }],
+        ['POST', `/v2.0/infrareds/${body.infrared_id}/air-conditioners/${body.remote_id}/command`, { code: body.acCode || 'power', value: v.power }],
+      ];
+      let last = 'falhou';
+      for (const [m, p, b] of attempts) {
+        try { const j = await tuya(m, p, b); if (j.success) return Response.json({ ok: true }); last = j.msg || last; } catch (e) { last = String(e.message || e); }
+      }
+      return Response.json({ error: last }, { status: 500 });
     }
     // ---- Aparelho normal (tomada, luz) ----
     const j = await tuya('POST', `/v1.0/devices/${body.deviceId}/commands`, { commands: [{ code: body.code, value: body.value }] });
