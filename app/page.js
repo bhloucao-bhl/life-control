@@ -67,9 +67,22 @@ async function importExportedJson(text) {
 }
 
 async function authFetch(path, opts = {}) {
-  const { data: sess } = await supabase.auth.getSession();
-  const token = sess && sess.session ? sess.session.access_token : '';
-  return fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
+  let { data: sess } = await supabase.auth.getSession();
+  let token = sess && sess.session ? sess.session.access_token : '';
+  // se nao ha token, tenta renovar a sessao uma vez (evita "sem sessão" por token expirado)
+  if (!token) {
+    try { const r = await supabase.auth.refreshSession(); if (r && r.data && r.data.session) token = r.data.session.access_token; } catch (e) {}
+  }
+  const res = await fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...(opts.headers || {}) } });
+  // se deu 401, tenta renovar e repetir uma vez
+  if (res.status === 401) {
+    try {
+      const r = await supabase.auth.refreshSession();
+      const t2 = r && r.data && r.data.session ? r.data.session.access_token : '';
+      if (t2 && t2 !== token) return fetch(path, { ...opts, headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${t2}`, ...(opts.headers || {}) } });
+    } catch (e) {}
+  }
+  return res;
 }
 
 /* ============================================================
@@ -438,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v27 · 31jul';
+const APP_VERSION = 'v28 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1036,35 +1049,7 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function OutlookToday({ events, lang, t }) {
-  const [open, setOpen] = useState(false);
-  const now = nowHM();
-  const upcoming = (events || []).filter((e) => !e.start || (String(e.start).slice(11, 16) >= now) || e.allDay);
-  const shown = (upcoming.length ? upcoming : events || []).slice(0, 4);
-  const fmtT = (iso) => iso ? String(iso).slice(11, 16) : '';
-  return (
-    <div style={{ ...card, padding: 14, marginBottom: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: shown.length ? 10 : 0 }}>
-        <span style={{ fontSize: 12, fontWeight: 700, color: '#0F6CBD', display: 'flex', gap: 6, alignItems: 'center' }}><Calendar size={14} />Outlook</span>
-        <span style={{ fontSize: 11, color: C.text3 }}>{(events || []).length} {lang === 'pt' ? 'hoje' : 'today'}</span>
-      </div>
-      {shown.length === 0 ? (
-        <div style={{ fontSize: 12.5, color: C.text3 }}>{lang === 'pt' ? 'Sem compromissos hoje.' : 'No events today.'}</div>
-      ) : shown.map((e) => (
-        <div key={e.id} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '7px 0', borderTop: `1px solid ${C.borderSoft}` }}>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F6CBD', width: 42, flexShrink: 0 }}>{e.allDay ? (lang === 'pt' ? 'dia' : 'all') : fmtT(e.start)}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
-            {e.location && <div style={{ fontSize: 11, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.location}</div>}
-          </div>
-          {e.online && e.link && <a href={e.link} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()} style={{ flexShrink: 0 }}><Video size={15} style={{ color: '#0F6CBD' }} /></a>}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, outlook }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
 
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
@@ -1124,7 +1109,6 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         ? <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', margin: '-2px 0 12px', display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{(w.readiness == null && w.sleep == null) ? t('ouraNoData') : t('ouraSynced')}</div>
         : (w.readiness == null && w.sleep == null) && <div style={{ fontSize: 11.5, color: C.text3, textAlign: 'center', margin: '-2px 0 12px' }}>{t('connectOura')}</div>}
       <WeatherCard lang={lang} t={t} wx={live && live.weather} loading={liveLoading} />
-      {outlook && outlook.connected && <OutlookToday events={outlook.events} lang={lang} t={t} />}
       {balances.length > 0 ? balances.map((b) => <InfoCard key={b.id} icon={CreditCard} title={b.title} sub={t('available')} onClick={() => onOpen(b)} accent right={<span style={{ fontSize: 18, fontWeight: 700, color: C.green }}>{fmtMoney(b.meta.balance, lang)}</span>} />) : <InfoCard icon={CreditCard} title={t('available')} sub={t('addBalance')} onClick={() => goModule('finance')} right={<Plus size={18} style={{ color: C.text3 }} />} />}
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
       {ttItems.length > 0 && attention.length === 0 && <HintCard icon={Star} text={lang === 'pt' ? 'Marque tarefas com a etiqueta “Importante” no TickTick para elas aparecerem aqui.' : 'Tag tasks “Importante” in TickTick to surface them here.'} />}
@@ -3256,7 +3240,6 @@ function Connections({ lang, t }) {
       <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
       <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
       <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
-      <Row id="microsoft" label="Outlook (Microsoft)" icon={Calendar} color="#0F6CBD" />
     </div>
   );
 }
@@ -3392,7 +3375,7 @@ function App() {
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
   const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null);
   const [newsData, setNewsData] = useState(null); const [newsLoading, setNewsLoading] = useState(false);
-  const [outlook, setOutlook] = useState({ connected: false, events: [] }); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
+  const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
@@ -3416,7 +3399,6 @@ function App() {
     authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
     loadGmail();
     loadNews();
-    authFetch('/api/outlook').then((r) => r.json()).then((j) => { if (alive && j) setOutlook({ connected: !!j.connected, events: j.events || [] }); }).catch(() => {});
     authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
     authFetch('/api/google').then((r) => r.json()).then((j) => {
       if (!alive || !j) return;
@@ -3499,7 +3481,7 @@ function App() {
     const q = new URLSearchParams(window.location.search);
     const conn = q.get('conn');
     if (!conn) return;
-    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : conn === 'microsoft' ? 'Outlook conectado ✓' : 'Google conectado ✓';
+    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : 'Google conectado ✓';
     setToast(q.get('ok') ? okMsg : 'Erro: ' + (q.get('erro') || ''));
     setTimeout(() => setToast(null), 4000);
     window.history.replaceState({}, '', window.location.pathname);
@@ -3572,7 +3554,7 @@ function App() {
         </div>
       </div>
       <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} outlook={outlook} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
           savedNews={items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news')}
