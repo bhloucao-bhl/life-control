@@ -438,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v26 · 31jul';
+const APP_VERSION = 'v27 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1036,7 +1036,35 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news }) {
+function OutlookToday({ events, lang, t }) {
+  const [open, setOpen] = useState(false);
+  const now = nowHM();
+  const upcoming = (events || []).filter((e) => !e.start || (String(e.start).slice(11, 16) >= now) || e.allDay);
+  const shown = (upcoming.length ? upcoming : events || []).slice(0, 4);
+  const fmtT = (iso) => iso ? String(iso).slice(11, 16) : '';
+  return (
+    <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: shown.length ? 10 : 0 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: '#0F6CBD', display: 'flex', gap: 6, alignItems: 'center' }}><Calendar size={14} />Outlook</span>
+        <span style={{ fontSize: 11, color: C.text3 }}>{(events || []).length} {lang === 'pt' ? 'hoje' : 'today'}</span>
+      </div>
+      {shown.length === 0 ? (
+        <div style={{ fontSize: 12.5, color: C.text3 }}>{lang === 'pt' ? 'Sem compromissos hoje.' : 'No events today.'}</div>
+      ) : shown.map((e) => (
+        <div key={e.id} style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '7px 0', borderTop: `1px solid ${C.borderSoft}` }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: '#0F6CBD', width: 42, flexShrink: 0 }}>{e.allDay ? (lang === 'pt' ? 'dia' : 'all') : fmtT(e.start)}</div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</div>
+            {e.location && <div style={{ fontSize: 11, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.location}</div>}
+          </div>
+          {e.online && e.link && <a href={e.link} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()} style={{ flexShrink: 0 }}><Video size={15} style={{ color: '#0F6CBD' }} /></a>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, outlook }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
 
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
@@ -1096,6 +1124,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         ? <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', margin: '-2px 0 12px', display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{(w.readiness == null && w.sleep == null) ? t('ouraNoData') : t('ouraSynced')}</div>
         : (w.readiness == null && w.sleep == null) && <div style={{ fontSize: 11.5, color: C.text3, textAlign: 'center', margin: '-2px 0 12px' }}>{t('connectOura')}</div>}
       <WeatherCard lang={lang} t={t} wx={live && live.weather} loading={liveLoading} />
+      {outlook && outlook.connected && <OutlookToday events={outlook.events} lang={lang} t={t} />}
       {balances.length > 0 ? balances.map((b) => <InfoCard key={b.id} icon={CreditCard} title={b.title} sub={t('available')} onClick={() => onOpen(b)} accent right={<span style={{ fontSize: 18, fontWeight: 700, color: C.green }}>{fmtMoney(b.meta.balance, lang)}</span>} />) : <InfoCard icon={CreditCard} title={t('available')} sub={t('addBalance')} onClick={() => goModule('finance')} right={<Plus size={18} style={{ color: C.text3 }} />} />}
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
       {ttItems.length > 0 && attention.length === 0 && <HintCard icon={Star} text={lang === 'pt' ? 'Marque tarefas com a etiqueta “Importante” no TickTick para elas aparecerem aqui.' : 'Tag tasks “Importante” in TickTick to surface them here.'} />}
@@ -1270,8 +1299,19 @@ function timeAgo(pub, lang) {
   const d = Math.floor(h / 24); return (lang === 'pt' ? 'há ' : '') + d + 'd';
 }
 
-function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSendItem }) {
+function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSendItem, savedNews = [], onUnsave }) {
   const [reader, setReader] = useState(null); // noticia aberta no leitor interno
+  const [tab, setTab] = useState('feed'); // feed | saved
+  const savedLinks = new Set((savedNews || []).map((x) => x.meta && x.meta.link).filter(Boolean));
+  const isSaved = (n) => savedLinks.has(n.link);
+  const shareNative = async (n) => {
+    const shareData = { title: n.title, text: n.summary || n.title, url: n.link };
+    try { if (navigator.share) { await navigator.share(shareData); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+    onSendItem && onSendItem(n); // fallback: email
+  };
+  const list = tab === 'saved'
+    ? (savedNews || []).map((it) => ({ title: it.title, link: it.meta && it.meta.link, summary: (it.notes || '').split('\n')[0], theme: (it.meta && it.meta.theme) || 'tech', pub: it.meta && it.meta.pub, source: it.meta && it.meta.source, _saved: it }))
+    : (news || []);
   const THEMES = {
     tech: { label: lang === 'pt' ? 'Tecnologia & IA' : 'Tech & AI', color: C.blue },
     financas: { label: lang === 'pt' ? 'Mercado financeiro' : 'Finance', color: C.green },
@@ -1291,8 +1331,8 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
         {reader.summary && <div style={{ ...card, padding: 15, fontSize: 14, lineHeight: 1.6, color: C.text, marginBottom: 12 }}>{reader.summary}</div>}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           <a href={reader.link} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: 'none' }}><Btn style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><ArrowRight size={15} />{lang === 'pt' ? 'Abrir no site' : 'Open site'}</Btn></a>
-          <Btn kind="soft" onClick={() => onSaveItem && onSaveItem(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Star size={14} /></Btn>
-          <Btn kind="soft" onClick={() => onSendItem && onSendItem(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Send size={14} /></Btn>
+          <Btn kind="soft" onClick={() => { if (isSaved(reader)) { onUnsave && onUnsave(reader); } else { onSaveItem && onSaveItem(reader); } }} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Star size={14} style={{ color: isSaved(reader) ? C.accent : C.text2, fill: isSaved(reader) ? C.accent : 'none' }} /></Btn>
+          <Btn kind="soft" onClick={() => shareNative(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Send size={14} /></Btn>
         </div>
         <div style={{ ...card, padding: 16, textAlign: 'center', color: C.text3 }}>
           <Newspaper size={22} style={{ color: C.text3, marginBottom: 8 }} />
@@ -1309,12 +1349,16 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
         <ScreenTitle title={t('news')} />
         <button onClick={onRefresh} style={{ ...card, padding: '7px 11px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 12 }}>{loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}{t('refresh')}</button>
       </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        <Chip active={tab === 'feed'} onClick={() => setTab('feed')}>{lang === 'pt' ? 'Destaques' : 'Feed'}</Chip>
+        <Chip active={tab === 'saved'} onClick={() => setTab('saved')}>⭐ {lang === 'pt' ? 'Salvos' : 'Saved'}{savedNews.length ? ` (${savedNews.length})` : ''}</Chip>
+      </div>
       {(!news && loading) ? (
         <div style={{ ...card, padding: 30, textAlign: 'center', color: C.text3, display: 'flex', gap: 9, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={16} className="spin" />{lang === 'pt' ? 'Curando as melhores para você…' : 'Curating…'}</div>
-      ) : (news && news.length === 0) ? (
-        <Empty icon={Newspaper} text={lang === 'pt' ? 'Nenhuma notícia agora.' : 'No news.'} />
+      ) : (list && list.length === 0) ? (
+        <Empty icon={tab === 'saved' ? Star : Newspaper} text={tab === 'saved' ? (lang === 'pt' ? 'Nada salvo ainda. Toque na estrela de uma notícia.' : 'Nothing saved yet.') : (lang === 'pt' ? 'Nenhuma notícia agora.' : 'No news.')} />
       ) : (
-        (news || []).map((n, i) => {
+        (list || []).map((n, i) => {
           const th = THEMES[n.theme] || { label: n.theme, color: C.text3 };
           return (
             <div key={i} onClick={() => setReader(n)} style={{ ...card, padding: 15, marginBottom: 10, cursor: 'pointer' }}>
@@ -1326,8 +1370,8 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
               {n.summary && <div style={{ fontSize: 12.5, color: C.text2, marginTop: 6, lineHeight: 1.5 }}>{n.summary}</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
                 <Btn kind="soft" onClick={() => setReader(n)} style={{ flex: 1, fontSize: 12, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><ArrowRight size={13} />{lang === 'pt' ? 'Ler' : 'Read'}</Btn>
-                <Btn kind="soft" onClick={() => onSaveItem && onSaveItem(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Star size={13} /></Btn>
-                <Btn kind="soft" onClick={() => onSendItem && onSendItem(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Send size={13} /></Btn>
+                <Btn kind="soft" onClick={() => { if (isSaved(n) || n._saved) { onUnsave && onUnsave(n._saved || n); } else { onSaveItem && onSaveItem(n); } }} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Star size={13} style={{ color: (isSaved(n) || n._saved) ? C.accent : C.text2, fill: (isSaved(n) || n._saved) ? C.accent : 'none' }} /></Btn>
+                <Btn kind="soft" onClick={() => shareNative(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Send size={13} /></Btn>
               </div>
             </div>
           );
@@ -3212,6 +3256,7 @@ function Connections({ lang, t }) {
       <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
       <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
       <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
+      <Row id="microsoft" label="Outlook (Microsoft)" icon={Calendar} color="#0F6CBD" />
     </div>
   );
 }
@@ -3346,7 +3391,8 @@ function App() {
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
   const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null);
-  const [newsData, setNewsData] = useState(null); const [newsLoading, setNewsLoading] = useState(false); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
+  const [newsData, setNewsData] = useState(null); const [newsLoading, setNewsLoading] = useState(false);
+  const [outlook, setOutlook] = useState({ connected: false, events: [] }); const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
@@ -3370,6 +3416,7 @@ function App() {
     authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
     loadGmail();
     loadNews();
+    authFetch('/api/outlook').then((r) => r.json()).then((j) => { if (alive && j) setOutlook({ connected: !!j.connected, events: j.events || [] }); }).catch(() => {});
     authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
     authFetch('/api/google').then((r) => r.json()).then((j) => {
       if (!alive || !j) return;
@@ -3452,7 +3499,7 @@ function App() {
     const q = new URLSearchParams(window.location.search);
     const conn = q.get('conn');
     if (!conn) return;
-    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : 'Google conectado ✓';
+    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : conn === 'microsoft' ? 'Outlook conectado ✓' : 'Google conectado ✓';
     setToast(q.get('ok') ? okMsg : 'Erro: ' + (q.get('erro') || ''));
     setTimeout(() => setToast(null), 4000);
     window.history.replaceState({}, '', window.location.pathname);
@@ -3482,7 +3529,10 @@ function App() {
   const greeting = () => { const h = new Date().getHours(); return h < 12 ? t('goodMorning') : h < 18 ? t('goodAfternoon') : t('goodEvening'); };
   const navTo = (k) => { if (SCREEN_ICONS[k]) setActive({ screen: k, module: k === 'dashboard' ? null : null }); else setActive({ screen: 'dashboard', module: moduleByKey(k) }); };
 
-  if (!ready) return <div style={{ background: C.bg, color: C.text3, height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Loader2 className="spin" size={22} /></div>;
+  if (!ready) return <div style={{ background: C.bg, color: C.text, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: C.accent }}>BhL</div>
+    <div style={{ fontSize: 12, color: C.text3, letterSpacing: '.08em', textTransform: 'uppercase' }}>Life Control</div>
+  </div>;
 
   const ttItems = (ticktick.tasks || []).map((t) => ({
     id: 'tt_' + t.id, ttId: t.id, ttProject: t.projectId, type: 'task', domain: 'personal',
@@ -3522,10 +3572,12 @@ function App() {
         </div>
       </div>
       <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} outlook={outlook} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
-          onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news' } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
+          savedNews={items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news')}
+          onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
+          onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
@@ -3579,7 +3631,10 @@ export default function Page() {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { kvCache.clear(); setSession(s); });
     return () => sub.subscription.unsubscribe();
   }, []);
-  if (!booted) return <div style={{ background: '#0B0B0F', color: '#63636F', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'system-ui' }}>…</div>;
+  if (!booted) return <div style={{ background: '#0B0B0F', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, fontFamily: 'system-ui' }}>
+    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: '#F5C263' }}>BhL</div>
+    <div style={{ fontSize: 12, color: '#63636F', letterSpacing: '.08em', textTransform: 'uppercase' }}>Life Control</div>
+  </div>;
   if (!session) return <Login />;
   return <App />;
 }
