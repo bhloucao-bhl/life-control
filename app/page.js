@@ -150,7 +150,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil
+  MapPin, Building2, Pencil, Tv, Radio
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -210,6 +210,11 @@ const S = {
   deleteConfirmGeneric: L('Tem certeza que deseja excluir? Esta ação não pode ser desfeita.', 'Delete this? This cannot be undone.'),
   on: L('Ligado', 'On'), off: L('Desligado', 'Off'), offline: L('Offline', 'Offline'),
   choose: L('Escolher', 'Choose'), configDevices: L('Aparelhos da Casa', 'Home devices'),
+  pullRefresh: L('Puxe para atualizar', 'Pull to refresh'), releaseRefresh: L('Solte para atualizar', 'Release to refresh'), refreshing: L('Atualizando…', 'Refreshing…'),
+  openRemote: L('Abrir controle', 'Open remote'), brightness: L('Brilho', 'Brightness'), color: L('Cor', 'Color'), whiteLight: L('Luz branca', 'White'), turnOff: L('Desligar', 'Turn off'),
+  acMode: L('Modo', 'Mode'), cold: L('Frio', 'Cool'), hot: L('Quente', 'Heat'), fan: L('Ventilar', 'Fan'), fanSpeed: L('Velocidade', 'Fan speed'),
+  power: L('Liga/Desliga', 'Power'), volume: L('Volume', 'Volume'), input: L('Entrada', 'Input'), changeInput: L('Trocar', 'Switch'), back: L('Voltar', 'Back'),
+  irNote: L('Comandos por infravermelho. Se algum botão não responder, me diga qual — ajusto o código dele.', 'IR commands. If a button does not respond, tell me which one.'),
   screenError: L('Algo deu errado nesta tela', 'Something went wrong on this screen'),
   screenErrorHint: L('O resto do app continua funcionando. Tente voltar e abrir de novo.', 'The rest of the app still works. Go back and reopen.'),
   composeNew: L('Escrever e-mail', 'Compose'), toField: L('Para', 'To'), subjectField: L('Assunto', 'Subject'),
@@ -416,6 +421,20 @@ const DOCKABLE = ['home', 'messages', 'calendar', 'dashboard', 'claude', 'tasks'
 const DEFAULT_DOCK = ['home', 'messages', 'calendar', 'dashboard', 'claude'];
 function navIcon(k) { return SCREEN_ICONS[k] || (moduleByKey(k) ? moduleByKey(k).icon : Circle); }
 function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
+const TUYA_SEED = {
+  'ebd25cb250d51d988bfmgd': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'light' },
+  'ebce584d586201f762d4ag': { show: true, alias: 'Subwoofer', room: 'Home-office', kind: 'plug' },
+  'ebbc591b7da959062dm9im': { show: true, alias: 'TV Suíte', room: 'Suíte', kind: 'tv' },
+  'eb35a5d8aab7cb6a92jpzr': { show: true, alias: 'Vivo Suíte', room: 'Suíte', kind: 'stb' },
+  'eb8629b8368eb1b1cfnhnm': { show: true, alias: 'Ar Brinquedoteca', room: 'Quarto Maria', kind: 'ac' },
+  'ebce4627183df11fbewuyh': { show: true, alias: 'Ar Dudu', room: 'Quarto Dudu', kind: 'ac' },
+  '467308739c9c1f859136': { show: true, alias: 'Cervejeira', room: 'Área', kind: 'plug' },
+  'eb9d5c2de5306c1e93f0rp': { show: true, alias: 'Receiver', room: 'Sala de TV', kind: 'receiver' },
+  'eb1312396be3adad2fklrm': { show: true, alias: 'TV Sala', room: 'Sala de TV', kind: 'tv' },
+  'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb' },
+  'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac' },
+};
+const APP_VERSION = 'v16 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1897,7 +1916,7 @@ function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
 }
 
 function TuyaConfig({ devices, prefs, setPrefs, lang, t, onClose }) {
-  const kinds = [['auto', lang === 'pt' ? 'Automático' : 'Auto'], ['light', lang === 'pt' ? 'Luz' : 'Light'], ['plug', lang === 'pt' ? 'Tomada' : 'Plug'], ['switch', lang === 'pt' ? 'Interruptor' : 'Switch'], ['climate', lang === 'pt' ? 'Clima' : 'Climate']];
+  const kinds = [['auto', 'Auto'], ['light', lang === 'pt' ? 'Luz' : 'Light'], ['plug', lang === 'pt' ? 'Tomada' : 'Plug'], ['switch', lang === 'pt' ? 'Interruptor' : 'Switch'], ['ac', lang === 'pt' ? 'Ar-cond.' : 'A/C'], ['tv', 'TV'], ['stb', lang === 'pt' ? 'TV a cabo' : 'Set-top'], ['receiver', 'Receiver']];
   const get = (id) => (prefs && prefs[id]) || {};
   const patch = (id, p) => setPrefs((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), ...p } }));
   const allShown = devices.every((d) => get(d.id).show !== false);
@@ -1942,18 +1961,161 @@ function TuyaConfig({ devices, prefs, setPrefs, lang, t, onClose }) {
   );
 }
 
+function TuyaLight({ device, label, t, onCmd, onClose }) {
+  const st = device.status || {};
+  const [bri, setBri] = useState(st.bright_value_v2 != null ? st.bright_value_v2 : (st.bright_value != null ? st.bright_value : 500));
+  const briCode = st.bright_value_v2 != null ? 'bright_value_v2' : 'bright_value';
+  const briMax = briCode === 'bright_value_v2' ? 1000 : 255;
+  const colours = [
+    ['Vermelho', 0], ['Laranja', 30], ['Amarelo', 60], ['Verde', 120],
+    ['Ciano', 180], ['Azul', 240], ['Roxo', 280], ['Rosa', 320],
+  ];
+  const setColour = (h) => {
+    onCmd(device.id, 'work_mode', 'colour');
+    onCmd(device.id, st.colour_data_v2 !== undefined ? 'colour_data_v2' : 'colour_data', { h, s: 1000, v: 1000 });
+  };
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={label} onClose={onClose} icon={Lightbulb} />
+      <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8 }}>{t('brightness')}</div>
+      <input type="range" min="10" max={briMax} value={bri} onChange={(e) => setBri(Number(e.target.value))} onMouseUp={() => onCmd(device.id, briCode, bri)} onTouchEnd={() => onCmd(device.id, briCode, bri)}
+        style={{ width: '100%', accentColor: C.accent, marginBottom: 6 }} />
+      <div style={{ textAlign: 'right', fontSize: 11, color: C.text3, marginBottom: 16 }}>{Math.round((bri / briMax) * 100)}%</div>
+
+      <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8 }}>{t('color')}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 16 }}>
+        {colours.map(([nome, h]) => (
+          <button key={h} onClick={() => setColour(h)} title={nome} style={{ height: 44, borderRadius: 12, border: `1px solid ${C.border}`, background: `hsl(${h} 85% 55%)`, cursor: 'pointer' }} />
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn kind="soft" onClick={() => { onCmd(device.id, 'work_mode', 'white'); }} style={{ flex: 1, fontSize: 12.5 }}>{t('whiteLight')}</Btn>
+        <Btn kind="soft" onClick={() => { const sw = tuyaSwitchCode(st); if (sw) onCmd(device.id, sw, false); onClose(); }} style={{ flex: 1, fontSize: 12.5 }}>{t('turnOff')}</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function IRBtn({ children, onClick, wide, accent }) {
+  return <button onClick={onClick} style={{ padding: wide ? '12px 10px' : '12px 0', borderRadius: 12, border: `1px solid ${C.border}`, background: accent ? C.accentSoft : C.surface2, color: accent ? C.accent : C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 0 }}>{children}</button>;
+}
+
+// Para controles IR "universais" da Tuya, os comandos vao pelo code padrao.
+// Como cada remoto aprendido pode variar, usamos os codes comuns e deixamos claro
+// que ajustamos caso algum botao nao responda.
+function TuyaRemote({ device, kind, label, t, onCmd, onClose }) {
+  const send = (code, value) => onCmd(device.id, code, value === undefined ? true : value);
+  const [temp, setTemp] = useState(device.status.temp_set != null ? device.status.temp_set : 23);
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={label} onClose={onClose} icon={kind === 'ac' ? Wind : kind === 'receiver' ? Radio : Tv} />
+
+      {kind === 'ac' ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <div style={{ ...card, padding: 16, textAlign: 'center' }}>
+            <div style={{ fontSize: 40, fontWeight: 800, color: C.accent }}>{temp}°</div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 10 }}>
+              <IRBtn onClick={() => { const v = Math.max(16, temp - 1); setTemp(v); send('temp', v); }} wide>−</IRBtn>
+              <IRBtn onClick={() => { const v = Math.min(30, temp + 1); setTemp(v); send('temp', v); }} wide>＋</IRBtn>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('acMode')}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <IRBtn onClick={() => send('mode', 'cold')} accent>❄ {t('cold')}</IRBtn>
+              <IRBtn onClick={() => send('mode', 'hot')}>☀ {t('hot')}</IRBtn>
+              <IRBtn onClick={() => send('mode', 'wind')}>💨 {t('fan')}</IRBtn>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('fanSpeed')}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+              <IRBtn onClick={() => send('wind', 'low')}>1</IRBtn>
+              <IRBtn onClick={() => send('wind', 'mid')}>2</IRBtn>
+              <IRBtn onClick={() => send('wind', 'high')}>3</IRBtn>
+              <IRBtn onClick={() => send('wind', 'auto')}>A</IRBtn>
+            </div>
+          </div>
+          <IRBtn onClick={() => send('power', 'off')}>⏻ {t('turnOff')}</IRBtn>
+        </div>
+      ) : kind === 'receiver' ? (
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <IRBtn onClick={() => send('power')} accent>⏻ {t('power')}</IRBtn>
+            <IRBtn onClick={() => send('mute')}>🔇 Mute</IRBtn>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.text2 }}>{t('volume')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <IRBtn onClick={() => send('volume_down')} wide>🔉 −</IRBtn>
+            <IRBtn onClick={() => send('volume_up')} wide>🔊 ＋</IRBtn>
+          </div>
+          <div style={{ fontSize: 11.5, color: C.text2 }}>{t('input')}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <IRBtn onClick={() => send('input')}>↔ {t('changeInput')}</IRBtn>
+            <IRBtn onClick={() => send('menu')}>☰ Menu</IRBtn>
+          </div>
+        </div>
+      ) : (
+        // TV ou set-top box
+        <div style={{ display: 'grid', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <IRBtn onClick={() => send('power')} accent>⏻ {t('power')}</IRBtn>
+            <IRBtn onClick={() => send('mute')}>🔇 Mute</IRBtn>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
+            <div />
+            <IRBtn onClick={() => send('up')}>▲</IRBtn>
+            <div />
+            <IRBtn onClick={() => send('left')}>◀</IRBtn>
+            <IRBtn onClick={() => send('ok')} accent>OK</IRBtn>
+            <IRBtn onClick={() => send('right')}>▶</IRBtn>
+            <div />
+            <IRBtn onClick={() => send('down')}>▼</IRBtn>
+            <div />
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <IRBtn onClick={() => send('vol_add')} wide>🔊 Vol +</IRBtn>
+            <IRBtn onClick={() => send('vol_sub')} wide>🔉 Vol −</IRBtn>
+            <IRBtn onClick={() => send('ch_add')} wide>CH +</IRBtn>
+            <IRBtn onClick={() => send('ch_sub')} wide>CH −</IRBtn>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <IRBtn onClick={() => send('back')}>↩ {t('back')}</IRBtn>
+            <IRBtn onClick={() => send('menu')}>☰ Menu</IRBtn>
+          </div>
+        </div>
+      )}
+      <div style={{ fontSize: 10.5, color: C.text3, marginTop: 14, textAlign: 'center', lineHeight: 1.5 }}>{t('irNote')}</div>
+    </Modal>
+  );
+}
+
 function tuyaSwitchCode(status) {
   const keys = Object.keys(status || {});
   return keys.find((k) => /^switch(_1|_led)?$|^switch$/.test(k)) || keys.find((k) => k.startsWith('switch')) || null;
 }
 function TuyaCard({ device, t, onCmd, kind, label }) {
+  const [remote, setRemote] = useState(false); const [light, setLight] = useState(false);
+  const irKind = kind === 'tv' || kind === 'stb' || kind === 'ac' || kind === 'receiver';
   const sw = tuyaSwitchCode(device.status);
   const on = sw ? !!device.status[sw] : null;
   const bright = device.status.bright_value_v2 != null ? device.status.bright_value_v2 : device.status.bright_value;
   const temp = device.status.temp_current != null ? device.status.temp_current : (device.status.va_temperature != null ? device.status.va_temperature / 10 : null);
-  const kindIcon = { light: Lightbulb, plug: Power, switch: Power, climate: Wind };
+  const kindIcon = { light: Lightbulb, plug: Power, switch: Power, climate: Wind, ac: Wind, tv: Tv, stb: Tv, receiver: Radio };
   const Ic = kindIcon[kind] || Power;
   const nome = label || device.name;
+  if (irKind) {
+    return (
+      <>
+        <button onClick={() => device.online && setRemote(true)} disabled={!device.online} style={{ ...card, padding: 13, textAlign: 'left', cursor: device.online ? 'pointer' : 'not-allowed', opacity: device.online ? 1 : 0.55, border: 'none', width: '100%', color: C.text }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: C.accent }} /></div>
+          <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div>
+          <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{device.online ? t('openRemote') : t('offline')}</div>
+        </button>
+        {remote && <TuyaRemote device={device} kind={kind} label={nome} t={t} onCmd={onCmd} onClose={() => setRemote(false)} />}
+      </>
+    );
+  }
   return (
     <div style={{ ...card, padding: 13, opacity: device.online ? 1 : 0.55 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -1968,10 +2130,14 @@ function TuyaCard({ device, t, onCmd, kind, label }) {
         )}
       </div>
       <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div>
-      <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>
-        {device.online ? (sw ? (on ? t('on') : t('off')) : (temp != null ? temp + '°' : '—')) : t('offline')}
-        {bright != null && device.online ? ` · ${Math.round((bright / 1000) * 100)}%` : ''}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>
+          {device.online ? (sw ? (on ? t('on') : t('off')) : (temp != null ? temp + '°' : '—')) : t('offline')}
+          {bright != null && device.online ? ` · ${Math.round((bright / 1000) * 100)}%` : ''}
+        </div>
+        {kind === 'light' && device.online && on && <button onClick={() => setLight(true)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', padding: 2 }}><Sparkles size={14} /></button>}
       </div>
+      {kind === 'light' && light && <TuyaLight device={device} label={nome} t={t} onCmd={onCmd} onClose={() => setLight(false)} />}
     </div>
   );
 }
@@ -2010,7 +2176,17 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
   const loadTuya = () => {
     setTuya((p) => ({ ...p, loading: true }));
     authFetch('/api/tuya').then((r) => r.json())
-      .then((j) => setTuya({ loading: false, configured: !!j.configured, connected: !!j.connected, devices: j.devices || [], error: j.error || null }))
+      .then((j) => {
+        setTuya({ loading: false, configured: !!j.configured, connected: !!j.connected, devices: j.devices || [], error: j.error || null });
+        // aplica apelidos/comodos conhecidos uma unica vez
+        if (j.devices && j.devices.length) {
+          setTuyaPrefs((prev) => {
+            const next = { ...prev }; let changed = false;
+            j.devices.forEach((d) => { if (!next[d.id] && TUYA_SEED[d.id]) { next[d.id] = TUYA_SEED[d.id]; changed = true; } });
+            return changed ? next : prev;
+          });
+        }
+      })
       .catch((e) => setTuya({ loading: false, configured: false, connected: false, devices: [], error: String(e) }));
   };
   useEffect(() => { loadTuya(); }, []);
@@ -2569,6 +2745,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       <Btn kind="ghost" onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{lang === 'pt' ? 'Sair da conta' : 'Sign out'}</Btn>
       <Btn kind="danger" onClick={() => { if (confirm(t('clearConfirm'))) { setItems([]); persistSeeded(); onClose(); } }} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Trash2 size={15} />{t('clearData')}</Btn>
       {!hasStore() && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 14, textAlign: 'center' }}>{t('noPersist')}</div>}
+      <div style={{ fontSize: 10.5, color: C.text3, marginTop: 16, textAlign: 'center', opacity: 0.7 }}>{APP_VERSION}</div>
     </Modal>
   );
 }
@@ -2714,6 +2891,34 @@ function App() {
     if (Array.isArray(j.messages)) setGMsgs(j.messages);
   }).catch(() => {});
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2000); };
+
+  // ---- Pull-to-refresh (puxar pra baixo no topo) ----
+  const [pull, setPull] = useState(0); const [refreshing, setRefreshing] = useState(false);
+  const pullRef = useRef({ y0: 0, active: false });
+  const doRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const jobs = [refreshGoogle(), loadGmail()];
+      await Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {})));
+      // recarrega Oura tambem
+      try { const j = await (await authFetch('/api/oura')).json(); if (j) { if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); } } catch (e) {}
+    } finally { setTimeout(() => setRefreshing(false), 300); }
+  };
+  const onTouchStart = (e) => {
+    const sc = document.scrollingElement || document.documentElement;
+    if (sc.scrollTop <= 0 && !refreshing) { pullRef.current = { y0: e.touches[0].clientY, active: true }; }
+  };
+  const onTouchMove = (e) => {
+    if (!pullRef.current.active) return;
+    const dy = e.touches[0].clientY - pullRef.current.y0;
+    if (dy > 0) { setPull(Math.min(90, dy * 0.5)); }
+  };
+  const onTouchEnd = () => {
+    if (!pullRef.current.active) return;
+    pullRef.current.active = false;
+    if (pull > 55) doRefresh();
+    setPull(0);
+  };
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const q = new URLSearchParams(window.location.search);
@@ -2768,7 +2973,10 @@ function App() {
   };
 
   return (
-    <div style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: 480, margin: '0 auto', position: 'relative', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)' }}>
+    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: 480, margin: '0 auto', position: 'relative', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)' }}>
+      <div style={{ height: refreshing ? 44 : pull, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: pullRef.current.active ? 'none' : 'height .2s', color: C.text3 }}>
+        {(refreshing || pull > 10) && <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12 }}><RefreshCw size={15} className={refreshing ? 'spin' : ''} style={{ transform: refreshing ? 'none' : `rotate(${pull * 4}deg)` }} />{refreshing ? t('refreshing') : (pull > 55 ? t('releaseRefresh') : t('pullRefresh'))}</div>}
+      </div>
       <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:#16161E}`}</style>
       <div style={{ padding: '16px 18px 8px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life Control</div>
