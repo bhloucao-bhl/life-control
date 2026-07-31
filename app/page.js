@@ -2093,7 +2093,7 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
 }
 
 /* ---------------- Travel ---------------- */
-function ModuleErrorCard({ t, back, module }) {
+function ModuleErrorCard({ t, back, module, msg }) {
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -2101,6 +2101,7 @@ function ModuleErrorCard({ t, back, module }) {
         <AlertTriangle size={26} style={{ color: C.accent, marginBottom: 10 }} />
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{t('screenError')}</div>
         <div style={{ fontSize: 12.5, color: C.text3, lineHeight: 1.5 }}>{t('screenErrorHint')}</div>
+        {msg && <div style={{ ...card, marginTop: 12, padding: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word', textAlign: 'left' }}>{msg}</div>}
       </div>
     </div>
   );
@@ -2120,6 +2121,9 @@ function FlightMap({ flights, lang, t }) {
   });
   const keys = Object.keys(pts);
   if (routes.length === 0) return <div style={{ ...card, padding: 20, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('nothingHere')}</div>;
+  // se qualquer coordenada estiver invalida, nao arrisca o mapa
+  const badPt = keys.some((k) => !Array.isArray(pts[k]) || pts[k].length < 2 || isNaN(pts[k][0]) || isNaN(pts[k][1]));
+  if (badPt) return <div style={{ ...card, padding: 18, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('mapUnavailable')}</div>;
 
   // --- Mercator (com trava de latitude p/ nao gerar Infinity) ---
   const W = 340, H = 220, TS = 256;
@@ -2197,8 +2201,8 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
   const flights = items.filter((i) => i.type === 'flight' && ((mt.locator && i.meta && i.meta.locator === mt.locator) || inRange(i.date))).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
   const tdocs = items.filter((i) => i.type === 'document' && (i.domain === 'travel' || (mt.locator && i.meta && i.meta.locator === mt.locator)));
   const atts = mt.attachments || [];
-  const days = Math.ceil((new Date(trip.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000);
-  const cd = days > 1 ? `${days} ${t('daysWord')}` : days === 1 ? (lang === 'pt' ? 'amanhã' : 'tomorrow') : days === 0 ? (lang === 'pt' ? 'hoje' : 'today') : (mt.endDate && mt.endDate >= today ? t('ongoing') : t('doneLabel'));
+  const days = trip.date ? Math.ceil((new Date(trip.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000) : null;
+  const cd = days == null ? '' : days > 1 ? `${days} ${t('daysWord')}` : days === 1 ? (lang === 'pt' ? 'amanhã' : 'tomorrow') : days === 0 ? (lang === 'pt' ? 'hoje' : 'today') : (mt.endDate && mt.endDate >= today ? t('ongoing') : t('doneLabel'));
   return (
     <div>
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{t('travel')}</button>
@@ -2234,7 +2238,7 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const today = todayISO();
   const upcoming = trips.filter((tr) => ((tr.meta && tr.meta.endDate) ? tr.meta.endDate : tr.date) >= today).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const nextTrip = upcoming[0];
-  const nextDays = nextTrip ? Math.ceil((new Date(nextTrip.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000) : null;
+  const nextDays = (nextTrip && nextTrip.date) ? Math.ceil((new Date(nextTrip.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000) : null;
   const year = today.slice(0, 4);
   const yf = period === 'year' ? flights.filter((f) => (f.date || '').startsWith(year)) : flights;
   const hours = yf.reduce((a, b) => a + (Number(b.meta && b.meta.durationMin) || 0), 0) / 60;
@@ -2676,9 +2680,9 @@ function App() {
   const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, updateItem, delItem, flash };
   const renderModule = (mo) => {
     const back = () => setActive({ screen: 'dashboard', module: null });
-    if (mo.custom === 'travel') return <ErrorBoundary fallback={<ModuleErrorCard t={t} back={back} module={mo} />}><TravelScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'cars') return <ErrorBoundary fallback={<ModuleErrorCard t={t} back={back} module={mo} />}><CarsScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'people') return <ErrorBoundary fallback={<ModuleErrorCard t={t} back={back} module={mo} />}><PeopleScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
+    if (mo.custom === 'travel') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><TravelScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
+    if (mo.custom === 'cars') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><CarsScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
+    if (mo.custom === 'people') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PeopleScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
     if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} />;
