@@ -1,4 +1,4 @@
-import { userFromRequest } from '../../../lib/oauth';
+import { userFromRequest, admin } from '../../../lib/oauth';
 
 export const runtime = 'nodejs';
 
@@ -51,7 +51,11 @@ function parseFeed(xml, theme) {
     if (!link) link = (b.match(/<link[^>]*href="(.*?)"/s) || [])[1];
     const pub = (b.match(/<pubDate[^>]*>(.*?)<\/pubDate>/s) || b.match(/<updated[^>]*>(.*?)<\/updated>/s) || b.match(/<published[^>]*>(.*?)<\/published>/s) || [])[1];
     const desc = decode((b.match(/<description[^>]*>(.*?)<\/description>/s) || b.match(/<summary[^>]*>(.*?)<\/summary>/s) || [])[1]).slice(0, 300);
-    if (title && link) items.push({ title, link: decode(link), pub: pub || null, desc, theme });
+    if (title && link) {
+      let source = '';
+      try { source = new URL(decode(link)).hostname.replace(/^www\./, ''); } catch (e) {}
+      items.push({ title, link: decode(link), pub: pub || null, desc, theme, source });
+    }
   }
   return items;
 }
@@ -65,13 +69,10 @@ async function fetchFeed(f) {
   } catch (e) { return []; }
 }
 
-export async function GET(req) {
-  const user = await userFromRequest(req);
-  if (!user) return Response.json({ error: 'Sem sessão.' }, { status: 401 });
-
+async function curate() {
   // 1) buscar todos os feeds em paralelo
   const all = (await Promise.all(FEEDS.map(fetchFeed))).flat();
-  if (all.length === 0) return Response.json({ items: [], error: 'Nenhuma fonte respondeu.' });
+  if (all.length === 0) return { items: [], error: 'Nenhuma fonte respondeu.' };
 
   // 2) ordenar por data (mais recentes primeiro) e limitar candidatos
   const withDate = all.map((x) => ({ ...x, ts: x.pub ? Date.parse(x.pub) || 0 : 0 }));
@@ -80,10 +81,7 @@ export async function GET(req) {
 
   // 3) Claude rankeia e resume os 5 principais
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    // sem Claude: devolve os mais recentes crus
-    return Response.json({ items: candidates.slice(0, 8).map((x) => ({ ...x, why: null, summary: x.desc })) });
-  }
+  if (!key) return { items: candidates.slice(0, 12).map((x) => ({ ...x, why: null, summary: x.desc })) };
 
   const list = candidates.map((x, i) => `[${i}] (${x.theme}) ${x.title} — ${x.desc.slice(0, 120)}`).join('\n');
   const prompt = `${INTERESTS}
@@ -105,10 +103,38 @@ Responda APENAS com JSON válido, sem markdown, no formato:
     const j = await r.json();
     const txt = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').replace(/```json|```/g, '').trim();
     const parsed = JSON.parse(txt);
-    const picks = (parsed.picks || []).map((p) => ({ ...candidates[p.i], summary: p.summary, why: p.why })).filter((x) => x.title);
-    return Response.json({ items: picks.length ? picks : candidates.slice(0, 5) });
+    const picks = (parsed.picks || []).map((p) => ({ ...candidates[p.i], summary: p.summary })).filter((x) => x.title);
+    // acrescenta mais recentes (sem resumo IA) para preencher a aba completa por tema
+    const extra = candidates.filter((c) => !picks.find((p) => p.link === c.link)).slice(0, 20);
+    return { items: [...picks, ...extra] };
   } catch (e) {
-    // fallback: recentes crus
-    return Response.json({ items: candidates.slice(0, 8).map((x) => ({ ...x, summary: x.desc, why: null })), error: String(e.message || e) });
+    return { items: candidates.slice(0, 20).map((x) => ({ ...x, summary: x.desc })), error: String(e.message || e) };
   }
+}
+
+const MAX_AGE_MS = 60 * 60 * 1000; // 1 hora
+
+export async function GET(req) {
+  const user = await userFromRequest(req);
+  if (!user) return Response.json({ error: 'Sem sessão.' }, { status: 401 });
+
+  const force = new URL(req.url).searchParams.get('force');
+  const db = admin();
+
+  // 1) tentar cache
+  if (!force) {
+    try {
+      const { data } = await db.from('news_cache').select('items, updated_at').eq('id', 'latest').maybeSingle();
+      if (data && data.items && (Date.now() - Date.parse(data.updated_at)) < MAX_AGE_MS) {
+        return Response.json({ items: data.items, cachedAt: data.updated_at, cached: true });
+      }
+    } catch (e) { /* tabela pode não existir ainda; segue para curar */ }
+  }
+
+  // 2) recurar e salvar
+  const result = await curate();
+  try {
+    await db.from('news_cache').upsert({ id: 'latest', items: result.items, updated_at: new Date().toISOString() });
+  } catch (e) { /* sem cache, ok */ }
+  return Response.json({ ...result, cachedAt: new Date().toISOString(), cached: false });
 }
