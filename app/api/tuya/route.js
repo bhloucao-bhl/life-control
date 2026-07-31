@@ -46,7 +46,14 @@ async function getToken() {
     headers: { client_id: id, sign, t, sign_method: 'HMAC-SHA256', 'Content-Type': 'application/json' },
   });
   const j = await r.json();
-  if (!j.success) throw new Error('token: ' + (j.msg || JSON.stringify(j)).slice(0, 160));
+  if (!j.success) {
+    const code = j.code;
+    let hint = j.msg || JSON.stringify(j);
+    if (code === 1106 || /permission/i.test(hint)) hint = 'permission denied — verifique no painel Tuya (iot.tuya.com → Cloud → seu projeto): (1) o serviço IoT Core está com assinatura ATIVA? (2) seu projeto tem o data center correto? (3) a conta do app está vinculada em Devices → Link App Account.';
+    else if (code === 1010 || /token/i.test(hint)) hint = 'token expirado/ inválido — a assinatura de algum serviço pode ter vencido no painel Tuya.';
+    else if (code === 1004 || /sign/i.test(hint)) hint = 'sign invalid — Client ID/Secret ou região (TUYA_REGION) diferentes do projeto.';
+    throw new Error('Tuya [' + (code != null ? code : '?') + ']: ' + hint);
+  }
   tokenCache = { token: j.result.access_token, exp: Date.now() + (j.result.expire_time || 7200) * 1000 };
   return tokenCache.token;
 }
