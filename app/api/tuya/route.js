@@ -69,6 +69,35 @@ async function tuya(method, path, body) {
   return r.json();
 }
 
+
+/** Descobre controles IR: hubs -> remotes -> keys */
+async function irDiscover() {
+  const out = { hubs: [], remotes: [], error: null };
+  try {
+    // aparelhos do usuario; hubs IR tem category 'wnykq' (IR) ou sao infrared parents
+    const uid = process.env.TUYA_UID;
+    const dj = await tuya('GET', `/v1.0/users/${uid}/devices`);
+    const all = (dj.result || []);
+    // hub IR: categoria wnykq (universal remote) ou infrared_id presente
+    const hubs = all.filter((d) => d.category === 'wnykq' || d.category === 'infrared');
+    for (const hub of hubs) {
+      out.hubs.push({ id: hub.id, name: hub.name });
+      // remotes sob o hub
+      const rr = await tuya('GET', `/v2.0/infrareds/${hub.id}/remotes`);
+      (rr.result || []).forEach((rem) => {
+        out.remotes.push({
+          infrared_id: hub.id,
+          remote_id: rem.remote_id,
+          name: rem.remote_name || rem.name,
+          category_id: rem.category_id,
+          brand_id: rem.brand_id,
+        });
+      });
+    }
+  } catch (e) { out.error = String(e.message || e); }
+  return out;
+}
+
 /** GET -> lista de aparelhos com estado */
 export async function GET(req) {
   const user = await userFromRequest(req);
@@ -76,6 +105,11 @@ export async function GET(req) {
   if (!process.env.TUYA_CLIENT_ID) return Response.json({ configured: false, devices: [] });
 
   const uid = process.env.TUYA_UID;
+  const wantIr = new URL(req.url).searchParams.get('ir');
+  if (wantIr) {
+    const ir = await irDiscover();
+    return Response.json({ configured: true, ...ir });
+  }
   try {
     const j = await tuya('GET', `/v1.0/users/${uid}/devices`);
     if (!j.success) throw new Error(j.msg || 'falha ao listar');
@@ -98,9 +132,24 @@ export async function POST(req) {
   const user = await userFromRequest(req);
   if (!user) return Response.json({ error: 'Sem sessão.' }, { status: 401 });
 
-  const { deviceId, code, value } = await req.json();
+  const body = await req.json();
   try {
-    const j = await tuya('POST', `/v1.0/devices/${deviceId}/commands`, { commands: [{ code, value }] });
+    // ---- Comando IR de TV / set-top box: usa key ----
+    if (body.ir === 'key') {
+      const j = await tuya('POST', `/v2.0/infrareds/${body.infrared_id}/remotes/${body.remote_id}/command`, { key: body.key });
+      if (!j.success) throw new Error(j.msg || 'IR falhou');
+      return Response.json({ ok: true });
+    }
+    // ---- Comando IR de ar-condicionado: usa power/mode/temp/wind ----
+    if (body.ir === 'ac') {
+      const j = await tuya('POST', `/v2.0/infrareds/${body.infrared_id}/air-conditioners/${body.remote_id}/command`, {
+        code: body.acCode, value: body.acValue,
+      });
+      if (!j.success) throw new Error(j.msg || 'IR A/C falhou');
+      return Response.json({ ok: true });
+    }
+    // ---- Aparelho normal (tomada, luz) ----
+    const j = await tuya('POST', `/v1.0/devices/${body.deviceId}/commands`, { commands: [{ code: body.code, value: body.value }] });
     if (!j.success) throw new Error(j.msg || 'comando falhou');
     return Response.json({ ok: true });
   } catch (e) {
