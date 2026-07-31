@@ -1,4 +1,4 @@
-'use client';
+   'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v31 · 31jul';
+const APP_VERSION = 'v32 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2195,6 +2195,7 @@ function LgAcRemote({ device, host, t, lang, flash, onClose }) {
     <Modal onClose={onClose}>
       <SheetHead title={device.name} onClose={onClose} icon={Wind} />
       {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word' }}>{err}</div>}
+      {keys && keys.length > 0 && meta && meta.category_id == null && kind !== 'ac' && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.accent }}>{lang === 'pt' ? 'Aviso: este controle não retornou categoria. Use "Todos os botões" — se ainda falhar, me avise que ajusto.' : 'No category returned for this remote.'}</div>}
       {!st ? <div style={{ ...card, padding: 24, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={15} className="spin" />…</div> : (
         <div style={{ display: 'grid', gap: 12 }}>
           <div style={{ ...card, padding: 16, textAlign: 'center' }}>
@@ -2352,7 +2353,7 @@ function IRBtn({ children, onClick, wide, accent }) {
 // Como cada remoto aprendido pode variar, usamos os codes comuns e deixamos claro
 // que ajustamos caso algum botao nao responda.
 function TuyaRemote({ device, kind, label, irId, t, onClose }) {
-  const [keys, setKeys] = useState(null); const [meta, setMeta] = useState({}); const [err, setErr] = useState(null); const [sending, setSending] = useState('');
+  const [keys, setKeys] = useState(null); const [meta, setMeta] = useState({}); const [err, setErr] = useState(null); const [sending, setSending] = useState(''); const [showAll, setShowAll] = useState(false);
   const [temp, setTemp] = useState(23); const [mode, setMode] = useState('cold'); const [wind, setWind] = useState('auto'); const [power, setPower] = useState(true);
 
   // Busca as teclas reais para TV/STB/receiver
@@ -2398,6 +2399,7 @@ function TuyaRemote({ device, kind, label, irId, t, onClose }) {
     <Modal onClose={onClose}>
       <SheetHead title={label} onClose={onClose} icon={kind === 'ac' ? Wind : kind === 'receiver' ? Radio : Tv} />
       {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word' }}>{err}</div>}
+      {keys && keys.length > 0 && meta && meta.category_id == null && kind !== 'ac' && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.accent }}>{lang === 'pt' ? 'Aviso: este controle não retornou categoria. Use "Todos os botões" — se ainda falhar, me avise que ajusto.' : 'No category returned for this remote.'}</div>}
 
       {kind === 'ac' ? (
         <div style={{ display: 'grid', gap: 12 }}>
@@ -2459,6 +2461,15 @@ function TuyaRemote({ device, kind, label, irId, t, onClose }) {
             <KeyBtn names={['back', 'return', 'exit']} label={'↩ ' + t('back')} />
             <KeyBtn names={['home']} label={'⌂ Home'} />
           </div>
+          <button onClick={() => setShowAll((v) => !v)} style={{ ...card, padding: '10px', color: C.text2, cursor: 'pointer', fontSize: 12, border: 'none', width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>{showAll ? <ChevronLeft size={13} /> : <Plus size={13} />}{showAll ? (lang === 'pt' ? 'Ocultar todos os botões' : 'Hide all') : (lang === 'pt' ? 'Todos os botões do controle' : 'All remote buttons')}</button>
+          {showAll && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
+              {keys.map((k, i) => {
+                const nm = k.key_name || k.key || ('k' + i);
+                return <IRBtn key={i} onClick={() => sendKey(k)}>{sending === (k.key_id || k.key || k.key_name) ? '…' : nm}</IRBtn>;
+              })}
+            </div>
+          )}
           <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5 }}>{t('irNote')}</div>
         </div>
       )}
