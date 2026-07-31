@@ -208,6 +208,9 @@ const S = {
   scanning: L('Lendo e-mails…', 'Reading email…'), noSuggestions: L('Nada novo encontrado.', 'Nothing new found.'),
   addPhoto: L('Foto', 'Photo'), photo: L('Foto', 'Photo'),
   deleteConfirmGeneric: L('Tem certeza que deseja excluir? Esta ação não pode ser desfeita.', 'Delete this? This cannot be undone.'),
+  on: L('Ligado', 'On'), off: L('Desligado', 'Off'), offline: L('Offline', 'Offline'),
+  screenError: L('Algo deu errado nesta tela', 'Something went wrong on this screen'),
+  screenErrorHint: L('O resto do app continua funcionando. Tente voltar e abrir de novo.', 'The rest of the app still works. Go back and reopen.'),
   composeNew: L('Escrever e-mail', 'Compose'), toField: L('Para', 'To'), subjectField: L('Assunto', 'Subject'),
   emailBody: L('Mensagem', 'Message'), sendingE: L('Enviando…', 'Sending…'), saveError: L('Erro ao salvar. Tente de novo.', 'Save failed. Try again.'),
   externalItem: L('Item externo — edite no app de origem.', 'External item — edit in the source app.'),
@@ -1842,6 +1845,39 @@ function WeightHistory({ weights, lang, t }) {
   );
 }
 
+function tuyaSwitchCode(status) {
+  const keys = Object.keys(status || {});
+  return keys.find((k) => /^switch(_1|_led)?$|^switch$/.test(k)) || keys.find((k) => k.startsWith('switch')) || null;
+}
+function TuyaCard({ device, t, onCmd }) {
+  const sw = tuyaSwitchCode(device.status);
+  const on = sw ? !!device.status[sw] : null;
+  const bright = device.status.bright_value_v2 != null ? device.status.bright_value_v2 : device.status.bright_value;
+  const temp = device.status.temp_current != null ? device.status.temp_current : (device.status.va_temperature != null ? device.status.va_temperature / 10 : null);
+  const catIcon = (c) => (/dj|dc|dd|xdd|fwd|tgq|tyndj/.test(c || '') ? Lightbulb : /cz|pc|kg/.test(c || '') ? Power : /wk|wkf|ms/.test(c || '') ? Home : /kt|ktkzq/.test(c || '') ? Wind : Power);
+  const Ic = catIcon(device.category);
+  return (
+    <div style={{ ...card, padding: 13, opacity: device.online ? 1 : 0.55 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ width: 34, height: 34, borderRadius: 9, background: (on ? C.accent : C.surface2) + (on ? '22' : ''), display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Ic size={17} style={{ color: on ? C.accent : C.text3 }} />
+        </div>
+        {sw && (
+          <button onClick={() => device.online && onCmd(device.id, sw, !on)} disabled={!device.online}
+            style={{ width: 42, height: 25, borderRadius: 999, border: 'none', background: on ? C.green : C.surface2, position: 'relative', cursor: device.online ? 'pointer' : 'not-allowed', transition: 'background .2s' }}>
+            <span style={{ position: 'absolute', top: 3, left: on ? 20 : 3, width: 19, height: 19, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{device.name}</div>
+      <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>
+        {device.online ? (sw ? (on ? t('on') : t('off')) : (temp != null ? temp + '°' : '—')) : t('offline')}
+        {bright != null && device.online ? ` · ${Math.round((bright / 1000) * 100)}%` : ''}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- House dashboard ---------------- */
 function DeviceCard({ device, onChange }) {
   const on = device.on;
@@ -1872,6 +1908,23 @@ function DeviceCard({ device, onChange }) {
 }
 function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, devices, setDevices }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
+  const [tuya, setTuya] = useState({ loading: true, configured: false, connected: false, devices: [], error: null });
+  const loadTuya = () => {
+    setTuya((p) => ({ ...p, loading: true }));
+    authFetch('/api/tuya').then((r) => r.json())
+      .then((j) => setTuya({ loading: false, configured: !!j.configured, connected: !!j.connected, devices: j.devices || [], error: j.error || null }))
+      .catch((e) => setTuya({ loading: false, configured: false, connected: false, devices: [], error: String(e) }));
+  };
+  useEffect(() => { loadTuya(); }, []);
+  const sendCmd = async (deviceId, code, value) => {
+    // otimista
+    setTuya((p) => ({ ...p, devices: p.devices.map((d) => d.id === deviceId ? { ...d, status: { ...d.status, [code]: value } } : d) }));
+    try {
+      const r = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId, code, value }) });
+      const j = await r.json();
+      if (!j.ok) { flash(j.error || 'Erro'); loadTuya(); }
+    } catch (e) { flash(String(e)); loadTuya(); }
+  };
   const month = todayISO().slice(0, 7);
   const houseItems = items.filter((i) => i.domain === 'home');
   const tasks = houseItems.filter((i) => i.type === 'task' && i.status !== 'done');
@@ -1882,9 +1935,23 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
-      <SectionTitle icon={Power} label={t('devices')} color={C.accent} />
-      <HintCard icon={Power} text={t('deviceHint')} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{devices.map((d) => <DeviceCard key={d.id} device={d} onChange={upd} />)}</div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <SectionTitle icon={Power} label={t('devices')} color={C.accent} />
+        {tuya.configured && <button onClick={loadTuya} style={{ ...card, padding: '5px 9px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11 }}>{tuya.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}SmartLife</button>}
+      </div>
+      {tuya.error && <HintCard icon={AlertTriangle} text={'SmartLife: ' + tuya.error} />}
+      {tuya.loading && !tuya.devices.length ? (
+        <div style={{ ...card, padding: 20, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={14} className="spin" />SmartLife…</div>
+      ) : tuya.connected && tuya.devices.length ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 4 }}>
+          {tuya.devices.map((d) => <TuyaCard key={d.id} device={d} t={t} onCmd={sendCmd} />)}
+        </div>
+      ) : !tuya.configured ? (
+        <><HintCard icon={Power} text={t('deviceHint')} />
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{devices.map((d) => <DeviceCard key={d.id} device={d} onChange={upd} />)}</div></>
+      ) : (
+        <HintCard icon={Power} text={lang === 'pt' ? 'Nenhum aparelho SmartLife encontrado.' : 'No SmartLife devices found.'} />
+      )}
       <SectionTitle icon={Wallet} label={t('houseCosts')} color={C.green} />
       <div style={{ ...card, padding: 16, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div><div style={{ fontSize: 22, fontWeight: 700, color: C.green }}>{fmtMoney(cost, lang)}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{filterAll ? t('allTime') : t('thisMonth')}</div></div>
@@ -2026,6 +2093,19 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
 }
 
 /* ---------------- Travel ---------------- */
+function ModuleErrorCard({ t, back, module }) {
+  return (
+    <div>
+      <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ ...card, padding: 22, textAlign: 'center' }}>
+        <AlertTriangle size={26} style={{ color: C.accent, marginBottom: 10 }} />
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{t('screenError')}</div>
+        <div style={{ fontSize: 12.5, color: C.text3, lineHeight: 1.5 }}>{t('screenErrorHint')}</div>
+      </div>
+    </div>
+  );
+}
+
 class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { err: null }; }
   static getDerivedStateFromError(err) { return { err }; }
@@ -2596,9 +2676,9 @@ function App() {
   const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, updateItem, delItem, flash };
   const renderModule = (mo) => {
     const back = () => setActive({ screen: 'dashboard', module: null });
-    if (mo.custom === 'travel') return <TravelScreen module={mo} {...shared} back={back} />;
-    if (mo.custom === 'cars') return <CarsScreen module={mo} {...shared} back={back} />;
-    if (mo.custom === 'people') return <PeopleScreen module={mo} {...shared} back={back} />;
+    if (mo.custom === 'travel') return <ErrorBoundary fallback={<ModuleErrorCard t={t} back={back} module={mo} />}><TravelScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
+    if (mo.custom === 'cars') return <ErrorBoundary fallback={<ModuleErrorCard t={t} back={back} module={mo} />}><CarsScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
+    if (mo.custom === 'people') return <ErrorBoundary fallback={<ModuleErrorCard t={t} back={back} module={mo} />}><PeopleScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
     if (mo.custom === 'house') return <HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} />;
