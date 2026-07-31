@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v29 · 31jul';
+const APP_VERSION = 'v30 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2352,7 +2352,7 @@ function IRBtn({ children, onClick, wide, accent }) {
 // Como cada remoto aprendido pode variar, usamos os codes comuns e deixamos claro
 // que ajustamos caso algum botao nao responda.
 function TuyaRemote({ device, kind, label, irId, t, onClose }) {
-  const [keys, setKeys] = useState(null); const [err, setErr] = useState(null); const [sending, setSending] = useState('');
+  const [keys, setKeys] = useState(null); const [meta, setMeta] = useState({}); const [err, setErr] = useState(null); const [sending, setSending] = useState('');
   const [temp, setTemp] = useState(23); const [mode, setMode] = useState('cold'); const [wind, setWind] = useState('auto'); const [power, setPower] = useState(true);
 
   // Busca as teclas reais para TV/STB/receiver
@@ -2362,14 +2362,14 @@ function TuyaRemote({ device, kind, label, irId, t, onClose }) {
     const ctrl = new AbortController();
     const to = setTimeout(() => ctrl.abort(), 12000);
     authFetch(`/api/tuya?keys=1&infrared_id=${irId}&remote_id=${device.id}`, { signal: ctrl.signal }).then((r) => r.json())
-      .then((j) => { clearTimeout(to); setKeys(j.keys || []); if (j.error) setErr(j.error); })
+      .then((j) => { clearTimeout(to); setKeys(j.keys || []); setMeta(j.meta || {}); if (j.error) setErr(j.error); })
       .catch((e) => { clearTimeout(to); setKeys([]); setErr(e.name === 'AbortError' ? 'Tempo esgotado ao buscar teclas.' : String(e)); });
   }, [irId, device.id, kind]);
 
   const sendKey = async (keyObj) => {
     setSending(keyObj.key_id || keyObj.key || keyObj.key_name);
     try {
-      const r = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'key', infrared_id: irId, remote_id: device.id, key: keyObj.key || keyObj.key_name, key_id: keyObj.key_id }) });
+      const r = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'key', infrared_id: irId, remote_id: device.id, key: keyObj.key || keyObj.key_name, key_id: keyObj.key_id, category_id: meta.category_id, remote_index: meta.remote_index }) });
       const j = await r.json();
       if (!j.ok) setErr(j.error || 'falhou');
     } catch (e) { setErr(String(e)); }
@@ -3188,10 +3188,12 @@ function LgDiag({ t, lang }) {
 }
 
 function TuyaIrDiag({ t, lang }) {
-  const [data, setData] = useState(null); const [busy, setBusy] = useState(false);
+  const [data, setData] = useState(null); const [busy, setBusy] = useState(false); const [lamp, setLamp] = useState(null);
   const run = async () => {
     setBusy(true);
     try { const r = await authFetch('/api/tuya?ir=1'); setData(await r.json()); } catch (e) { setData({ error: String(e) }); }
+    // status cru do Abajur Carol para diagnostico
+    try { const r2 = await authFetch('/api/tuya?status=ebd25cb250d51d988bfmgd'); setLamp(await r2.json()); } catch (e) { setLamp({ error: String(e) }); }
     setBusy(false);
   };
   return (
@@ -3202,6 +3204,7 @@ function TuyaIrDiag({ t, lang }) {
       {data && (
         <div style={{ ...card, padding: 12, fontSize: 11, fontFamily: 'monospace', maxHeight: 260, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: C.text2 }}>
           {data.error ? 'Erro: ' + data.error : JSON.stringify({ hubs: data.hubs, remotes: data.remotes }, null, 1)}
+          {lamp && '\n\n--- Abajur Carol (status) ---\n' + JSON.stringify(lamp.status || lamp, null, 1)}
         </div>
       )}
     </div>
