@@ -211,6 +211,7 @@ const S = {
   on: L('Ligado', 'On'), off: L('Desligado', 'Off'), offline: L('Offline', 'Offline'),
   choose: L('Escolher', 'Choose'), configDevices: L('Aparelhos da Casa', 'Home devices'),
   giftLink: L('Link da compra', 'Purchase link'), giftPrice: L('Preço', 'Price'),
+  expiryDate: L('Data de vencimento', 'Expiry date'),
   pullRefresh: L('Puxe para atualizar', 'Pull to refresh'), releaseRefresh: L('Solte para atualizar', 'Release to refresh'), refreshing: L('Atualizando…', 'Refreshing…'),
   openRemote: L('Abrir controle', 'Open remote'), brightness: L('Brilho', 'Brightness'), color: L('Cor', 'Color'), whiteLight: L('Luz branca', 'White'), turnOff: L('Desligar', 'Turn off'),
   acMode: L('Modo', 'Mode'), cold: L('Frio', 'Cool'), hot: L('Quente', 'Heat'), fan: L('Ventilar', 'Fan'), fanSpeed: L('Velocidade', 'Fan speed'),
@@ -437,7 +438,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v19 · 31jul';
+const APP_VERSION = 'v20 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1251,7 +1252,8 @@ const CAL_FILTERS = [['all', 'fAll', null], ['work', 'fWork', 'work'], ['persona
 function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount }) {
   useEffect(() => { if (onMount) onMount(); }, []);
   const [mode, setMode] = useState('week'); const [spin, setSpin] = useState(false); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7)); const [filter, setFilter] = useState(null); const [scope, setScope] = useState('all');
-  const dated = items.filter((i) => i.date && i.status !== 'done' && i.type !== 'account' && i.type !== 'person' && i.type !== 'message' && (scope === 'all' || ['event', 'appointment', 'flight', 'trip', 'document', 'bill'].includes(i.type)) && (!filter || i.domain === filter));
+  const CAL_EXCLUDE = ['account', 'person', 'message', 'vehicle', 'note'];
+  const dated = items.filter((i) => i.date && i.status !== 'done' && !CAL_EXCLUDE.includes(i.type) && (scope === 'all' || ['event', 'appointment', 'flight', 'trip', 'document', 'bill'].includes(i.type)) && (!filter || i.domain === filter));
   const onDay = (iso) => dated.filter((i) => i.date === iso);
   const [y, m] = vm.split('-').map(Number);
   const shiftMonth = (d) => { let nm = m + d, ny = y; if (nm < 1) { nm = 12; ny--; } if (nm > 12) { nm = 1; ny++; } setVm(`${ny}-${pad2(nm)}`); };
@@ -2766,6 +2768,27 @@ function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct })
 }
 
 /* ---------------- Settings ---------------- */
+function LgDiag({ t, lang }) {
+  const [data, setData] = useState(null); const [busy, setBusy] = useState(false);
+  const run = async () => {
+    setBusy(true);
+    try { const r = await authFetch('/api/lg?debug=1'); setData(await r.json()); } catch (e) { setData({ error: String(e) }); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <Btn kind="soft" onClick={run} disabled={busy} style={{ width: '100%', marginBottom: 8, padding: '12px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>
+        {busy ? <Loader2 size={14} className="spin" /> : <Power size={14} />}{lang === 'pt' ? 'Diagnóstico LG ThinQ' : 'LG ThinQ diagnostic'}
+      </Btn>
+      {data && (
+        <div style={{ ...card, padding: 12, fontSize: 10.5, fontFamily: 'monospace', maxHeight: 280, overflowY: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: C.text2 }}>
+          {JSON.stringify(data, null, 1)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TuyaIrDiag({ t, lang }) {
   const [data, setData] = useState(null); const [busy, setBusy] = useState(false);
   const run = async () => {
@@ -2853,6 +2876,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{t('connections')}</div>
       <Connections lang={lang} t={t} />
       <TuyaIrDiag t={t} lang={lang} />
+      <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
       <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); persistSeeded(); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
