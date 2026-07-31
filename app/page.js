@@ -214,6 +214,7 @@ const S = {
   openRemote: L('Abrir controle', 'Open remote'), brightness: L('Brilho', 'Brightness'), color: L('Cor', 'Color'), whiteLight: L('Luz branca', 'White'), turnOff: L('Desligar', 'Turn off'),
   acMode: L('Modo', 'Mode'), cold: L('Frio', 'Cool'), hot: L('Quente', 'Heat'), fan: L('Ventilar', 'Fan'), fanSpeed: L('Velocidade', 'Fan speed'),
   power: L('Liga/Desliga', 'Power'), volume: L('Volume', 'Volume'), input: L('Entrada', 'Input'), changeInput: L('Trocar', 'Switch'), back: L('Voltar', 'Back'),
+  noKeys: L('Não encontrei as teclas deste controle. Me diga a marca e eu configuro.', 'No keys found for this remote.'),
   irNote: L('Comandos por infravermelho. Se algum botão não responder, me diga qual — ajusto o código dele.', 'IR commands. If a button does not respond, tell me which one.'),
   screenError: L('Algo deu errado nesta tela', 'Something went wrong on this screen'),
   screenErrorHint: L('O resto do app continua funcionando. Tente voltar e abrir de novo.', 'The rest of the app still works. Go back and reopen.'),
@@ -424,17 +425,18 @@ function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
 const TUYA_SEED = {
   'ebd25cb250d51d988bfmgd': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'light' },
   'ebce584d586201f762d4ag': { show: true, alias: 'Subwoofer', room: 'Home-office', kind: 'plug' },
-  'ebbc591b7da959062dm9im': { show: true, alias: 'TV Suíte', room: 'Suíte', kind: 'tv' },
-  'eb35a5d8aab7cb6a92jpzr': { show: true, alias: 'Vivo Suíte', room: 'Suíte', kind: 'stb' },
-  'eb8629b8368eb1b1cfnhnm': { show: true, alias: 'Ar Brinquedoteca', room: 'Quarto Maria', kind: 'ac' },
-  'ebce4627183df11fbewuyh': { show: true, alias: 'Ar Dudu', room: 'Quarto Dudu', kind: 'ac' },
+  'ebbc591b7da959062dm9im': { show: true, alias: 'TV Suíte', room: 'Suíte', kind: 'tv', ir: '534436288caab546bacb' },
+  'eb35a5d8aab7cb6a92jpzr': { show: true, alias: 'Vivo Suíte', room: 'Suíte', kind: 'stb', ir: '534436288caab546bacb' },
+  'eb8d3532144aa35a7do3go': { show: true, alias: 'Ar Suíte', room: 'Suíte', kind: 'ac', ir: '534436288caab546bacb' },
+  'eb8629b8368eb1b1cfnhnm': { show: true, alias: 'Ar Brinquedoteca', room: 'Quarto Maria', kind: 'ac', ir: '534436288caab5460e50' },
+  'ebce4627183df11fbewuyh': { show: true, alias: 'Ar Dudu', room: 'Quarto Dudu', kind: 'ac', ir: '042057708cce4ef3ee58' },
   '467308739c9c1f859136': { show: true, alias: 'Cervejeira', room: 'Área', kind: 'plug' },
-  'eb9d5c2de5306c1e93f0rp': { show: true, alias: 'Receiver', room: 'Sala de TV', kind: 'receiver' },
-  'eb1312396be3adad2fklrm': { show: true, alias: 'TV Sala', room: 'Sala de TV', kind: 'tv' },
-  'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb' },
-  'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac' },
+  'eb9d5c2de5306c1e93f0rp': { show: true, alias: 'Receiver', room: 'Sala de TV', kind: 'receiver', ir: '04205770e868e76cda25' },
+  'eb1312396be3adad2fklrm': { show: true, alias: 'TV Sala', room: 'Sala de TV', kind: 'tv', ir: '04205770e868e76cda25' },
+  'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
+  'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v17 · 31jul';
+const APP_VERSION = 'v18 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1907,7 +1909,7 @@ function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
         <div key={room || 'sem'} style={{ marginBottom: 12 }}>
           {room ? <div style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 2px 8px' }}>{room}</div> : (roomNames.length > 1 ? <div style={{ fontSize: 11.5, color: C.text3, margin: '2px 2px 8px' }}>{lang === 'pt' ? 'Outros' : 'Other'}</div> : null)}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} t={t} onCmd={onCmd} />)}
+            {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} irId={(prefs && prefs[d.id] && prefs[d.id].ir) || null} t={t} onCmd={onCmd} />)}
           </div>
         </div>
       ))}
@@ -2003,89 +2005,115 @@ function IRBtn({ children, onClick, wide, accent }) {
 // Para controles IR "universais" da Tuya, os comandos vao pelo code padrao.
 // Como cada remoto aprendido pode variar, usamos os codes comuns e deixamos claro
 // que ajustamos caso algum botao nao responda.
-function TuyaRemote({ device, kind, label, t, onCmd, onClose }) {
-  const send = (code, value) => onCmd(device.id, code, value === undefined ? true : value);
-  const [temp, setTemp] = useState(device.status.temp_set != null ? device.status.temp_set : 23);
+function TuyaRemote({ device, kind, label, irId, t, onClose }) {
+  const [keys, setKeys] = useState(null); const [err, setErr] = useState(null); const [sending, setSending] = useState('');
+  const [temp, setTemp] = useState(23); const [mode, setMode] = useState('cold'); const [wind, setWind] = useState('auto'); const [power, setPower] = useState(true);
+
+  // Busca as teclas reais para TV/STB/receiver
+  useEffect(() => {
+    if (!irId) { setErr('Sem hub IR configurado.'); return; }
+    if (kind === 'ac') return; // ar usa comandos proprios
+    authFetch(`/api/tuya?keys=1&infrared_id=${irId}&remote_id=${device.id}`).then((r) => r.json())
+      .then((j) => { if (j.keys) setKeys(j.keys); if (j.error) setErr(j.error); })
+      .catch((e) => setErr(String(e)));
+  }, [irId, device.id, kind]);
+
+  const sendKey = async (keyObj) => {
+    setSending(keyObj.key_id || keyObj.key || keyObj.key_name);
+    try {
+      const r = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'key', infrared_id: irId, remote_id: device.id, key: keyObj.key || keyObj.key_name, key_id: keyObj.key_id }) });
+      const j = await r.json();
+      if (!j.ok) setErr(j.error || 'falhou');
+    } catch (e) { setErr(String(e)); }
+    setSending('');
+  };
+
+  const sendAc = async (patch) => {
+    const next = { power, mode, temp, wind, ...patch };
+    setPower(next.power); setMode(next.mode); setTemp(next.temp); setWind(next.wind);
+    try {
+      const r = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'ac', infrared_id: irId, remote_id: device.id, acCode: 'all', acValue: { power: next.power ? 1 : 0, mode: next.mode, temp: next.temp, wind: next.wind } }) });
+      const j = await r.json();
+      if (!j.ok) setErr(j.error || 'falhou');
+    } catch (e) { setErr(String(e)); }
+  };
+
+  // Agrupa teclas comuns para TV/STB/receiver
+  const findKey = (names) => (keys || []).find((k) => names.includes((k.key_name || '').toLowerCase()) || names.includes((k.key || '').toLowerCase()));
+  const KeyBtn = ({ names, label: lb, accent }) => {
+    const k = findKey(names);
+    if (!k) return null;
+    return <IRBtn onClick={() => sendKey(k)} accent={accent}>{sending === (k.key_id || k.key || k.key_name) ? '…' : lb}</IRBtn>;
+  };
+
   return (
     <Modal onClose={onClose}>
       <SheetHead title={label} onClose={onClose} icon={kind === 'ac' ? Wind : kind === 'receiver' ? Radio : Tv} />
+      {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word' }}>{err}</div>}
 
       {kind === 'ac' ? (
         <div style={{ display: 'grid', gap: 12 }}>
           <div style={{ ...card, padding: 16, textAlign: 'center' }}>
             <div style={{ fontSize: 40, fontWeight: 800, color: C.accent }}>{temp}°</div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 10 }}>
-              <IRBtn onClick={() => { const v = Math.max(16, temp - 1); setTemp(v); send('temp', v); }} wide>−</IRBtn>
-              <IRBtn onClick={() => { const v = Math.min(30, temp + 1); setTemp(v); send('temp', v); }} wide>＋</IRBtn>
+              <IRBtn onClick={() => sendAc({ temp: Math.max(16, temp - 1) })} wide>−</IRBtn>
+              <IRBtn onClick={() => sendAc({ temp: Math.min(30, temp + 1) })} wide>＋</IRBtn>
             </div>
           </div>
           <div>
             <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('acMode')}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              <IRBtn onClick={() => send('mode', 'cold')} accent>❄ {t('cold')}</IRBtn>
-              <IRBtn onClick={() => send('mode', 'hot')}>☀ {t('hot')}</IRBtn>
-              <IRBtn onClick={() => send('mode', 'wind')}>💨 {t('fan')}</IRBtn>
+              <IRBtn onClick={() => sendAc({ mode: 'cold' })} accent={mode === 'cold'}>❄ {t('cold')}</IRBtn>
+              <IRBtn onClick={() => sendAc({ mode: 'hot' })} accent={mode === 'hot'}>☀ {t('hot')}</IRBtn>
+              <IRBtn onClick={() => sendAc({ mode: 'wind' })} accent={mode === 'wind'}>💨 {t('fan')}</IRBtn>
             </div>
           </div>
           <div>
             <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('fanSpeed')}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
-              <IRBtn onClick={() => send('wind', 'low')}>1</IRBtn>
-              <IRBtn onClick={() => send('wind', 'mid')}>2</IRBtn>
-              <IRBtn onClick={() => send('wind', 'high')}>3</IRBtn>
-              <IRBtn onClick={() => send('wind', 'auto')}>A</IRBtn>
+              <IRBtn onClick={() => sendAc({ wind: 'low' })} accent={wind === 'low'}>1</IRBtn>
+              <IRBtn onClick={() => sendAc({ wind: 'mid' })} accent={wind === 'mid'}>2</IRBtn>
+              <IRBtn onClick={() => sendAc({ wind: 'high' })} accent={wind === 'high'}>3</IRBtn>
+              <IRBtn onClick={() => sendAc({ wind: 'auto' })} accent={wind === 'auto'}>A</IRBtn>
             </div>
           </div>
-          <IRBtn onClick={() => send('power', 'off')}>⏻ {t('turnOff')}</IRBtn>
+          <IRBtn onClick={() => sendAc({ power: !power })} accent>{power ? '⏻ ' + t('turnOff') : '⏻ ' + t('power')}</IRBtn>
+          <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5 }}>{t('irNote')}</div>
         </div>
-      ) : kind === 'receiver' ? (
-        <div style={{ display: 'grid', gap: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <IRBtn onClick={() => send('power')} accent>⏻ {t('power')}</IRBtn>
-            <IRBtn onClick={() => send('mute')}>🔇 Mute</IRBtn>
-          </div>
-          <div style={{ fontSize: 11.5, color: C.text2 }}>{t('volume')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <IRBtn onClick={() => send('volume_down')} wide>🔉 −</IRBtn>
-            <IRBtn onClick={() => send('volume_up')} wide>🔊 ＋</IRBtn>
-          </div>
-          <div style={{ fontSize: 11.5, color: C.text2 }}>{t('input')}</div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <IRBtn onClick={() => send('input')}>↔ {t('changeInput')}</IRBtn>
-            <IRBtn onClick={() => send('menu')}>☰ Menu</IRBtn>
-          </div>
-        </div>
+      ) : keys === null ? (
+        <div style={{ ...card, padding: 26, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={15} className="spin" />…</div>
+      ) : keys.length === 0 ? (
+        <div style={{ ...card, padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('noKeys')}</div>
       ) : (
-        // TV ou set-top box
         <div style={{ display: 'grid', gap: 10 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <IRBtn onClick={() => send('power')} accent>⏻ {t('power')}</IRBtn>
-            <IRBtn onClick={() => send('mute')}>🔇 Mute</IRBtn>
+            <KeyBtn names={['power']} label={'⏻ ' + t('power')} accent />
+            <KeyBtn names={['mute']} label={'🔇 Mute'} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
-            <div />
-            <IRBtn onClick={() => send('up')}>▲</IRBtn>
-            <div />
-            <IRBtn onClick={() => send('left')}>◀</IRBtn>
-            <IRBtn onClick={() => send('ok')} accent>OK</IRBtn>
-            <IRBtn onClick={() => send('right')}>▶</IRBtn>
-            <div />
-            <IRBtn onClick={() => send('down')}>▼</IRBtn>
-            <div />
+          {kind !== 'receiver' && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
+              <div /><KeyBtn names={['up', 'menu_up']} label={'▲'} /><div />
+              <KeyBtn names={['left', 'menu_left']} label={'◀'} />
+              <KeyBtn names={['ok', 'enter']} label={'OK'} accent />
+              <KeyBtn names={['right', 'menu_right']} label={'▶'} />
+              <div /><KeyBtn names={['down', 'menu_down']} label={'▼'} /><div />
+            </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <KeyBtn names={['volume_up', 'vol+', 'vol_add']} label={'🔊 Vol +'} />
+            <KeyBtn names={['volume_down', 'vol-', 'vol_sub']} label={'🔉 Vol −'} />
+            <KeyBtn names={['channel_up', 'ch+', 'ch_add']} label={'CH +'} />
+            <KeyBtn names={['channel_down', 'ch-', 'ch_sub']} label={'CH −'} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <IRBtn onClick={() => send('vol_add')} wide>🔊 Vol +</IRBtn>
-            <IRBtn onClick={() => send('vol_sub')} wide>🔉 Vol −</IRBtn>
-            <IRBtn onClick={() => send('ch_add')} wide>CH +</IRBtn>
-            <IRBtn onClick={() => send('ch_sub')} wide>CH −</IRBtn>
+            <KeyBtn names={['input', 'source', 'signal']} label={t('input')} />
+            <KeyBtn names={['menu']} label={'☰ Menu'} />
+            <KeyBtn names={['back', 'return', 'exit']} label={'↩ ' + t('back')} />
+            <KeyBtn names={['home']} label={'⌂ Home'} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <IRBtn onClick={() => send('back')}>↩ {t('back')}</IRBtn>
-            <IRBtn onClick={() => send('menu')}>☰ Menu</IRBtn>
-          </div>
+          <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5 }}>{t('irNote')}</div>
         </div>
       )}
-      <div style={{ fontSize: 10.5, color: C.text3, marginTop: 14, textAlign: 'center', lineHeight: 1.5 }}>{t('irNote')}</div>
     </Modal>
   );
 }
@@ -2094,7 +2122,7 @@ function tuyaSwitchCode(status) {
   const keys = Object.keys(status || {});
   return keys.find((k) => /^switch(_1|_led)?$|^switch$/.test(k)) || keys.find((k) => k.startsWith('switch')) || null;
 }
-function TuyaCard({ device, t, onCmd, kind, label }) {
+function TuyaCard({ device, t, onCmd, kind, label, irId }) {
   const [remote, setRemote] = useState(false); const [light, setLight] = useState(false);
   const irKind = kind === 'tv' || kind === 'stb' || kind === 'ac' || kind === 'receiver';
   const sw = tuyaSwitchCode(device.status);
@@ -2112,7 +2140,7 @@ function TuyaCard({ device, t, onCmd, kind, label }) {
           <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div>
           <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{device.online ? t('openRemote') : t('offline')}</div>
         </button>
-        {remote && <TuyaRemote device={device} kind={kind} label={nome} t={t} onCmd={onCmd} onClose={() => setRemote(false)} />}
+        {remote && <TuyaRemote device={device} kind={kind} label={nome} irId={irId} t={t} onClose={() => setRemote(false)} />}
       </>
     );
   }
