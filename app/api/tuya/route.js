@@ -236,18 +236,29 @@ export async function POST(req) {
       return Response.json({ error: last }, { status: 500 });
     }
     // ---- Aparelho normal (tomada, luz) ----
-    // tenta o code informado; se for switch e falhar, tenta variantes comuns de lâmpada
-    const codeVariants = [body.code];
-    if (/^switch/.test(body.code || '')) { ['switch_led', 'switch_1', 'switch'].forEach((c) => { if (!codeVariants.includes(c)) codeVariants.push(c); }); }
+    // tenta o code informado; se for switch e falhar, descobre o codigo real pelo status
+    let codeVariants = [body.code];
+    if (/^switch/.test(body.code || '')) {
+      // buscar status real para achar o codigo de switch verdadeiro
+      try {
+        const st = await tuya('GET', `/v1.0/devices/${body.deviceId}/status`);
+        if (st.success && Array.isArray(st.result)) {
+          const realSwitch = st.result.map((x) => x.code).filter((c) => /^switch/.test(c));
+          codeVariants = [...new Set([...realSwitch, 'switch_led', 'switch_1', 'switch', body.code])];
+        }
+      } catch (e) {}
+      ['switch_led', 'switch_1', 'switch'].forEach((c) => { if (!codeVariants.includes(c)) codeVariants.push(c); });
+    }
     let lastErr = 'comando falhou';
     for (const code of codeVariants) {
+      if (!code) continue;
       try {
         const j = await tuya('POST', `/v1.0/devices/${body.deviceId}/commands`, { commands: [{ code, value: body.value }] });
         if (j.success) return Response.json({ ok: true, usedCode: code });
         lastErr = 'code ' + (j.code != null ? j.code : '?') + ': ' + (j.msg || '');
       } catch (e) { lastErr = String(e.message || e); }
     }
-    return Response.json({ error: lastErr }, { status: 500 });
+    return Response.json({ error: lastErr, tried: codeVariants }, { status: 500 });
   } catch (e) {
     return Response.json({ error: String(e.message || e) }, { status: 500 });
   }
