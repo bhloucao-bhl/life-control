@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v35 · 31jul';
+const APP_VERSION = 'v36 · 31jul';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2387,7 +2387,11 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
   };
 
   // Agrupa teclas comuns para TV/STB/receiver
-  const findKey = (names) => (keys || []).find((k) => names.includes((k.key_name || '').toLowerCase()) || names.includes((k.key || '').toLowerCase()));
+  const norm = (x) => String(x || '').toLowerCase().replace(/[\s_\-\.]/g, '');
+  const findKey = (names) => {
+    const set = names.map(norm);
+    return (keys || []).find((k) => set.includes(norm(k.key_name)) || set.includes(norm(k.key)) || set.includes(norm(k.key_id)));
+  };
   const KeyBtn = ({ names, label: lb, accent }) => {
     const k = findKey(names);
     if (!k) return null;
@@ -2436,8 +2440,8 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <KeyBtn names={['power']} label={'⏻ ' + t('power')} accent />
-            <KeyBtn names={['mute']} label={'🔇 Mute'} />
+            <KeyBtn names={['power', 'power_off', 'power_on', 'poweroff', 'poweron', 'onoff', 'on_off', 'standby']} label={'⏻ ' + t('power')} accent />
+            <KeyBtn names={['mute', 'muting', 'silence', 'silent', 'vol_mute', 'volume_mute', 'sound_mute', 'quiet']} label={'🔇 Mute'} />
           </div>
           {kind !== 'receiver' && (
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
@@ -2449,15 +2453,15 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <KeyBtn names={['volume_up', 'vol+', 'vol_add']} label={'🔊 Vol +'} />
-            <KeyBtn names={['volume_down', 'vol-', 'vol_sub']} label={'🔉 Vol −'} />
-            <KeyBtn names={['channel_up', 'ch+', 'ch_add']} label={'CH +'} />
-            <KeyBtn names={['channel_down', 'ch-', 'ch_sub']} label={'CH −'} />
+            <KeyBtn names={['volume_up', 'vol+', 'vol_add', 'volumeup', 'vol_up', 'volup', 'v+']} label={'🔊 Vol +'} />
+            <KeyBtn names={['volume_down', 'vol-', 'vol_sub', 'volumedown', 'vol_down', 'voldown', 'v-']} label={'🔉 Vol −'} />
+            <KeyBtn names={['channel_up', 'ch+', 'ch_add', 'channelup', 'ch_up', 'chup', 'prog+', 'program_up']} label={'CH +'} />
+            <KeyBtn names={['channel_down', 'ch-', 'ch_sub', 'channeldown', 'ch_down', 'chdown', 'prog-', 'program_down']} label={'CH −'} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <KeyBtn names={['input', 'source', 'signal']} label={t('input')} />
-            <KeyBtn names={['menu']} label={'☰ Menu'} />
-            <KeyBtn names={['back', 'return', 'exit']} label={'↩ ' + t('back')} />
+            <KeyBtn names={['input', 'source', 'signal', 'tv/av', 'tvav', 'av', 'hdmi', 'input_source', 'source_input', 'sources']} label={t('input')} />
+            <KeyBtn names={['menu', 'home', 'setting', 'settings', 'smart', 'smart_hub']} label={'☰ Menu'} />
+            <KeyBtn names={['back', 'return', 'exit', 'prev', 'previous', 'esc']} label={'↩ ' + t('back')} />
             <KeyBtn names={['home']} label={'⌂ Home'} />
           </div>
           <button onClick={() => setShowAll((v) => !v)} style={{ ...card, padding: '10px', color: C.text2, cursor: 'pointer', fontSize: 12, border: 'none', width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>{showAll ? <ChevronLeft size={13} /> : <Plus size={13} />}{showAll ? (lang === 'pt' ? 'Ocultar todos os botões' : 'Hide all') : (lang === 'pt' ? 'Todos os botões do controle' : 'All remote buttons')}</button>
