@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v36 · 31jul';
+const APP_VERSION = 'v37 · 01ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2398,11 +2398,47 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
     return <IRBtn onClick={() => sendKey(k)} accent={accent}>{sending === (k.key_id || k.key || k.key_name) ? '…' : lb}</IRBtn>;
   };
 
+  // teclado numerico (STB/Vivo)
+  const NumPad = () => {
+    const nums = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+    const found = nums.map((n) => findKey([n, 'num_' + n, 'number_' + n, 'digit_' + n, 'key_' + n]));
+    if (!found.some(Boolean)) return null;
+    return (
+      <div style={{ marginTop: 4 }}>
+        <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{lang === 'pt' ? 'Canais' : 'Numbers'}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+          {nums.slice(0, 9).map((n, i) => found[i] ? <IRBtn key={n} onClick={() => sendKey(found[i])}>{n}</IRBtn> : <div key={n} />)}
+          <div />
+          {found[9] ? <IRBtn onClick={() => sendKey(found[9])}>0</IRBtn> : <div />}
+          <div />
+        </div>
+      </div>
+    );
+  };
+
+  const DPad = () => {
+    const up = findKey(['up', 'menu_up', 'dpad_up', 'nav_up']);
+    const down = findKey(['down', 'menu_down', 'dpad_down', 'nav_down']);
+    const left = findKey(['left', 'menu_left', 'dpad_left', 'nav_left']);
+    const right = findKey(['right', 'menu_right', 'dpad_right', 'nav_right']);
+    const ok = findKey(['ok', 'enter', 'confirm', 'select', 'dpad_center']);
+    if (!up && !down && !left && !right && !ok) return null;
+    const Cell = ({ k, children }) => k ? <IRBtn onClick={() => sendKey(k)}>{children}</IRBtn> : <div />;
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
+        <div /><Cell k={up}>▲</Cell><div />
+        <Cell k={left}>◀</Cell><Cell k={ok} >OK</Cell><Cell k={right}>▶</Cell>
+        <div /><Cell k={down}>▼</Cell><div />
+      </div>
+    );
+  };
+
+  const Row2 = ({ children }) => <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>{children}</div>;
+
   return (
     <Modal onClose={onClose}>
       <SheetHead title={label} onClose={onClose} icon={kind === 'ac' ? Wind : kind === 'receiver' ? Radio : Tv} />
       {err && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word' }}>{err}</div>}
-      {keys && keys.length > 0 && meta && meta.category_id == null && kind !== 'ac' && <div style={{ ...card, padding: 10, marginBottom: 10, fontSize: 11, color: C.accent }}>{lang === 'pt' ? 'Aviso: este controle não retornou categoria. Use "Todos os botões" — se ainda falhar, me avise que ajusto.' : 'No category returned for this remote.'}</div>}
 
       {kind === 'ac' ? (
         <div style={{ display: 'grid', gap: 12 }}>
@@ -2431,52 +2467,120 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
             </div>
           </div>
           <IRBtn onClick={() => sendAc({ power: !power })} accent>{power ? '⏻ ' + t('turnOff') : '⏻ ' + t('power')}</IRBtn>
-          <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5 }}>{t('irNote')}</div>
         </div>
       ) : keys === null ? (
         <div style={{ ...card, padding: 26, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={15} className="spin" />…</div>
       ) : keys.length === 0 ? (
         <div style={{ ...card, padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('noKeys')}</div>
+      ) : kind === 'receiver' ? (
+        /* ---------- RECEIVER (Onkyo) ---------- */
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Row2>
+            <KeyBtn names={['power', 'power_off', 'power_on', 'onoff', 'on_off', 'standby']} label={'⏻ ' + t('power')} accent />
+            <KeyBtn names={['mute', 'muting', 'vol_mute', 'volume_mute', 'sound_mute']} label={'🔇 Mute'} />
+          </Row2>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('volume')}</div>
+            <Row2>
+              <KeyBtn names={['volume_up', 'vol+', 'vol_add', 'volumeup', 'vol_up', 'volup', 'v+', 'master_volume_up']} label={'🔊 +'} />
+              <KeyBtn names={['volume_down', 'vol-', 'vol_sub', 'volumedown', 'vol_down', 'voldown', 'v-', 'master_volume_down']} label={'🔉 −'} />
+            </Row2>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{lang === 'pt' ? 'Entradas' : 'Inputs'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <KeyBtn names={['cbl/sat', 'cbl_sat', 'cblsat', 'cbl', 'sat', 'cable']} label={'CBL/SAT'} />
+              <KeyBtn names={['net', 'network', 'internet']} label={'NET'} />
+              <KeyBtn names={['bluetooth', 'bt']} label={'Bluetooth'} />
+              <KeyBtn names={['game', 'game1', 'game2']} label={'Game'} />
+              <KeyBtn names={['tuner', 'am', 'fm', 'radio']} label={'Tuner'} />
+              <KeyBtn names={['aux', 'aux1', 'aux2']} label={'Aux'} />
+              <KeyBtn names={['pc', 'computer', 'vga']} label={'PC'} />
+              <KeyBtn names={['dvd', 'bd/dvd', 'bd_dvd', 'bddvd', 'bd', 'blu-ray', 'bluray']} label={'DVD'} />
+              <KeyBtn names={['tv/cd', 'tv_cd', 'tvcd', 'tv', 'cd']} label={'TV/CD'} />
+              <KeyBtn names={['phono', 'turntable']} label={'Phono'} />
+              <KeyBtn names={['usb']} label={'USB'} />
+              <KeyBtn names={['hdmi', 'hdmi1', 'hdmi2']} label={'HDMI'} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{lang === 'pt' ? 'Modo de som' : 'Sound mode'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 8 }}>
+              <KeyBtn names={['movie', 'film', 'cinema']} label={'Movie'} />
+              <KeyBtn names={['music']} label={'Music'} />
+              <KeyBtn names={['game_mode', 'gamemode']} label={'Game'} />
+              <KeyBtn names={['thx']} label={'THX'} />
+              <KeyBtn names={['stereo']} label={'Stereo'} />
+              <KeyBtn names={['direct', 'pure', 'pure_direct', 'puredirect']} label={'Direct'} />
+              <KeyBtn names={['surround', 'surr']} label={'Surround'} />
+              <KeyBtn names={['listening_mode', 'listeningmode', 'sound', 'mode']} label={'Mode'} />
+            </div>
+          </div>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>Zone 2</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <KeyBtn names={['zone2', 'zone_2', 'z2', 'zone2_power', 'zone2power']} label={lang === 'pt' ? 'Z2 Liga' : 'Z2 On'} />
+              <KeyBtn names={['zone2_vol_up', 'zone2volup', 'z2_vol_up', 'zone2_volume_up']} label={'Z2 Vol +'} />
+              <KeyBtn names={['zone2_vol_down', 'zone2voldown', 'z2_vol_down', 'zone2_volume_down']} label={'Z2 Vol −'} />
+            </div>
+          </div>
+          <DPad />
+          <AllButtonsToggle showAll={showAll} setShowAll={setShowAll} keys={keys} sendKey={sendKey} sending={sending} lang={lang} />
+        </div>
       ) : (
+        /* ---------- TV e STB/Vivo ---------- */
         <div style={{ display: 'grid', gap: 10 }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+          <Row2>
             <KeyBtn names={['power', 'power_off', 'power_on', 'poweroff', 'poweron', 'onoff', 'on_off', 'standby']} label={'⏻ ' + t('power')} accent />
             <KeyBtn names={['mute', 'muting', 'silence', 'silent', 'vol_mute', 'volume_mute', 'sound_mute', 'quiet']} label={'🔇 Mute'} />
+          </Row2>
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{t('volume')}</div>
+            <Row2>
+              <KeyBtn names={['volume_up', 'vol+', 'vol_add', 'volumeup', 'vol_up', 'volup', 'v+']} label={'🔊 Vol +'} />
+              <KeyBtn names={['volume_down', 'vol-', 'vol_sub', 'volumedown', 'vol_down', 'voldown', 'v-']} label={'🔉 Vol −'} />
+            </Row2>
           </div>
-          {kind !== 'receiver' && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, alignItems: 'center' }}>
-              <div /><KeyBtn names={['up', 'menu_up']} label={'▲'} /><div />
-              <KeyBtn names={['left', 'menu_left']} label={'◀'} />
-              <KeyBtn names={['ok', 'enter']} label={'OK'} accent />
-              <KeyBtn names={['right', 'menu_right']} label={'▶'} />
-              <div /><KeyBtn names={['down', 'menu_down']} label={'▼'} /><div />
+          {kind === 'stb' && (
+            <div>
+              <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{lang === 'pt' ? 'Canais' : 'Channels'}</div>
+              <Row2>
+                <KeyBtn names={['channel_up', 'ch+', 'ch_add', 'channelup', 'ch_up', 'chup', 'prog+', 'program_up']} label={'CH +'} />
+                <KeyBtn names={['channel_down', 'ch-', 'ch_sub', 'channeldown', 'ch_down', 'chdown', 'prog-', 'program_down']} label={'CH −'} />
+              </Row2>
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <KeyBtn names={['volume_up', 'vol+', 'vol_add', 'volumeup', 'vol_up', 'volup', 'v+']} label={'🔊 Vol +'} />
-            <KeyBtn names={['volume_down', 'vol-', 'vol_sub', 'volumedown', 'vol_down', 'voldown', 'v-']} label={'🔉 Vol −'} />
-            <KeyBtn names={['channel_up', 'ch+', 'ch_add', 'channelup', 'ch_up', 'chup', 'prog+', 'program_up']} label={'CH +'} />
-            <KeyBtn names={['channel_down', 'ch-', 'ch_sub', 'channeldown', 'ch_down', 'chdown', 'prog-', 'program_down']} label={'CH −'} />
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-            <KeyBtn names={['input', 'source', 'signal', 'tv/av', 'tvav', 'av', 'hdmi', 'input_source', 'source_input', 'sources']} label={t('input')} />
-            <KeyBtn names={['menu', 'home', 'setting', 'settings', 'smart', 'smart_hub']} label={'☰ Menu'} />
-            <KeyBtn names={['back', 'return', 'exit', 'prev', 'previous', 'esc']} label={'↩ ' + t('back')} />
-            <KeyBtn names={['home']} label={'⌂ Home'} />
-          </div>
-          <button onClick={() => setShowAll((v) => !v)} style={{ ...card, padding: '10px', color: C.text2, cursor: 'pointer', fontSize: 12, border: 'none', width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>{showAll ? <ChevronLeft size={13} /> : <Plus size={13} />}{showAll ? (lang === 'pt' ? 'Ocultar todos os botões' : 'Hide all') : (lang === 'pt' ? 'Todos os botões do controle' : 'All remote buttons')}</button>
-          {showAll && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-              {keys.map((k, i) => {
-                const nm = k.key_name || k.key || ('k' + i);
-                return <IRBtn key={i} onClick={() => sendKey(k)}>{sending === (k.key_id || k.key || k.key_name) ? '…' : nm}</IRBtn>;
-              })}
+          <DPad />
+          {kind === 'stb' && <NumPad />}
+          <div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{lang === 'pt' ? 'Navegação' : 'Navigation'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+              <KeyBtn names={['menu', 'setting', 'settings']} label={'☰ Menu'} />
+              <KeyBtn names={['home', 'smart', 'smart_hub']} label={'⌂ Home'} />
+              <KeyBtn names={['back', 'return', 'exit', 'prev', 'previous', 'esc']} label={'↩ ' + t('back')} />
             </div>
-          )}
-          <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5 }}>{t('irNote')}</div>
+          </div>
+          <AllButtonsToggle showAll={showAll} setShowAll={setShowAll} keys={keys} sendKey={sendKey} sending={sending} lang={lang} />
         </div>
       )}
+      <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', lineHeight: 1.5, marginTop: 10 }}>{t('irNote')}</div>
     </Modal>
+  );
+}
+
+function AllButtonsToggle({ showAll, setShowAll, keys, sendKey, sending, lang }) {
+  return (
+    <div>
+      <button onClick={() => setShowAll((v) => !v)} style={{ ...card, padding: '10px', color: C.text2, cursor: 'pointer', fontSize: 12, border: 'none', width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>{showAll ? <ChevronLeft size={13} /> : <Plus size={13} />}{showAll ? (lang === 'pt' ? 'Ocultar todos os botões' : 'Hide all') : (lang === 'pt' ? 'Todos os botões do controle' : 'All remote buttons')}</button>
+      {showAll && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginTop: 8 }}>
+          {keys.map((k, i) => {
+            const nm = k.key_name || k.key || ('k' + i);
+            return <IRBtn key={i} onClick={() => sendKey(k)}>{sending === (k.key_id || k.key || k.key_name) ? '…' : nm}</IRBtn>;
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
