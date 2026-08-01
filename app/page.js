@@ -122,7 +122,7 @@ function Login() {
       <div style={{ width: '100%', maxWidth: 360 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 }}>
           <span style={{ width: 10, height: 10, borderRadius: 3, background: LC.accent }} />
-          <span style={{ fontSize: 17, fontWeight: 700 }}>Life Control</span>
+          <span style={{ fontSize: 17, fontWeight: 700 }}>Life in Control</span>
         </div>
         <p style={{ color: LC.text3, fontSize: 13.5, lineHeight: 1.5, marginBottom: 22 }}>
           {mode === 'up' ? 'Crie sua conta com e-mail e senha.' : 'Entre com seu e-mail e senha.'}
@@ -445,13 +445,13 @@ const TUYA_SEED = {
   'eb8d3532144aa35a7do3go': { show: true, alias: 'Ar Suíte', room: 'Suíte', kind: 'ac', ir: '534436288caab546bacb' },
   'eb8629b8368eb1b1cfnhnm': { show: true, alias: 'Ar Brinquedoteca', room: 'Quarto Maria', kind: 'ac', ir: '534436288caab5460e50' },
   'ebce4627183df11fbewuyh': { show: true, alias: 'Ar Dudu', room: 'Quarto Dudu', kind: 'ac', ir: '042057708cce4ef3ee58' },
-  '467308739c9c1f859136': { show: true, alias: 'Cervejeira', room: 'Área', kind: 'plug' },
+  '467308739c9c1f859136': { show: true, alias: 'Cervejeira', room: 'Cozinha', kind: 'plug' },
   'eb9d5c2de5306c1e93f0rp': { show: true, alias: 'Receiver', room: 'Sala de TV', kind: 'receiver', ir: '04205770e868e76cda25' },
   'eb1312396be3adad2fklrm': { show: true, alias: 'TV Sala', room: 'Sala de TV', kind: 'tv', ir: '04205770e868e76cda25' },
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v37 · 01ago';
+const APP_VERSION = 'v38 · 01ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1425,16 +1425,46 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
 }
 
 /* ---------------- Dashboard grid + generic module ---------------- */
-function DashboardScreen({ items, lang, t, open, gmailCount }) {
+function DashboardScreen({ items, lang, t, open, gmailCount, goNews, order, setOrder }) {
+  const [editing, setEditing] = useState(false);
+  // ordena os modulos conforme a ordem salva; novos modulos vao para o fim
+  const ordered = [...MODULES].sort((a, b) => {
+    const ia = order.indexOf(a.key), ib = order.indexOf(b.key);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
+  const move = (key, dir) => {
+    const cur = ordered.map((m) => m.key);
+    const i = cur.indexOf(key); const j = i + dir;
+    if (j < 0 || j >= cur.length) return;
+    [cur[i], cur[j]] = [cur[j], cur[i]];
+    setOrder(cur);
+  };
   return (
     <div>
-      <ScreenTitle title={t('dashboard')} sub={t('yourModules')} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        {MODULES.map((mo) => { const count = mo.key === 'gmail' ? (gmailCount || 0) : items.filter(mo.filter).length; const Ic = mo.icon; return (
-          <button key={mo.key} onClick={() => open(mo)} style={{ ...card, padding: 15, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 92 }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: mo.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={18} style={{ color: mo.color }} /></div>
-            <div><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
-          </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+        <ScreenTitle title={t('dashboard')} sub={t('yourModules')} />
+        <button onClick={() => setEditing((v) => !v)} style={{ ...card, padding: '7px 11px', color: editing ? C.accent : C.text2, cursor: 'pointer', fontSize: 12, display: 'flex', gap: 5, alignItems: 'center' }}>{editing ? <><Check size={13} />{lang === 'pt' ? 'Pronto' : 'Done'}</> : <><Pencil size={13} />{lang === 'pt' ? 'Ordenar' : 'Reorder'}</>}</button>
+      </div>
+      {/* Card de Noticias em destaque */}
+      <button onClick={goNews} style={{ ...card, padding: 15, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, width: '100%', marginBottom: 10, border: `1px solid ${C.blue}33` }}>
+        <div style={{ width: 38, height: 38, borderRadius: 10, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Newspaper size={19} style={{ color: C.blue }} /></div>
+        <div style={{ flex: 1 }}><div style={{ fontSize: 14.5, fontWeight: 600 }}>{t('news')}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Curadoria do seu interesse' : 'Curated for you'}</div></div>
+        <ChevronRight size={18} style={{ color: C.text3 }} />
+      </button>
+      <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr' : '1fr 1fr', gap: 10 }}>
+        {ordered.map((mo, idx) => { const count = mo.key === 'gmail' ? (gmailCount || 0) : items.filter(mo.filter).length; const Ic = mo.icon; return (
+          <div key={mo.key} style={{ ...card, padding: 15, display: 'flex', alignItems: 'center', gap: 11, minHeight: editing ? 'auto' : 92, flexDirection: editing ? 'row' : 'column', ...(editing ? {} : { alignItems: 'flex-start' }) }}>
+            <button onClick={() => !editing && open(mo)} disabled={editing} style={{ background: 'none', border: 'none', padding: 0, cursor: editing ? 'default' : 'pointer', display: 'flex', flexDirection: editing ? 'row' : 'column', gap: editing ? 11 : 10, alignItems: editing ? 'center' : 'flex-start', flex: 1, color: C.text, textAlign: 'left' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: mo.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ic size={18} style={{ color: mo.color }} /></div>
+              <div><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
+            </button>
+            {editing && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <button onClick={() => move(mo.key, -1)} disabled={idx === 0} style={{ ...card, padding: 5, cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, color: C.text2, border: 'none' }}><ChevronRight size={15} style={{ transform: 'rotate(-90deg)' }} /></button>
+                <button onClick={() => move(mo.key, 1)} disabled={idx === ordered.length - 1} style={{ ...card, padding: 5, cursor: idx === ordered.length - 1 ? 'default' : 'pointer', opacity: idx === ordered.length - 1 ? 0.3 : 1, color: C.text2, border: 'none' }}><ChevronRight size={15} style={{ transform: 'rotate(90deg)' }} /></button>
+              </div>
+            )}
+          </div>
         ); })}
       </div>
     </div>
@@ -2248,17 +2278,48 @@ function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
   // agrupar por comodo
   const groups = {};
   visible.forEach((d) => { const room = (prefs && prefs[d.id] && prefs[d.id].room) || ''; (groups[room] = groups[room] || []).push(d); });
-  const roomNames = Object.keys(groups).sort((a, b) => (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b)));
+  // ordem fixa dos comodos (o que nao estiver na lista vai pro fim, alfabetico)
+  const ORDER = ['Suíte', 'Sala de TV', 'Quarto Maria', 'Quarto Dudu', 'Cozinha', 'Home-office'];
+  const rank = (r) => { const i = ORDER.indexOf(r); return i === -1 ? 99 : i; };
+  const roomNames = Object.keys(groups).sort((a, b) => {
+    const ra = rank(a), rb = rank(b);
+    if (ra !== rb) return ra - rb;
+    return (a === '' ? 1 : b === '' ? -1 : a.localeCompare(b));
+  });
+  // Suite e Sala sempre abertos; demais colapsados por padrao
+  const alwaysOpen = ['Suíte', 'Sala de TV'];
   return (
     <div style={{ marginBottom: 4 }}>
       {roomNames.map((room) => (
-        <div key={room || 'sem'} style={{ marginBottom: 12 }}>
-          {room ? <div style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 2px 8px' }}>{room}</div> : (roomNames.length > 1 ? <div style={{ fontSize: 11.5, color: C.text3, margin: '2px 2px 8px' }}>{lang === 'pt' ? 'Outros' : 'Other'}</div> : null)}
+        <RoomGroup key={room || 'sem'} room={room} defaultOpen={alwaysOpen.includes(room)} lang={lang}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} irId={(prefs && prefs[d.id] && prefs[d.id].ir) || null} t={t} lang={lang} onCmd={onCmd} />)}
           </div>
-        </div>
+        </RoomGroup>
       ))}
+    </div>
+  );
+}
+
+function RoomGroup({ room, defaultOpen, lang, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+  const title = room || (lang === 'pt' ? 'Outros' : 'Other');
+  if (defaultOpen) {
+    // sempre aberto: mostra titulo simples, sem colapsar
+    return (
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 11.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 2px 8px' }}>{title}</div>
+        {children}
+      </div>
+    );
+  }
+  return (
+    <div style={{ marginBottom: 10 }}>
+      <button onClick={() => setOpen((v) => !v)} style={{ ...card, padding: '11px 13px', width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', border: 'none', color: C.text, marginBottom: open ? 10 : 0 }}>
+        <span style={{ fontSize: 12.5, color: C.text2, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em' }}>{title}</span>
+        <ChevronRight size={16} style={{ color: C.text3, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
+      </button>
+      {open && children}
     </div>
   );
 }
@@ -2489,18 +2550,20 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
           <div>
             <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{lang === 'pt' ? 'Entradas' : 'Inputs'}</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              <KeyBtn names={['cbl/sat', 'cbl_sat', 'cblsat', 'cbl', 'sat', 'cable']} label={'CBL/SAT'} />
-              <KeyBtn names={['net', 'network', 'internet']} label={'NET'} />
-              <KeyBtn names={['bluetooth', 'bt']} label={'Bluetooth'} />
-              <KeyBtn names={['game', 'game1', 'game2']} label={'Game'} />
-              <KeyBtn names={['tuner', 'am', 'fm', 'radio']} label={'Tuner'} />
-              <KeyBtn names={['aux', 'aux1', 'aux2']} label={'Aux'} />
-              <KeyBtn names={['pc', 'computer', 'vga']} label={'PC'} />
-              <KeyBtn names={['dvd', 'bd/dvd', 'bd_dvd', 'bddvd', 'bd', 'blu-ray', 'bluray']} label={'DVD'} />
-              <KeyBtn names={['tv/cd', 'tv_cd', 'tvcd', 'tv', 'cd']} label={'TV/CD'} />
+              <KeyBtn names={['cbl/sat', 'cbl_sat', 'cblsat', 'cbl', 'sat', 'cable', 'cbl sat', 'cblsat_input']} label={'CBL/SAT'} />
+              <KeyBtn names={['net', 'network', 'internet', 'netradio', 'net_radio']} label={'NET'} />
+              <KeyBtn names={['bluetooth', 'bt', 'blue_tooth', 'blue tooth']} label={'Bluetooth'} />
+              <KeyBtn names={['game', 'game1', 'game2', 'games']} label={'Game'} />
+              <KeyBtn names={['tuner', 'am', 'fm', 'radio', 'am/fm', 'amfm', 'am fm']} label={'Tuner'} />
+              <KeyBtn names={['aux', 'aux1', 'aux2', 'auxiliary']} label={'Aux'} />
+              <KeyBtn names={['pc', 'computer', 'vga', 'video']} label={'PC'} />
+              <KeyBtn names={['dvd', 'bd/dvd', 'bd_dvd', 'bddvd', 'bd', 'blu-ray', 'bluray', 'bd dvd']} label={'BD/DVD'} />
+              <KeyBtn names={['tv/cd', 'tv_cd', 'tvcd', 'tv', 'cd', 'tv cd']} label={'TV/CD'} />
+              <KeyBtn names={['stb/dvr', 'stb_dvr', 'stbdvr', 'stb', 'dvr', 'stb dvr']} label={'STB/DVR'} />
               <KeyBtn names={['phono', 'turntable']} label={'Phono'} />
               <KeyBtn names={['usb']} label={'USB'} />
               <KeyBtn names={['hdmi', 'hdmi1', 'hdmi2']} label={'HDMI'} />
+              <KeyBtn names={['input', 'source', 'input_selector', 'inputselector']} label={lang === 'pt' ? 'Entrada →' : 'Input →'} />
             </div>
           </div>
           <div>
@@ -2519,9 +2582,9 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
           <div>
             <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>Zone 2</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              <KeyBtn names={['zone2', 'zone_2', 'z2', 'zone2_power', 'zone2power']} label={lang === 'pt' ? 'Z2 Liga' : 'Z2 On'} />
-              <KeyBtn names={['zone2_vol_up', 'zone2volup', 'z2_vol_up', 'zone2_volume_up']} label={'Z2 Vol +'} />
-              <KeyBtn names={['zone2_vol_down', 'zone2voldown', 'z2_vol_down', 'zone2_volume_down']} label={'Z2 Vol −'} />
+              <KeyBtn names={['zone2', 'zone_2', 'z2', 'zone2_power', 'zone2power', 'zone 2', 'zone2_on', 'z2power', 'zone2 power']} label={lang === 'pt' ? 'Z2 Liga' : 'Z2 On'} />
+              <KeyBtn names={['zone2_vol_up', 'zone2volup', 'z2_vol_up', 'zone2_volume_up', 'zone2 vol+', 'z2vol+', 'zone2_vol+']} label={'Z2 Vol +'} />
+              <KeyBtn names={['zone2_vol_down', 'zone2voldown', 'z2_vol_down', 'zone2_volume_down', 'zone2 vol-', 'z2vol-', 'zone2_vol-']} label={'Z2 Vol −'} />
             </div>
           </div>
           <DPad />
@@ -3643,8 +3706,8 @@ function App() {
   const navTo = (k) => { if (SCREEN_ICONS[k]) setActive({ screen: k, module: k === 'dashboard' ? null : null }); else setActive({ screen: 'dashboard', module: moduleByKey(k) }); };
 
   if (!ready) return <div style={{ background: C.bg, color: C.text, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: C.accent }}>BhL</div>
-    <div style={{ fontSize: 12, color: C.text3, letterSpacing: '.08em', textTransform: 'uppercase' }}>Life Control</div>
+    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: C.accent, fontFamily: "'Outfit', sans-serif" }}>BhL</div>
+    <div style={{ fontSize: 12, color: C.text3, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: "'Outfit', sans-serif" }}>Life in Control</div>
   </div>;
 
   const ttItems = (ticktick.tasks || []).map((t) => ({
@@ -3678,7 +3741,7 @@ function App() {
       </div>
       <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:#16161E}`}</style>
       <div style={{ padding: '16px 18px 8px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life Control</div>
+        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life in Control</div>
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={() => setSettings((s) => ({ ...s, lang: s.lang === 'pt' ? 'en' : 'pt' }))} style={{ ...card, padding: '5px 10px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Globe size={13} />{lang.toUpperCase()}</button>
           <button onClick={() => setShowSettings(true)} style={{ ...card, padding: 7, color: C.text2, cursor: 'pointer' }}><Cog size={15} /></button>
@@ -3695,7 +3758,7 @@ function App() {
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
-        {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} />)}
+        {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} goNews={() => setActive({ screen: 'news', module: null })} order={settings.moduleOrder || []} setOrder={(o) => setSettings((st) => ({ ...st, moduleOrder: o }))} />)}
       </div>
 
       {active.screen !== 'claude' && (
@@ -3745,8 +3808,8 @@ export default function Page() {
     return () => sub.subscription.unsubscribe();
   }, []);
   if (!booted) return <div style={{ background: '#0B0B0F', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, fontFamily: 'system-ui' }}>
-    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: '#F5C263' }}>BhL</div>
-    <div style={{ fontSize: 12, color: '#63636F', letterSpacing: '.08em', textTransform: 'uppercase' }}>Life Control</div>
+    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: '#F5C263', fontFamily: "'Outfit', sans-serif" }}>BhL</div>
+    <div style={{ fontSize: 12, color: '#63636F', letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: "'Outfit', sans-serif" }}>Life in Control</div>
   </div>;
   if (!session) return <Login />;
   return <App />;
