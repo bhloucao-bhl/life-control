@@ -9,13 +9,14 @@ export async function GET(req) {
 
   const sp = new URL(req.url).searchParams;
   const flight = (sp.get('flight') || '').replace(/\s+/g, '').toUpperCase();
+  const date = sp.get('date') || '';
   if (!flight) return Response.json({ error: 'Informe o número do voo.' }, { status: 400 });
 
   const key = process.env.AVIATIONSTACK_KEY;
   if (!key) return Response.json({ configured: false, flight: null });
 
   try {
-    const url = `https://api.aviationstack.com/v1/flights?access_key=${key}&flight_iata=${flight}`;
+    const url = `https://api.aviationstack.com/v1/flights?access_key=${key}&flight_iata=${flight}` + (date ? `&flight_date=${date}` : '');
     const r = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(9000) });
     const j = await r.json();
     if (j.error) return Response.json({ configured: true, flight: null, error: j.error.message || 'erro' });
