@@ -163,7 +163,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -451,7 +451,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v38 · 01ago';
+const APP_VERSION = 'v40 · 02ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -665,6 +665,7 @@ function Avatar({ photo, name, size = 42, color = C.sky }) {
 function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], onSave, onCancel, onDelete }) {
   const [f, setF] = useState({ priority: 2, status: 'planned', ...draft, meta: { ...(draft.meta || {}) } });
   const [fcode, setFcode] = useState('');
+  const [resolving, setResolving] = useState(false); const [resolveMsg, setResolveMsg] = useState('');
   const up = (patch) => setF((p) => ({ ...p, ...patch }));
   const upMeta = (patch) => setF((p) => ({ ...p, meta: { ...p.meta, ...patch } }));
   const type = f.type; const metaFields = META[type] || []; const attList = f.meta.attachments || [];
@@ -677,15 +678,59 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
     const match = people.find((p) => p.title.toLowerCase() === (f.person || '').toLowerCase());
     onSave({ ...f, title: title || t('t_' + type), person: f.person || null, meta: { ...f.meta, personId: match ? match.id : (f.meta.personId || null) }, amount: isMoney(type) ? (f.amount == null || f.amount === '' ? null : Number(f.amount)) : (f.amount ?? null) });
   };
-  const doResolve = () => { const r = resolveFlight(fcode); if (r) upMeta({ airline: r.airline, flightNumber: r.flightNumber }); };
+  const doResolve = async () => {
+    if (!fcode.trim()) return;
+    setResolving(true); setResolveMsg('');
+    // fallback local imediato (companhia pelo prefixo)
+    const local = resolveFlight(fcode);
+    if (local) upMeta({ airline: local.airline, flightNumber: local.flightNumber });
+    try {
+      const r = await authFetch('/api/flight?flight=' + encodeURIComponent(fcode.trim()));
+      const j = await r.json();
+      if (j.flight) {
+        const fl = j.flight;
+        upMeta({
+          airline: fl.airline || (local && local.airline) || '',
+          flightNumber: fl.flightNumber || (local && local.flightNumber) || fcode.trim().toUpperCase(),
+          from: fl.depIata || undefined, to: fl.arrIata || undefined,
+          aircraft: fl.aircraft || undefined, aircraftReg: fl.aircraftReg || undefined,
+          depAirport: fl.depAirport, arrAirport: fl.arrAirport,
+          depTerminal: fl.depTerminal, depGate: fl.depGate,
+          arrTerminal: fl.arrTerminal, arrGate: fl.arrGate,
+          depTime: fl.depTime, arrTime: fl.arrTime, status: fl.status,
+        });
+        setResolveMsg(lang === 'pt' ? '✓ Voo encontrado' : '✓ Found');
+      } else if (j.configured === false) {
+        setResolveMsg(lang === 'pt' ? 'Busca automática não configurada — preencha manualmente.' : 'Auto lookup not set up.');
+      } else {
+        setResolveMsg(lang === 'pt' ? 'Voo não encontrado — preencha manualmente.' : 'Not found.');
+      }
+    } catch (e) { setResolveMsg(lang === 'pt' ? 'Erro na busca.' : 'Lookup error.'); }
+    setResolving(false);
+  };
   return (
     <div>
       {allowedTypes.length > 1 && <Field label={t('type')}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{allowedTypes.map((ty) => <Chip key={ty} active={type === ty} onClick={() => up({ type: ty })}>{t('t_' + ty)}</Chip>)}</div></Field>}
       {type === 'flight' && (
         <div style={{ ...card, padding: 12, marginBottom: 12, background: C.bg2 }}>
           <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{t('flightCode')}</div>
-          <div style={{ display: 'flex', gap: 8 }}><input value={fcode} onChange={(e) => setFcode(e.target.value)} placeholder="LA 3414" style={inputStyle} /><Btn kind="soft" onClick={doResolve}>{t('resolve')}</Btn></div>
+          <div style={{ display: 'flex', gap: 8 }}><input value={fcode} onChange={(e) => setFcode(e.target.value)} placeholder="LA 3414" style={inputStyle} /><Btn kind="soft" onClick={doResolve} disabled={resolving} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{resolving ? <Loader2 size={14} className="spin" /> : <Search size={14} />}{t('resolve')}</Btn></div>
+          {resolveMsg && <div style={{ fontSize: 11.5, color: resolveMsg.startsWith('✓') ? C.green : C.text3, marginTop: 7 }}>{resolveMsg}</div>}
+          {f.meta.aircraft && <div style={{ fontSize: 12, color: C.text2, marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}><Plane size={13} style={{ color: C.violet }} />{lang === 'pt' ? 'Aeronave' : 'Aircraft'}: <b>{f.meta.aircraft}</b>{f.meta.aircraftReg ? ` (${f.meta.aircraftReg})` : ''}</div>}
+          {(f.meta.depGate || f.meta.depTerminal) && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 4 }}>{lang === 'pt' ? 'Embarque' : 'Departure'}: {f.meta.depTerminal ? `T${f.meta.depTerminal}` : ''}{f.meta.depGate ? ` · Portão ${f.meta.depGate}` : ''}</div>}
           <div style={{ fontSize: 11, color: C.text3, marginTop: 7, lineHeight: 1.45 }}>{t('flightHint')}</div>
+        </div>
+      )}
+      {type === 'trip' && people.length > 0 && (
+        <div style={{ ...card, padding: 12, marginBottom: 12, background: C.bg2 }}>
+          <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center' }}><Users size={13} />{lang === 'pt' ? 'Quem vai nesta viagem' : 'Who is traveling'}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {people.map((p) => {
+              const sel = (f.meta.travelers || []).includes(p.id);
+              return <Chip key={p.id} active={sel} onClick={() => { const cur = f.meta.travelers || []; upMeta({ travelers: sel ? cur.filter((x) => x !== p.id) : [...cur, p.id] }); }}>{p.title}</Chip>;
+            })}
+          </div>
+          <div style={{ fontSize: 11, color: C.text3, marginTop: 8, lineHeight: 1.45 }}>{lang === 'pt' ? 'Cartões de embarque, reservas e voos podem ser vinculados a esta viagem em família.' : 'Boarding passes and bookings can be linked to this family trip.'}</div>
         </div>
       )}
       {type === 'vehicle' && (
@@ -1060,11 +1105,14 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       fetch('/api/live' + q).then((r) => r.json()).then((j) => { if (alive) { setLive(j); setLiveLoading(false); } })
         .catch(() => { if (alive) setLiveLoading(false); });
     };
-    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+    // usa localizacao em cache se ja obtida nesta sessao (evita pedir toda vez)
+    if (typeof window !== 'undefined' && window.__lccGeo) {
+      load(window.__lccGeo.lat, window.__lccGeo.lon);
+    } else if (typeof navigator !== 'undefined' && navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (p) => load(p.coords.latitude.toFixed(3), p.coords.longitude.toFixed(3)),
+        (p) => { const lat = p.coords.latitude.toFixed(3), lon = p.coords.longitude.toFixed(3); if (typeof window !== 'undefined') window.__lccGeo = { lat, lon }; load(lat, lon); },
         () => load(null, null),
-        { timeout: 4000, maximumAge: 600000 }
+        { timeout: 4000, maximumAge: 1800000 }
       );
     } else load(null, null);
     return () => { alive = false; };
@@ -1453,18 +1501,21 @@ function DashboardScreen({ items, lang, t, open, gmailCount, goNews, order, setO
       </button>
       <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr' : '1fr 1fr', gap: 10 }}>
         {ordered.map((mo, idx) => { const count = mo.key === 'gmail' ? (gmailCount || 0) : items.filter(mo.filter).length; const Ic = mo.icon; return (
-          <div key={mo.key} style={{ ...card, padding: 15, display: 'flex', alignItems: 'center', gap: 11, minHeight: editing ? 'auto' : 92, flexDirection: editing ? 'row' : 'column', ...(editing ? {} : { alignItems: 'flex-start' }) }}>
-            <button onClick={() => !editing && open(mo)} disabled={editing} style={{ background: 'none', border: 'none', padding: 0, cursor: editing ? 'default' : 'pointer', display: 'flex', flexDirection: editing ? 'row' : 'column', gap: editing ? 11 : 10, alignItems: editing ? 'center' : 'flex-start', flex: 1, color: C.text, textAlign: 'left' }}>
+          editing ? (
+            <div key={mo.key} style={{ ...card, padding: 15, display: 'flex', alignItems: 'center', gap: 11 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: mo.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ic size={18} style={{ color: mo.color }} /></div>
-              <div><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
-            </button>
-            {editing && (
+              <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <button onClick={() => move(mo.key, -1)} disabled={idx === 0} style={{ ...card, padding: 5, cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, color: C.text2, border: 'none' }}><ChevronRight size={15} style={{ transform: 'rotate(-90deg)' }} /></button>
                 <button onClick={() => move(mo.key, 1)} disabled={idx === ordered.length - 1} style={{ ...card, padding: 5, cursor: idx === ordered.length - 1 ? 'default' : 'pointer', opacity: idx === ordered.length - 1 ? 0.3 : 1, color: C.text2, border: 'none' }}><ChevronRight size={15} style={{ transform: 'rotate(90deg)' }} /></button>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <button key={mo.key} onClick={() => open(mo)} style={{ ...card, padding: 15, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 92, alignItems: 'flex-start', border: 'none', color: C.text, width: '100%' }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: mo.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={18} style={{ color: mo.color }} /></div>
+              <div><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
+            </button>
+          )
         ); })}
       </div>
     </div>
@@ -1557,6 +1608,10 @@ function DocsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
 /* ---------------- Gmail (cliente simples) ---------------- */
 function GmailThread({ m, lang, t, onClose, onAction, onReplied }) {
   const [reply, setReply] = useState(''); const [busy, setBusy] = useState(''); const [done, setDone] = useState('');
+  const [rich, setRich] = useState(!!m.html);
+  const iframeRef = useRef();
+  // monta o HTML seguro (sem script), com estilo legivel em fundo claro
+  const safeHtml = m.html ? `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base target="_blank"><style>body{font-family:-apple-system,system-ui,sans-serif;font-size:14px;line-height:1.5;color:#111;background:#fff;margin:12px;word-break:break-word}img{max-width:100%;height:auto}a{color:#0b66c3}table{max-width:100%}</style></head><body>${m.html}</body></html>` : '';
   const draft = async () => {
     setBusy('draft');
     try {
@@ -1582,7 +1637,19 @@ function GmailThread({ m, lang, t, onClose, onAction, onReplied }) {
       <SheetHead title={m.sender} onClose={onClose} icon={Mail} />
       <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 4 }}>{m.subject}</div>
       <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 12 }}>{m.email} · {fmtDate(m.date.slice(0, 10), lang)}</div>
-      <div style={{ ...card, padding: 14, marginBottom: 14, fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', maxHeight: 260, overflowY: 'auto' }}>{m.body}</div>
+      {m.html && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <Chip active={rich} onClick={() => setRich(true)}>{lang === 'pt' ? 'Formatado' : 'Rich'}</Chip>
+          <Chip active={!rich} onClick={() => setRich(false)}>{lang === 'pt' ? 'Texto' : 'Text'}</Chip>
+        </div>
+      )}
+      {rich && m.html ? (
+        <div style={{ ...card, padding: 0, marginBottom: 14, overflow: 'hidden', borderRadius: 12 }}>
+          <iframe ref={iframeRef} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={safeHtml} title="email" style={{ width: '100%', height: 340, border: 'none', background: '#fff', display: 'block' }} />
+        </div>
+      ) : (
+        <div style={{ ...card, padding: 14, marginBottom: 14, fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap', maxHeight: 260, overflowY: 'auto' }}>{m.body}</div>
+      )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <Btn kind="soft" onClick={() => { onAction(m.id, 'read'); onClose(); }} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={14} />{t('markRead')}</Btn>
         <Btn kind="soft" onClick={() => { onAction(m.id, 'archive'); onClose(); }} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Download size={14} />{t('archive')}</Btn>
@@ -1868,7 +1935,7 @@ function FinanceAssistant({ items, lang, t, back }) {
   );
 }
 function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash }) {
-  const [sub, setSub] = useState({ v: 'home' }); const [adding, setAdding] = useState(null); const [hidden, setHidden] = useState(false);
+  const [sub, setSub] = useState({ v: 'home' }); const [adding, setAdding] = useState(null); const [hidden, setHidden] = useState(true);
   const accounts = items.filter((i) => i.type === 'account');
   if (sub.v === 'account') { const acc = sub.id ? items.find((i) => i.id === sub.id) : null; return <AccountDetail acc={acc} items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} onOpen={onOpen} addItem={addItem} flash={flash} goReport={() => setSub({ v: 'reports' })} />; }
   if (sub.v === 'reports') return <ReportsScreen items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
@@ -1890,7 +1957,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
       <div style={{ ...card, padding: 18, marginBottom: 14, background: `linear-gradient(135deg, ${C.accent}1c, ${C.surface})`, borderColor: C.accent + '33' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontSize: 12, color: C.text3 }}>{t('totalBalance')}</span>
-          <button onClick={() => setHidden((h) => !h)} title={t('hideBalance')} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', fontSize: 13 }}>{hidden ? '👁' : '••'}</button>
+          <button onClick={() => setHidden((h) => !h)} title={t('hideBalance')} style={{ ...card, border: 'none', color: hidden ? C.accent : C.text2, cursor: 'pointer', fontSize: 12, padding: '7px 12px', display: 'flex', gap: 6, alignItems: 'center', fontWeight: 600 }}>{hidden ? <><Eye size={15} />{lang === 'pt' ? 'Mostrar' : 'Show'}</> : <><EyeOff size={15} />{lang === 'pt' ? 'Ocultar' : 'Hide'}</>}</button>
         </div>
         <div style={{ fontSize: 30, fontWeight: 800, letterSpacing: '-.02em', marginTop: 4 }}>{amountStr(inAccounts, lang, hidden)}</div>
         <div style={{ display: 'flex', gap: 18, marginTop: 12 }}>
@@ -1905,6 +1972,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
         <MiniStat label={`${t('incomeL')} · ${t('thisMonth')}`} value={amountStr(income, lang, hidden)} color={C.green} small />
         <MiniStat label={`${t('outflow')} · ${t('thisMonth')}`} value={amountStr(outflow, lang, hidden)} color={C.rose} small />
       </div>
+      {bills.length > 0 && <><SectionTitle icon={Clock} label={t('upcomingBills')} color={C.accent} />{bills.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       {catRows.length > 0 && (
         <>
           <div onClick={() => setSub({ v: 'reports' })} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px', cursor: 'pointer' }}>
@@ -1914,7 +1982,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
           <div style={{ ...card, padding: 14 }}>{catRows.slice(0, 4).map(([k, v]) => { const cc = CATEGORIES[k]; return <BarRow key={k} label={cc[lang]} value={v} max={catRows[0][1]} color={cc.color} icon={cc.icon} right={fmtMoney(v, lang)} />; })}</div>
         </>
       )}
-      {bills.length > 0 && <><SectionTitle icon={Clock} label={t('upcomingBills')} color={C.accent} />{bills.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
+
       <SectionTitle icon={CreditCard} label={t('accounts')} color={C.green} />
       {accounts.length === 0 ? <Empty icon={CreditCard} text={t('nothingHere')} /> : accounts.map((a) => { const km = KIND_META[(a.meta && a.meta.kind) || 'checking']; return (
         <div key={a.id} onClick={() => setSub({ v: 'account', id: a.id })} style={{ ...card, padding: '13px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
@@ -2835,10 +2903,6 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       <SectionTitle icon={ListTodo} label={t('houseTasks')} color={C.blue} />
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
       {tasks.length === 0 ? <Empty icon={Home} text={t('nothingHere')} /> : tasks.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
-      <SectionTitle icon={Video} label={t('cameras')} color={C.violet} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        {['Sala', 'Entrada'].map((cam) => <div key={cam} style={{ ...card, aspectRatio: '4/3', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, color: C.text3, background: C.bg2 }}><Camera size={22} /><span style={{ fontSize: 12 }}>{cam}</span><span style={{ fontSize: 10, textAlign: 'center', padding: '0 10px' }}>{t('camerasHint')}</span></div>)}
-      </div>
       <SectionTitle icon={Users} label={t('staff')} color={C.sky} />
       {staffMsgs.length === 0 ? <Empty icon={Users} text={t('nothingHere')} /> : staffMsgs.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {adding && <AddModal title={`${t('quickAdd')} · ${t('house')}`} icon={Plus} draft={{ type: 'task', domain: 'home' }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'home', ...x }); flash(t('savedOne')); setAdding(false); }} />}
@@ -2914,7 +2978,7 @@ function PersonDetail({ person, items, people, lang, t, back, backLabel, onOpen,
   );
 }
 function PeopleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
-  const [adding, setAdding] = useState(false); const [sel, setSel] = useState(null);
+  const [adding, setAdding] = useState(false); const [sel, setSel] = useState(null); const [drill, setDrill] = useState(null);
   const persons = items.filter((i) => i.type === 'person').sort((a, b) => a.title.localeCompare(b.title));
   const current = sel && items.find((i) => i.id === sel);
   if (drill) return (
@@ -2981,6 +3045,24 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
           </div>
         );
       })}
+      {kids.length > 0 && (() => {
+        const allLinked = kids.flatMap((p) => items.filter((i) => i.id !== p.id && ((i.meta && i.meta.personId === p.id) || (i.person && i.person.toLowerCase() === p.title.toLowerCase()))).map((i) => ({ ...i, _kid: p.title })));
+        const today = todayISO();
+        const agenda = allLinked.filter((i) => i.date && i.date >= today && ['event', 'appointment', 'task'].includes(i.type) && i.status !== 'done').sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))).slice(0, 8);
+        if (agenda.length === 0) return null;
+        return (
+          <div style={{ marginTop: 8 }}>
+            <SectionTitle icon={CalendarDays} label={lang === 'pt' ? 'Agenda dos dois' : "Both kids' agenda"} color={C.violet} />
+            {agenda.map((i) => (
+              <div key={i.id} onClick={() => onOpen(i)} style={{ ...card, padding: '11px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
+                <div style={{ textAlign: 'center', minWidth: 40 }}><div style={{ fontSize: 15, fontWeight: 700, color: C.violet }}>{i.date.slice(8, 10)}</div><div style={{ fontSize: 9.5, color: C.text3, textTransform: 'uppercase' }}>{new Date(i.date + 'T00:00').toLocaleDateString(lang === 'pt' ? 'pt-BR' : 'en', { month: 'short' })}</div></div>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div><div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{i._kid}{i.time ? ' · ' + i.time : ''}</div></div>
+                {i.type === 'task' && <button onClick={(e) => { e.stopPropagation(); toggleTask(i.id); }} style={{ width: 22, height: 22, borderRadius: 999, border: `2px solid ${C.border}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }} />}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -3463,7 +3545,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
-      <Btn kind="soft" onClick={() => { if (confirm(t('reloadConfirm'))) { setItems(SEED()); setSettings((s) => ({ ...s, ...SEED_SETTINGS })); persistSeeded(); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><RefreshCw size={15} />{t('reloadSamples')}</Btn>
+      <Btn kind="soft" onClick={() => { if (confirm(lang === 'pt' ? 'Apagar TODOS os dados do app e começar do zero? As conexões (Google, Oura, TickTick, Tuya, LG) permanecem.' : 'Erase all app data and start fresh? Connections stay.')) { setItems([]); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', color: C.rose }}><Trash2 size={15} />{lang === 'pt' ? 'Zerar app (começar do zero)' : 'Reset app'}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
       <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
       <input id="lcc-import" type="file" accept="application/json" style={{ display: 'none' }} onChange={async (e) => {
@@ -3581,10 +3663,8 @@ function App() {
   useEffect(() => { (async () => {
     const s = await loadState();
     if (s.items && s.items.length) setItems(s.items);
-    else if (!s.seeded) { setItems(SEED()); persistSeeded(); }
-    else setItems([]);
+    else setItems([]); // comeca vazio: sem dados de exemplo
     if (s.settings) setSettings((p) => ({ ...p, ...s.settings, health: s.settings.health || {}, profile: s.settings.profile || {}, dock: s.settings.dock || DEFAULT_DOCK, devices: s.settings.devices || DEFAULT_DEVICES }));
-    else setSettings((p) => ({ ...p, ...SEED_SETTINGS }));
     setReady(true);
   })(); }, []);
   useEffect(() => {
