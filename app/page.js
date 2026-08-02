@@ -452,7 +452,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v41 · 02ago';
+const APP_VERSION = 'v42 · 02ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -532,12 +532,15 @@ function buildContext(items) {
 const card = { background: C.surface, border: `1px solid ${C.borderSoft}`, borderRadius: 16, boxShadow: '0 1px 0 rgba(255,255,255,0.03) inset' };
 const inputStyle = { width: '100%', background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
 const inputStyleBig = { ...inputStyle, padding: '14px 15px', fontSize: 16, borderRadius: 12 };
+function haptic(ms = 8) {
+  try { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
+}
 function Btn({ children, onClick, kind = 'primary', style, disabled }) {
   const kinds = { primary: { background: C.accent, color: '#171200', border: 'none', fontWeight: 600 }, ghost: { background: 'transparent', color: C.text2, border: `1px solid ${C.border}` }, soft: { background: C.surface2, color: C.text, border: `1px solid ${C.border}` }, danger: { background: 'transparent', color: C.rose, border: `1px solid ${C.rose}55` } };
-  return <button onClick={onClick} disabled={disabled} style={{ padding: '10px 14px', borderRadius: 12, fontSize: 14, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, ...kinds[kind], ...style }}>{children}</button>;
+  return <button onClick={onClick ? (e) => { haptic(); onClick(e); } : undefined} disabled={disabled} style={{ padding: '10px 14px', borderRadius: 12, fontSize: 14, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, ...kinds[kind], ...style }}>{children}</button>;
 }
 function Chip({ children, active, onClick, color }) {
-  return <button onClick={onClick} style={{ padding: '6px 11px', borderRadius: 999, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap', background: active ? (color ? color + '22' : C.accentSoft) : 'transparent', color: active ? (color || C.accent) : C.text2, border: `1px solid ${active ? (color || C.accent) + '55' : C.border}` }}>{children}</button>;
+  return <button onClick={onClick ? (e) => { haptic(); onClick(e); } : undefined} style={{ padding: '6px 11px', borderRadius: 999, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap', background: active ? (color ? color + '22' : C.accentSoft) : 'transparent', color: active ? (color || C.accent) : C.text2, border: `1px solid ${active ? (color || C.accent) + '55' : C.border}` }}>{children}</button>;
 }
 function Field({ label, children }) {
   return <label style={{ display: 'block', marginBottom: 16 }}><div style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 7, fontWeight: 600 }}>{label}</div>{children}</label>;
@@ -577,7 +580,7 @@ function typeIcon(type) {
   const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift };
   return m[type] || FileText;
 }
-function ItemRow({ item, lang, t, onToggle, onOpen }) {
+function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
   const overdue = item.type === 'task' && item.status !== 'done' && item.date && item.date < todayISO();
   const Ic = typeIcon(item.type); const mile = item.meta && item.meta.milestone;
   return (
@@ -590,7 +593,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen }) {
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 5, alignItems: 'center' }}>
           <span style={{ fontSize: 11.5, color: C.text2, fontWeight: 500 }}>{t('t_' + item.type)}</span>
           {item.date && <span style={{ fontSize: 11.5, color: overdue ? C.rose : C.text2, display: 'inline-flex', alignItems: 'center', gap: 3 }}>{overdue ? <AlertTriangle size={11} /> : <Clock size={11} />}{fmtDate(item.date, lang)}{item.time ? ' · ' + item.time : ''}</span>}
-          {item.amount != null && <span style={{ fontSize: 11.5, color: C.green }}>{fmtMoney(item.amount, lang)}</span>}
+          {item.amount != null && <span style={{ fontSize: 11.5, color: C.green }}>{hideAmount ? '••••' : fmtMoney(item.amount, lang)}</span>}
           {item.person && <span style={{ fontSize: 11.5, color: C.text3 }}>· {item.person}</span>}
           {item.meta && item.meta.attachments && item.meta.attachments.length > 0 && <Paperclip size={11} style={{ color: C.text3 }} />}
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
@@ -1073,6 +1076,17 @@ function WeatherCard({ lang, t, wx, loading }) {
 }
 
 /* ---------------- Today ---------------- */
+function CompactScore({ label, value, color, onClick }) {
+  const v = value == null ? 0 : Math.max(0, Math.min(100, value));
+  return (
+    <button onClick={onClick} style={{ ...card, flex: 1, padding: '10px 12px', cursor: onClick ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ width: 34, height: 34, borderRadius: 999, background: value == null ? C.surface2 : `conic-gradient(${color} ${v * 3.6}deg, ${C.surface2} 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <div style={{ width: 25, height: 25, borderRadius: 999, background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 700, color: value == null ? C.text3 : color }}>{value == null ? '–' : value}</div>
+      </div>
+      <span style={{ fontSize: 12, color: C.text2, textAlign: 'left', lineHeight: 1.2 }}>{label}</span>
+    </button>
+  );
+}
 function ScoreRing({ label, value, color, onClick, locked }) {
   const v = value == null ? 0 : Math.max(0, Math.min(100, value));
   return (
@@ -1104,7 +1118,7 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
 
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
@@ -1130,9 +1144,11 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const isImportant = (tags) => (tags || []).some((tg) => String(tg).toLowerCase() === 'importante' || String(tg).toLowerCase() === 'important');
   const ttImportant = ttItems.filter((i) => i.status !== 'done' && isImportant(i._tags));
+  // contas a pagar que vencem HOJE (last warning) + contas atrasadas ainda em aberto
+  const billsDue = items.filter((i) => i.type === 'bill' && i.status !== 'done' && i.date && i.date <= today);
   const localAttention = items.filter((i) => i.type === 'task' && i.status !== 'done' && (i.priority === 1 || (i.date && i.date < today)) && !String(i.id).startsWith('tt_'));
-  // Prioriza tarefas 'Importante' do TickTick; completa com locais urgentes ate 5
-  const attention = [...ttImportant, ...localAttention].slice(0, 5);
+  // Contas vencendo hoje primeiro, depois tarefas 'Importante' do TickTick, depois locais urgentes
+  const attention = [...billsDue, ...ttImportant, ...localAttention].slice(0, 5);
   const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   const next5 = todayItems.filter((i) => !i.time || i.time >= hm).slice(0, 5);
   const balances = items.filter((i) => i.type === 'account' && i.meta && i.meta.showOnToday);
@@ -1159,17 +1175,12 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         </div>
       </div>
       <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} />
-      <div style={{ display: 'flex', gap: 10, margin: '10px 0' }}>
-        <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} locked={ouraOn} onClick={() => setLogOpen(true)} />
-        <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} locked={ouraOn} onClick={() => setLogOpen(true)} />
-      </div>
-      {ouraOn
-        ? <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', margin: '-2px 0 12px', display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{(w.readiness == null && w.sleep == null) ? t('ouraNoData') : t('ouraSynced')}</div>
-        : (w.readiness == null && w.sleep == null) && <div style={{ fontSize: 11.5, color: C.text3, textAlign: 'center', margin: '-2px 0 12px' }}>{t('connectOura')}</div>}
       <WeatherCard lang={lang} t={t} wx={live && live.weather} loading={liveLoading} />
-      {balances.length > 0 ? balances.map((b) => <InfoCard key={b.id} icon={CreditCard} title={b.title} sub={t('available')} onClick={() => onOpen(b)} accent right={<span style={{ fontSize: 18, fontWeight: 700, color: C.green }}>{fmtMoney(b.meta.balance, lang)}</span>} />) : <InfoCard icon={CreditCard} title={t('available')} sub={t('addBalance')} onClick={() => goModule('finance')} right={<Plus size={18} style={{ color: C.text3 }} />} />}
+      <div style={{ display: 'flex', gap: 8, margin: '10px 0' }}>
+        <CompactScore label={t('readiness')} value={w.readiness ?? null} color={C.green} onClick={() => !ouraOn && setLogOpen(true)} />
+        <CompactScore label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => !ouraOn && setLogOpen(true)} />
+      </div>
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
-      {ttItems.length > 0 && attention.length === 0 && <HintCard icon={Star} text={lang === 'pt' ? 'Marque tarefas com a etiqueta “Importante” no TickTick para elas aparecerem aqui.' : 'Tag tasks “Importante” in TickTick to surface them here.'} />}
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       <SectionTitle icon={Clock} label={t('todayPlan')} color={C.accent} />
       {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : next5.map((i) => (
@@ -1179,15 +1190,10 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <ChevronRight size={16} style={{ color: C.text3 }} />
         </div>
       ))}
-      <SectionTitle icon={Star} label={t('longTerm')} color={C.violet} />
-      {longTerm.length === 0 ? <Empty icon={Star} text={t('noLongTerm')} /> : longTerm.map((i) => (
-        <div key={i.id} onClick={() => onOpen(i)} style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
-          <div style={{ textAlign: 'center', width: 44, flexShrink: 0 }}><div style={{ fontSize: 15, fontWeight: 700 }}>{Number(i.date.slice(-2))}</div><div style={{ fontSize: 10, color: C.text3, textTransform: 'uppercase' }}>{new Date(i.date + 'T00:00:00').toLocaleDateString(loc(lang), { month: 'short' })}</div></div>
-          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div><div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{fmtDate(i.date, lang)}</div></div>
-          <ChevronRight size={16} style={{ color: C.text3 }} />
-        </div>
-      ))}
-      <SectionTitle icon={Newspaper} label={t('news')} color={C.blue} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
+        <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Newspaper size={14} style={{ color: C.blue }} />{t('news')}</span>
+        <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}{lang === 'pt' ? 'Atualizar' : 'Refresh'}</button>
+      </div>
       <div style={{ ...card, overflow: 'hidden' }}>
         {news === null ? (
           <div style={{ padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
@@ -1204,12 +1210,6 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         })}
       </div>
       <button onClick={goNews} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', fontSize: 12.5, padding: '8px 2px', display: 'flex', alignItems: 'center', gap: 4 }}>{t('seeAll')}<ChevronRight size={14} /></button>
-      <div style={{ ...card, padding: 6, display: 'flex', gap: 6, alignItems: 'center', margin: '10px 0 8px', border: `1px solid ${C.accent}33` }}>
-        <Sparkles size={16} style={{ color: C.accent, marginLeft: 6 }} />
-        <input value={ask} onChange={(e) => setAsk(e.target.value)} placeholder={t('askClaude')} onKeyDown={(e) => { if (e.key === 'Enter' && ask.trim()) { openClaude(ask.trim()); setAsk(''); } }} style={{ ...inputStyle, background: 'transparent', border: 'none' }} />
-        <Btn onClick={() => { if (ask.trim()) { openClaude(ask.trim()); setAsk(''); } }} disabled={!ask.trim()} style={{ padding: '9px 12px' }}><Send size={15} /></Btn>
-      </div>
-      <div style={{ marginTop: 18 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
       {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
     </div>
   );
@@ -1425,6 +1425,49 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
 
 /* ---------------- Calendar ---------------- */
 const CAL_FILTERS = [['all', 'fAll', null], ['work', 'fWork', 'work'], ['personal', 'fPersonal', 'personal'], ['kids', 'fKids', 'kids'], ['house', 'fHouse', 'home'], ['health', 'fHealth', 'health']];
+function MiniCalendar({ items, lang, t, toggleTask, onOpen }) {
+  const [mode, setMode] = useState('week'); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7));
+  const dated = (items || []).filter((i) => i.date && i.status !== 'done');
+  const onDay = (iso) => dated.filter((i) => i.date === iso);
+  const [y, m] = vm.split('-').map(Number);
+  const shiftMonth = (d) => { let nm = m + d, ny = y; if (nm < 1) { nm = 12; ny--; } if (nm > 12) { nm = 1; ny++; } setVm(`${ny}-${pad2(nm)}`); };
+  const shiftWeek = (d) => setSel(addDays(sel, d * 7));
+  let cells = [];
+  if (mode === 'month') { const sw = new Date(y, m - 1, 1).getDay(); const di = new Date(y, m, 0).getDate(); for (let i = 0; i < sw; i++) cells.push(null); for (let d = 1; d <= di; d++) cells.push(`${y}-${pad2(m)}-${pad2(d)}`); }
+  else { const base = new Date(sel + 'T00:00:00'); const ws = new Date(base); ws.setDate(base.getDate() - base.getDay()); for (let i = 0; i < 7; i++) { const d = new Date(ws); d.setDate(ws.getDate() + i); cells.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`); } }
+  const dayItems = onDay(sel).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const monthLabel = new Date(y, m - 1, 1).toLocaleDateString(loc(lang), { month: 'long', year: 'numeric' });
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 8 }}>
+        <Chip active={mode === 'week'} onClick={() => setMode('week')}>{t('week')}</Chip>
+        <Chip active={mode === 'month'} onClick={() => setMode('month')}>{t('month')}</Chip>
+      </div>
+      <div style={{ ...card, padding: 12, marginBottom: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <button onClick={() => (mode === 'month' ? shiftMonth(-1) : shiftWeek(-1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronLeft size={20} /></button>
+          <span style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{mode === 'month' ? monthLabel : `${t('week')} · ${fmtDate(cells[0], lang)}`}</span>
+          <button onClick={() => (mode === 'month' ? shiftMonth(1) : shiftWeek(1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronRight size={20} /></button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>{WD[lang].map((wd) => <div key={wd} style={{ textAlign: 'center', fontSize: 10.5, color: C.text3, padding: '2px 0' }}>{wd}</div>)}</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+          {cells.map((iso, idx) => {
+            if (!iso) return <div key={idx} />;
+            const list = onDay(iso); const n = list.length; const isToday = iso === today, isSel = iso === sel;
+            return (
+              <button key={idx} onClick={() => setSel(iso)} style={{ aspectRatio: '1', border: isSel ? `1px solid ${C.accent}` : '1px solid transparent', background: isSel ? C.accentSoft : isToday ? C.surface2 : 'transparent', borderRadius: 9, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: 2 }}>
+                <span style={{ fontSize: 13, color: isToday ? C.accent : C.text, fontWeight: isToday ? 700 : 400 }}>{Number(iso.slice(-2))}</span>
+                {n > 0 && <div style={{ display: 'flex', gap: 2 }}>{Array.from({ length: Math.min(n, 3) }).map((_, k) => <span key={k} style={{ width: 4, height: 4, borderRadius: 999, background: C.violet }} />)}</div>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ fontSize: 13.5, fontWeight: 600, margin: '4px 2px 10px', textTransform: 'capitalize', color: sel === today ? C.accent : C.text }}>{sel === today ? t('home') : fmtLong(sel, lang)}</div>
+      {dayItems.length === 0 ? <Empty icon={CalIcon} text={t('noItemsDay')} /> : dayItems.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+    </div>
+  );
+}
 function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount }) {
   useEffect(() => { if (onMount) onMount(); }, []);
   const [mode, setMode] = useState('week'); const [spin, setSpin] = useState(false); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7)); const [filter, setFilter] = useState(null); const [scope, setScope] = useState('all');
@@ -2083,14 +2126,14 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
         <MiniStat label={`${t('incomeL')} · ${t('thisMonth')}`} value={amountStr(income, lang, hidden)} color={C.green} small />
         <MiniStat label={`${t('outflow')} · ${t('thisMonth')}`} value={amountStr(outflow, lang, hidden)} color={C.rose} small />
       </div>
-      {bills.length > 0 && <><SectionTitle icon={Clock} label={t('upcomingBills')} color={C.accent} />{bills.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
+      {bills.length > 0 && <><SectionTitle icon={Clock} label={t('upcomingBills')} color={C.accent} />{bills.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} hideAmount={hidden} />)}</>}
       {catRows.length > 0 && (
         <>
           <div onClick={() => setSub({ v: 'reports' })} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px', cursor: 'pointer' }}>
             <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Activity size={14} style={{ color: C.green }} />{t('consumption')}</span>
             <ChevronRight size={16} style={{ color: C.text3 }} />
           </div>
-          <div style={{ ...card, padding: 14 }}>{catRows.slice(0, 4).map(([k, v]) => { const cc = CATEGORIES[k]; return <BarRow key={k} label={cc[lang]} value={v} max={catRows[0][1]} color={cc.color} icon={cc.icon} right={fmtMoney(v, lang)} />; })}</div>
+          <div style={{ ...card, padding: 14 }}>{catRows.slice(0, 4).map(([k, v]) => { const cc = CATEGORIES[k]; return <BarRow key={k} label={cc[lang]} value={v} max={catRows[0][1]} color={cc.color} icon={cc.icon} right={amountStr(v, lang, hidden)} />; })}</div>
         </>
       )}
 
@@ -2586,7 +2629,7 @@ function TuyaLight({ device, label, t, onCmd, onClose }) {
 }
 
 function IRBtn({ children, onClick, wide, accent }) {
-  return <button onClick={onClick} style={{ padding: wide ? '12px 10px' : '12px 0', borderRadius: 12, border: `1px solid ${C.border}`, background: accent ? C.accentSoft : C.surface2, color: accent ? C.accent : C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 0 }}>{children}</button>;
+  return <button onClick={onClick ? (e) => { haptic(12); onClick(e); } : undefined} style={{ padding: wide ? '12px 10px' : '12px 0', borderRadius: 12, border: `1px solid ${C.border}`, background: accent ? C.accentSoft : C.surface2, color: accent ? C.accent : C.text, fontSize: 13, fontWeight: 600, cursor: 'pointer', minWidth: 0 }}>{children}</button>;
 }
 
 // Para controles IR "universais" da Tuya, os comandos vao pelo code padrao.
@@ -3160,20 +3203,11 @@ function KidsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
         );
       })}
       {kids.length > 0 && (() => {
-        const allLinked = kids.flatMap((p) => items.filter((i) => i.id !== p.id && ((i.meta && i.meta.personId === p.id) || (i.person && i.person.toLowerCase() === p.title.toLowerCase()))).map((i) => ({ ...i, _kid: p.title })));
-        const today = todayISO();
-        const agenda = allLinked.filter((i) => i.date && i.date >= today && ['event', 'appointment', 'task'].includes(i.type) && i.status !== 'done').sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || ''))).slice(0, 8);
-        if (agenda.length === 0) return null;
+        const allLinked = kids.flatMap((p) => items.filter((i) => i.id !== p.id && ((i.meta && i.meta.personId === p.id) || (i.person && i.person.toLowerCase() === p.title.toLowerCase()))));
         return (
           <div style={{ marginTop: 8 }}>
-            <SectionTitle icon={CalendarDays} label={lang === 'pt' ? 'Agenda dos dois' : "Both kids' agenda"} color={C.violet} />
-            {agenda.map((i) => (
-              <div key={i.id} onClick={() => onOpen(i)} style={{ ...card, padding: '11px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
-                <div style={{ textAlign: 'center', minWidth: 40 }}><div style={{ fontSize: 15, fontWeight: 700, color: C.violet }}>{i.date.slice(8, 10)}</div><div style={{ fontSize: 9.5, color: C.text3, textTransform: 'uppercase' }}>{new Date(i.date + 'T00:00').toLocaleDateString(lang === 'pt' ? 'pt-BR' : 'en', { month: 'short' })}</div></div>
-                <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div><div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{i._kid}{i.time ? ' · ' + i.time : ''}</div></div>
-                {i.type === 'task' && <button onClick={(e) => { e.stopPropagation(); toggleTask(i.id); }} style={{ width: 22, height: 22, borderRadius: 999, border: `2px solid ${C.border}`, background: 'transparent', cursor: 'pointer', flexShrink: 0 }} />}
-              </div>
-            ))}
+            <SectionTitle icon={CalendarDays} label={lang === 'pt' ? 'Agenda dos filhos' : "Kids' calendar"} color={C.violet} />
+            <MiniCalendar items={allLinked} lang={lang} t={t} toggleTask={toggleTask} onOpen={onOpen} />
           </div>
         );
       })()}
@@ -3219,9 +3253,18 @@ function FlightRow({ f, lang, t, onOpen }) {
   );
 }
 
+// Silhuetas simplificadas dos continentes na projecao equiretangular (viewBox 360x180).
+// x = (lon+180)/2 ; y = (90-lat). Formas aproximadas, so para dar contexto geografico.
+const WORLD = {
+  na: 'M40,38 L92,34 L104,44 L96,60 L82,72 L70,68 L58,80 L48,72 L44,58 L36,50 Z',
+  sa: 'M96,96 L112,92 L118,104 L114,128 L104,140 L98,128 L94,110 Z',
+  eu: 'M168,40 L196,36 L204,44 L198,54 L184,58 L172,52 Z',
+  af: 'M170,70 L200,66 L212,84 L206,112 L192,124 L182,110 L176,88 Z',
+  as: 'M204,32 L300,30 L316,48 L300,66 L262,64 L232,56 L210,50 Z',
+  oc: 'M292,116 L324,112 L332,124 L320,134 L300,130 Z',
+};
 function FlightMap({ flights, lang, t }) {
-  // Versao simples e a prova de falhas: mundo estilizado + rotas.
-  // Sem tiles de rede (que podiam falhar/bloquear e derrubar a tela).
+  // Mapa-mundi fixo (projecao equiretangular) com continentes + rotas por cima.
   const pts = {}; const routes = [];
   (flights || []).forEach((f) => {
     const a = ((f && f.meta && f.meta.from) || '').toUpperCase();
@@ -3232,43 +3275,44 @@ function FlightMap({ flights, lang, t }) {
   if (routes.length === 0) {
     return <div style={{ ...card, padding: 20, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('nothingHere')}</div>;
   }
-  // projecao equiretangular simples (lon/lat -> x/y), sem Mercator, sem Infinity possivel
-  const W = 340, H = 180, pad = 24;
-  const lons = keys.map((k) => pts[k][0]), lats = keys.map((k) => pts[k][1]);
-  let minLon = Math.min(...lons), maxLon = Math.max(...lons);
-  let minLat = Math.min(...lats), maxLat = Math.max(...lats);
-  if (maxLon - minLon < 8) { minLon -= 4; maxLon += 4; }
-  if (maxLat - minLat < 8) { minLat -= 4; maxLat += 4; }
-  const sx = (W - pad * 2) / ((maxLon - minLon) || 1);
-  const sy = (H - pad * 2) / ((maxLat - minLat) || 1);
-  const sc = Math.min(sx, sy);
-  const cxWorld = (minLon + maxLon) / 2, cyWorld = (minLat + maxLat) / 2;
-  const px = (lon) => W / 2 + (lon - cxWorld) * sc;
-  const py = (lat) => H / 2 - (lat - cyWorld) * sc;
+  // projecao equiretangular do mundo inteiro: lon -180..180 -> 0..W, lat 90..-90 -> 0..H
+  const W = 360, H = 180;
+  const px = (lon) => (lon + 180) / 360 * W;
+  const py = (lat) => (90 - lat) / 180 * H;
 
   return (
     <div style={{ ...card, padding: 10, marginBottom: 10, overflow: 'hidden' }}>
-      <div style={{ borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(160deg,#101826,#0b1018)' }}>
+      <div style={{ borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(160deg,#0d1a2b,#0b1018)' }}>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }}>
+          {/* oceano com leve grade de meridianos/paralelos */}
           <defs>
-            <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse">
-              <path d="M28 0H0V28" fill="none" stroke="#ffffff10" strokeWidth="0.6" />
+            <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+              <path d="M30 0H0V30" fill="none" stroke="#ffffff08" strokeWidth="0.5" />
             </pattern>
           </defs>
           <rect x="0" y="0" width={W} height={H} fill="url(#grid)" />
+          {/* continentes simplificados (silhuetas) */}
+          <g fill="#1e3048" opacity="0.9">
+            <path d={WORLD.na} fill="#1e3048" />
+            <path d={WORLD.sa} fill="#1e3048" />
+            <path d={WORLD.eu} fill="#1e3048" />
+            <path d={WORLD.af} fill="#1e3048" />
+            <path d={WORLD.as} fill="#1e3048" />
+            <path d={WORLD.oc} fill="#1e3048" />
+          </g>
+          {/* rotas */}
           {routes.map(([a, b], i) => {
             const x1 = px(pts[a][0]), y1 = py(pts[a][1]), x2 = px(pts[b][0]), y2 = py(pts[b][1]);
-            const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.22 - 8;
-            return <path key={i} d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke={C.accent} strokeWidth="1.5" opacity="0.85" />;
+            const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.18 - 6;
+            return <path key={i} d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke={C.accent} strokeWidth="1.4" opacity="0.9" strokeLinecap="round" />;
           })}
           {keys.map((k) => {
             const x = px(pts[k][0]), y = py(pts[k][1]);
-            // desloca o label para o lado com mais espaco (esquerda se estiver na metade direita)
-            const right = x > W / 2;
+            const right = x > W * 0.7;
             return (
               <g key={k}>
-                <circle cx={x} cy={y} r="4" fill={C.accent} stroke="#0b1018" strokeWidth="1.2" />
-                <text x={right ? x - 6 : x + 6} y={y + 3} textAnchor={right ? 'end' : 'start'} fill="#E8E8EE" fontSize="9.5" fontWeight="700" style={{ paintOrder: 'stroke', stroke: '#0b1018', strokeWidth: 2.5 }}>{k}</text>
+                <circle cx={x} cy={y} r="3.2" fill={C.accent} stroke="#0b1018" strokeWidth="1" />
+                <text x={right ? x - 5 : x + 5} y={y + 3} textAnchor={right ? 'end' : 'start'} fill="#E8E8EE" fontSize="8.5" fontWeight="700" style={{ paintOrder: 'stroke', stroke: '#0b1018', strokeWidth: 2.5 }}>{k}</text>
               </g>
             );
           })}
@@ -3680,6 +3724,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
+      <div style={{ marginBottom: 12 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
       <Btn kind="soft" onClick={() => { if (confirm(lang === 'pt' ? 'Apagar TODOS os dados do app e começar do zero? As conexões (Google, Oura, TickTick, Tuya, LG) permanecem.' : 'Erase all app data and start fresh? Connections stay.')) { setItems([]); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', color: C.rose }}><Trash2 size={15} />{lang === 'pt' ? 'Zerar app (começar do zero)' : 'Reset app'}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
       <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
@@ -3963,7 +4008,7 @@ function App() {
         </div>
       </div>
       <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
           savedNews={items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news')}
@@ -3979,7 +4024,7 @@ function App() {
       {active.screen !== 'claude' && (
         <div style={{ position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)', left: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
           <div style={{ maxWidth: 480, margin: '0 auto', position: 'relative', height: 0 }}>
-            <button onClick={() => setShowCapture(true)} style={{ position: 'absolute', right: 18, bottom: 0, pointerEvents: 'auto', background: C.accent, color: '#171200', border: 'none', width: 52, height: 52, borderRadius: 16, cursor: 'pointer', boxShadow: '0 8px 24px rgba(230,180,80,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} /></button>
+            <button onClick={() => { haptic(12); setShowCapture(true); }} style={{ position: 'absolute', right: 18, bottom: 0, pointerEvents: 'auto', background: C.accent, color: '#171200', border: 'none', width: 52, height: 52, borderRadius: 16, cursor: 'pointer', boxShadow: '0 8px 24px rgba(230,180,80,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} /></button>
           </div>
         </div>
       )}
@@ -3990,7 +4035,7 @@ function App() {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
             const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
             const badge = k === 'messages' ? allItems.filter((i) => i.type === 'message' && i.meta && i.meta.unread).length + allItems.filter((i) => i.status === 'inbox').length : 0;
-            return <button key={k} onClick={() => navTo(k)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, position: 'relative', padding: '2px 8px' }}>
+            return <button key={k} onClick={() => { haptic(); navTo(k); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, position: 'relative', padding: '2px 8px' }}>
               <Ic size={21} /><span style={{ fontSize: 10.5 }}>{navLabel(k, t)}</span>
               {badge > 0 && <span style={{ position: 'absolute', top: -3, right: 4, background: C.rose, color: '#fff', fontSize: 9, borderRadius: 999, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{badge}</span>}
             </button>;
