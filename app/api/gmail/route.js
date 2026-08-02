@@ -32,6 +32,16 @@ function plainBody(payload) {
   return '';
 }
 
+function htmlBody(payload) {
+  if (!payload) return '';
+  const dec = (d) => { try { return Buffer.from(d.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'); } catch (e) { return ''; } };
+  if (payload.mimeType === 'text/html' && payload.body && payload.body.data) return dec(payload.body.data);
+  const parts = payload.parts || [];
+  for (const p of parts) { if (p.mimeType === 'text/html' && p.body && p.body.data) return dec(p.body.data); }
+  for (const p of parts) { const nested = htmlBody(p); if (nested) return nested; }
+  return '';
+}
+
 /** GET -> lista de não lidos das últimas 24h, com corpo. */
 export async function GET(req) {
   const user = await userFromRequest(req);
@@ -72,6 +82,7 @@ export async function GET(req) {
         if (!rr.ok) return null;
         const m = await rr.json();
         const from = header(m.payload, 'From');
+        const html = htmlBody(m.payload);
         const sender = from.replace(/<.*>/, '').replace(/"/g, '').trim() || from;
         const email = (from.match(/<(.+)>/) || [null, from])[1];
         const when = m.internalDate ? Number(m.internalDate) : Date.now();
@@ -83,6 +94,7 @@ export async function GET(req) {
           subject: header(m.payload, 'Subject') || '(sem assunto)',
           snippet: m.snippet || '',
           body: (plainBody(m.payload) || m.snippet || '').slice(0, 4000),
+          html: (html || '').slice(0, 200000),
           messageId: header(m.payload, 'Message-ID'),
           references: header(m.payload, 'References'),
           date: new Date(when).toISOString(),
