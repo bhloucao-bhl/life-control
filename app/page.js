@@ -163,7 +163,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, Upload
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -241,7 +241,8 @@ const S = {
   exams: L('Últimos exames', 'Recent exams'), support: L('Suporte (carteirinhas, vacinação)', 'Support (cards, vaccination)'),
   myKids: L('Minha prole', 'My kids'),
   company: L('Empresa', 'Company'), address: L('Endereço', 'Address'), contact: L('Contato', 'Contact'),
-  routeMapNote: L('Exemplo com suas viagens cadastradas — aeroportos conhecidos são plotados.', 'Example from your saved trips — known airports are plotted.'),
+  routeMapNote: L('Rotas dos seus voos cadastrados.', 'Routes from your saved flights.'),
+  importStatement: L('Importar extrato', 'Import statement'),
   travelCrawlNote: L('No deploy, um monitor do seu Gmail detecta novas reservas e, pela triagem, adiciona aqui, no calendário e no mapa.', 'At deploy, a Gmail monitor detects new bookings and, via triage, adds them here, to the calendar and map.'),
   snooze: L('Adiar 1 dia', 'Snooze 1 day'), markPaid: L('Marcar como paga', 'Mark paid'), undo: L('Desfazer', 'Undo'), doneLabel: L('Concluído', 'Done'),
   nextTrip: L('Próxima viagem', 'Next trip'), hospedagem: L('Hospedagem', 'Stay'), daysWord: L('dias', 'days'), ongoing: L('em andamento', 'ongoing'),
@@ -438,7 +439,7 @@ const DEFAULT_DOCK = ['home', 'messages', 'calendar', 'dashboard', 'claude'];
 function navIcon(k) { return SCREEN_ICONS[k] || (moduleByKey(k) ? moduleByKey(k).icon : Circle); }
 function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
 const TUYA_SEED = {
-  'ebd25cb250d51d988bfmgd': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'light' },
+  'ebd25cb250d51d988bfmgd': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'plug' },
   'ebce584d586201f762d4ag': { show: true, alias: 'Subwoofer', room: 'Home-office', kind: 'plug' },
   'ebbc591b7da959062dm9im': { show: true, alias: 'TV Suíte', room: 'Suíte', kind: 'tv', ir: '534436288caab546bacb' },
   'eb35a5d8aab7cb6a92jpzr': { show: true, alias: 'Vivo Suíte', room: 'Suíte', kind: 'stb', ir: '534436288caab546bacb' },
@@ -451,7 +452,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v40 · 02ago';
+const APP_VERSION = 'v41 · 02ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -685,7 +686,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
     const local = resolveFlight(fcode);
     if (local) upMeta({ airline: local.airline, flightNumber: local.flightNumber });
     try {
-      const r = await authFetch('/api/flight?flight=' + encodeURIComponent(fcode.trim()));
+      const r = await authFetch('/api/flight?flight=' + encodeURIComponent(fcode.trim()) + (f.date ? '&date=' + f.date : ''));
       const j = await r.json();
       if (j.flight) {
         const fl = j.flight;
@@ -714,23 +715,32 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
       {type === 'flight' && (
         <div style={{ ...card, padding: 12, marginBottom: 12, background: C.bg2 }}>
           <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{t('flightCode')}</div>
-          <div style={{ display: 'flex', gap: 8 }}><input value={fcode} onChange={(e) => setFcode(e.target.value)} placeholder="LA 3414" style={inputStyle} /><Btn kind="soft" onClick={doResolve} disabled={resolving} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{resolving ? <Loader2 size={14} className="spin" /> : <Search size={14} />}{t('resolve')}</Btn></div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}><input value={fcode} onChange={(e) => setFcode(e.target.value)} placeholder="LA 3414" style={inputStyle} /><Btn kind="soft" onClick={doResolve} disabled={resolving} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{resolving ? <Loader2 size={14} className="spin" /> : <Search size={14} />}{t('resolve')}</Btn></div>
+          <div style={{ fontSize: 10.5, color: C.text3, marginBottom: 4 }}>{lang === 'pt' ? 'Data do voo (melhora a busca da aeronave e horário)' : 'Flight date'}</div>
+          <input type="date" value={f.date || ''} onChange={(e) => up({ date: e.target.value })} style={{ ...inputStyle, colorScheme: 'dark' }} />
           {resolveMsg && <div style={{ fontSize: 11.5, color: resolveMsg.startsWith('✓') ? C.green : C.text3, marginTop: 7 }}>{resolveMsg}</div>}
           {f.meta.aircraft && <div style={{ fontSize: 12, color: C.text2, marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}><Plane size={13} style={{ color: C.violet }} />{lang === 'pt' ? 'Aeronave' : 'Aircraft'}: <b>{f.meta.aircraft}</b>{f.meta.aircraftReg ? ` (${f.meta.aircraftReg})` : ''}</div>}
+          {f.meta.depTime && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 4 }}>{lang === 'pt' ? 'Partida' : 'Departure'}: {new Date(f.meta.depTime).toLocaleString(lang === 'pt' ? 'pt-BR' : 'en', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}{f.meta.arrTime ? ` → ${new Date(f.meta.arrTime).toLocaleTimeString(lang === 'pt' ? 'pt-BR' : 'en', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>}
           {(f.meta.depGate || f.meta.depTerminal) && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 4 }}>{lang === 'pt' ? 'Embarque' : 'Departure'}: {f.meta.depTerminal ? `T${f.meta.depTerminal}` : ''}{f.meta.depGate ? ` · Portão ${f.meta.depGate}` : ''}</div>}
           <div style={{ fontSize: 11, color: C.text3, marginTop: 7, lineHeight: 1.45 }}>{t('flightHint')}</div>
         </div>
       )}
-      {type === 'trip' && people.length > 0 && (
+      {type === 'trip' && (
         <div style={{ ...card, padding: 12, marginBottom: 12, background: C.bg2 }}>
           <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8, display: 'flex', gap: 6, alignItems: 'center' }}><Users size={13} />{lang === 'pt' ? 'Quem vai nesta viagem' : 'Who is traveling'}</div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {people.map((p) => {
-              const sel = (f.meta.travelers || []).includes(p.id);
-              return <Chip key={p.id} active={sel} onClick={() => { const cur = f.meta.travelers || []; upMeta({ travelers: sel ? cur.filter((x) => x !== p.id) : [...cur, p.id] }); }}>{p.title}</Chip>;
-            })}
-          </div>
-          <div style={{ fontSize: 11, color: C.text3, marginTop: 8, lineHeight: 1.45 }}>{lang === 'pt' ? 'Cartões de embarque, reservas e voos podem ser vinculados a esta viagem em família.' : 'Boarding passes and bookings can be linked to this family trip.'}</div>
+          {people.length === 0 ? (
+            <div style={{ fontSize: 11.5, color: C.text3, lineHeight: 1.5 }}>{lang === 'pt' ? 'Você ainda não cadastrou pessoas. Adicione familiares na aba Painel → Pessoas e eles aparecerão aqui para você vincular à viagem.' : 'No people yet. Add them in Dashboard → People.'}</div>
+          ) : (
+            <>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {people.map((p) => {
+                  const sel = (f.meta.travelers || []).includes(p.id);
+                  return <Chip key={p.id} active={sel} onClick={() => { const cur = f.meta.travelers || []; upMeta({ travelers: sel ? cur.filter((x) => x !== p.id) : [...cur, p.id] }); }}>{p.title}</Chip>;
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: C.text3, marginTop: 8, lineHeight: 1.45 }}>{lang === 'pt' ? 'Os selecionados ficam vinculados à viagem — cartões de embarque, reservas e documentos aparecem conectados.' : 'Selected people are linked to this trip.'}</div>
+            </>
+          )}
         </div>
       )}
       {type === 'vehicle' && (
@@ -807,7 +817,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
       {isMilestoneType(type) && (
         <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, cursor: 'pointer' }} onClick={() => upMeta({ milestone: !f.meta.milestone })}>
           <div style={{ color: f.meta.milestone ? C.accent : C.text3 }}>{f.meta.milestone ? <Star size={20} fill={C.accent} /> : <Star size={20} />}</div>
-          <span style={{ fontSize: 13.5 }}>{t('important')}</span>
+          <div><div style={{ fontSize: 13.5 }}>{lang === 'pt' ? 'Marcar como importante ⭐' : 'Mark as important'}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Fixa este item em destaque no topo da aba Hoje (seção “Longo prazo”)' : 'Pins to Today highlights'}</div></div>
         </label>
       )}
       {!['note', 'person', 'account', 'vehicle', 'message'].includes(type) && (
@@ -1934,8 +1944,109 @@ function FinanceAssistant({ items, lang, t, back }) {
     </div>
   );
 }
+function StatementImport({ lang, t, existing, onClose, onImport }) {
+  const [stage, setStage] = useState('pick'); // pick | password | loading | review | error
+  const [fileData, setFileData] = useState(null); const [fileName, setFileName] = useState('');
+  const [password, setPassword] = useState(''); const [err, setErr] = useState('');
+  const [txs, setTxs] = useState([]); const [account, setAccount] = useState(null);
+  const fileRef = useRef();
+  const pt = lang === 'pt';
+
+  const existingFps = new Set((existing || []).filter((i) => i.meta && i.meta.fingerprint).map((i) => i.meta.fingerprint));
+
+  const pickFile = (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = () => { const b64 = String(reader.result).split(',')[1]; setFileData(b64); process(b64, ''); };
+    reader.readAsDataURL(file);
+  };
+
+  const process = async (b64, pwd) => {
+    setStage('loading'); setErr('');
+    try {
+      const r = await authFetch('/api/statement', { method: 'POST', body: JSON.stringify({ pdfBase64: b64, password: pwd }) });
+      const j = await r.json();
+      if (j.needPassword || j.error === 'senha') { setStage('password'); return; }
+      if (j.error) { setErr(j.error); setStage('error'); return; }
+      // dedup contra o que ja existe
+      const seen = new Set(); const clean = [];
+      (j.transactions || []).forEach((tx) => {
+        if (existingFps.has(tx.fingerprint) || seen.has(tx.fingerprint)) return;
+        seen.add(tx.fingerprint); clean.push({ ...tx, _keep: true });
+      });
+      setTxs(clean); setAccount(j.account);
+      setStage('review');
+    } catch (e) { setErr(String(e)); setStage('error'); }
+  };
+
+  const dupCount = (txs.length === 0 && stage === 'review') ? 0 : null;
+  const toImport = txs.filter((t) => t._keep);
+
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={pt ? 'Importar extrato' : 'Import statement'} onClose={onClose} icon={Upload} />
+
+      {stage === 'pick' && (
+        <div>
+          <div style={{ ...card, padding: 18, textAlign: 'center', marginBottom: 12 }}>
+            <FileText size={26} style={{ color: C.accent, marginBottom: 10 }} />
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: C.text2 }}>{pt ? 'Envie o PDF do seu extrato ou fatura. O Claude lê as transações e evita duplicatas automaticamente.' : 'Upload your statement PDF. Claude reads transactions and avoids duplicates.'}</div>
+          </div>
+          <input ref={fileRef} type="file" accept="application/pdf" onChange={pickFile} style={{ display: 'none' }} />
+          <Btn onClick={() => fileRef.current && fileRef.current.click()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Upload size={16} />{pt ? 'Escolher PDF' : 'Choose PDF'}</Btn>
+        </div>
+      )}
+
+      {stage === 'password' && (
+        <div>
+          <div style={{ ...card, padding: 14, marginBottom: 12, fontSize: 13, color: C.text2, display: 'flex', gap: 9, alignItems: 'center' }}><Lock size={16} style={{ color: C.accent, flexShrink: 0 }} />{pt ? 'Este extrato tem senha. Digite para abrir (não guardamos a senha).' : 'This PDF is password-protected.'}</div>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pt ? 'Senha do PDF' : 'PDF password'} style={{ ...inputStyle, marginBottom: 10 }} />
+          <Btn onClick={() => process(fileData, password)} disabled={!password} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Check size={16} />{pt ? 'Abrir extrato' : 'Open'}</Btn>
+        </div>
+      )}
+
+      {stage === 'loading' && (
+        <div style={{ ...card, padding: 30, textAlign: 'center', color: C.text3, display: 'flex', gap: 9, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={16} className="spin" />{pt ? 'Lendo e organizando as transações…' : 'Reading…'}</div>
+      )}
+
+      {stage === 'error' && (
+        <div>
+          <div style={{ ...card, padding: 14, marginBottom: 12, fontSize: 12.5, color: C.rose }}>{err}</div>
+          <Btn kind="soft" onClick={() => setStage('pick')} style={{ width: '100%' }}>{pt ? 'Tentar outro arquivo' : 'Try again'}</Btn>
+        </div>
+      )}
+
+      {stage === 'review' && (
+        <div>
+          {account && <div style={{ fontSize: 12, color: C.text3, marginBottom: 8 }}>{pt ? 'Conta identificada' : 'Account'}: {account}</div>}
+          <div style={{ ...card, padding: 12, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: 12.5, color: C.text2 }}>{pt ? 'Novas transações' : 'New'}: <b style={{ color: C.text }}>{txs.length}</b></span>
+            <span style={{ fontSize: 11.5, color: C.green }}>{pt ? 'Duplicatas já filtradas ✓' : 'Duplicates filtered ✓'}</span>
+          </div>
+          {txs.length === 0 ? (
+            <Empty icon={Check} text={pt ? 'Nada novo — tudo deste extrato já estava no app.' : 'Nothing new.'} />
+          ) : (
+            <div style={{ maxHeight: '40vh', overflowY: 'auto', marginBottom: 12 }}>
+              {txs.map((tx, i) => (
+                <div key={i} onClick={() => setTxs((p) => p.map((x, j) => j === i ? { ...x, _keep: !x._keep } : x))} style={{ ...card, padding: '10px 12px', marginBottom: 6, display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', opacity: tx._keep ? 1 : 0.4 }}>
+                  <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${tx._keep ? C.accent : C.border}`, background: tx._keep ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{tx._keep && <Check size={13} style={{ color: '#000' }} />}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</div><div style={{ fontSize: 11, color: C.text3 }}>{fmtDate(tx.date, lang)}</div></div>
+                  <span style={{ fontSize: 13.5, fontWeight: 700, color: tx.type === 'income' ? C.green : C.rose }}>{tx.type === 'income' ? '+' : '−'}{fmtMoney(tx.amount, lang)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {toImport.length > 0 && <Btn onClick={() => onImport(toImport)} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Download size={16} />{pt ? `Importar ${toImport.length} transações` : `Import ${toImport.length}`}</Btn>}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash }) {
-  const [sub, setSub] = useState({ v: 'home' }); const [adding, setAdding] = useState(null); const [hidden, setHidden] = useState(true);
+  const [sub, setSub] = useState({ v: 'home' }); const [adding, setAdding] = useState(null); const [hidden, setHidden] = useState(true); const [importing, setImporting] = useState(false);
   const accounts = items.filter((i) => i.type === 'account');
   if (sub.v === 'account') { const acc = sub.id ? items.find((i) => i.id === sub.id) : null; return <AccountDetail acc={acc} items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} onOpen={onOpen} addItem={addItem} flash={flash} goReport={() => setSub({ v: 'reports' })} />; }
   if (sub.v === 'reports') return <ReportsScreen items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
@@ -1950,7 +2061,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
   const byCat = {}; monthTx.filter(isDebit).forEach((i) => { const k = deriveCat(i); byCat[k] = (byCat[k] || 0) + (Number(i.amount) || 0); });
   const catRows = Object.entries(byCat).sort((a, b) => b[1] - a[1]);
   const bills = items.filter((i) => i.type === 'bill' && i.date && i.date >= todayISO()).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 4);
-  const SHORT = [{ k: 'statement', icon: Wallet, on: () => setSub({ v: 'account', id: null }) }, { k: 'reports', icon: Activity, on: () => setSub({ v: 'reports' }) }, { k: 'assistant', icon: Sparkles, on: () => setSub({ v: 'assistant' }) }];
+  const SHORT = [{ k: 'importStatement', icon: Upload, on: () => setImporting(true) }, { k: 'reports', icon: Activity, on: () => setSub({ v: 'reports' }) }, { k: 'assistant', icon: Sparkles, on: () => setSub({ v: 'assistant' }) }];
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -1993,6 +2104,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
       ); })}
       <Btn kind="soft" onClick={() => setAdding('account')} style={{ width: '100%', marginTop: 4, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={15} />{t('addAccount')}</Btn>
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'finance', meta: adding === 'account' ? { kind: 'checking' } : {} }} allowedTypes={[adding]} lang={lang} t={t} people={people} accounts={accounts} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'finance', ...x }); flash(t('savedOne')); setAdding(null); }} />}
+      {importing && <StatementImport lang={lang} t={t} existing={items} onClose={() => setImporting(false)} onImport={(txs) => { txs.forEach((tx) => addItem({ type: tx.type, domain: 'finance', title: tx.description, amount: tx.amount, date: tx.date, meta: { fingerprint: tx.fingerprint, source: 'extrato' } })); flash((lang === 'pt' ? 'Importadas ' : 'Imported ') + txs.length); setImporting(false); }} />}
     </div>
   );
 }
@@ -2816,6 +2928,8 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
                 // completa campos que faltam nas prefs antigas (ex.: hub IR e kind), sem apagar apelido/cômodo do usuário
                 if (seed.ir && !next[d.id].ir) { next[d.id] = { ...next[d.id], ir: seed.ir }; changed = true; }
                 if (seed.kind && (!next[d.id].kind || next[d.id].kind === 'auto')) { next[d.id] = { ...next[d.id], kind: seed.kind }; changed = true; }
+                // correção específica: Abajur Carol foi salvo como 'light' mas é interruptor (switch_1)
+                if (d.id === 'ebd25cb250d51d988bfmgd' && next[d.id].kind === 'light') { next[d.id] = { ...next[d.id], kind: 'plug' }; changed = true; }
               }
             });
             return changed ? next : prev;
@@ -3147,12 +3261,17 @@ function FlightMap({ flights, lang, t }) {
             const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.22 - 8;
             return <path key={i} d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke={C.accent} strokeWidth="1.5" opacity="0.85" />;
           })}
-          {keys.map((k) => (
-            <g key={k}>
-              <circle cx={px(pts[k][0])} cy={py(pts[k][1])} r="3.4" fill={C.accent} />
-              <text x={px(pts[k][0]) + 5} y={py(pts[k][1]) + 3} fill="#E8E8EE" fontSize="8.5" fontWeight="700">{k}</text>
-            </g>
-          ))}
+          {keys.map((k) => {
+            const x = px(pts[k][0]), y = py(pts[k][1]);
+            // desloca o label para o lado com mais espaco (esquerda se estiver na metade direita)
+            const right = x > W / 2;
+            return (
+              <g key={k}>
+                <circle cx={x} cy={y} r="4" fill={C.accent} stroke="#0b1018" strokeWidth="1.2" />
+                <text x={right ? x - 6 : x + 6} y={y + 3} textAnchor={right ? 'end' : 'start'} fill="#E8E8EE" fontSize="9.5" fontWeight="700" style={{ paintOrder: 'stroke', stroke: '#0b1018', strokeWidth: 2.5 }}>{k}</text>
+              </g>
+            );
+          })}
         </svg>
       </div>
       <div style={{ fontSize: 9.5, color: C.text3, marginTop: 7, textAlign: 'center' }}>{t('routeMapNote')}</div>
@@ -3183,6 +3302,23 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
         </div>
         <button onClick={() => setEditing(true)} style={{ ...card, padding: '6px 12px', color: C.text2, cursor: 'pointer', fontSize: 12.5, marginTop: 12, display: 'inline-flex', gap: 6, alignItems: 'center' }}><Pencil size={13} />{t('edit')}</button>
       </div>
+      {(mt.travelers && mt.travelers.length > 0) && (() => {
+        const travelers = (mt.travelers || []).map((id) => people.find((p) => p.id === id)).filter(Boolean);
+        if (travelers.length === 0) return null;
+        return (
+          <>
+            <SectionTitle icon={Users} label={lang === 'pt' ? 'Viajantes' : 'Travelers'} color={C.sky} />
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+              {travelers.map((p) => (
+                <div key={p.id} onClick={() => onOpen(p)} style={{ ...card, padding: '8px 12px 8px 8px', display: 'flex', gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+                  <Avatar photo={p.meta && p.meta.photo} name={p.title} size={28} color={C.sky} />
+                  <span style={{ fontSize: 13, fontWeight: 500 }}>{p.title}</span>
+                </div>
+              ))}
+            </div>
+          </>
+        );
+      })()}
       <SectionTitle icon={Plane} label={t('flights')} color={C.violet} />
       {flights.length === 0 ? <Empty icon={Plane} text={t('nothingHere')} /> : flights.map((f) => <FlightRow key={f.id} f={f} lang={lang} t={t} onOpen={onOpen} />)}
       <HintCard icon={Ticket} text={t('boardingSoon')} />
@@ -3232,7 +3368,6 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
         <>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 10 }}><Chip active={period === 'year'} onClick={() => setPeriod('year')}>{t('thisYear')}</Chip><Chip active={period === 'all'} onClick={() => setPeriod('all')}>{t('allTime')}</Chip></div>
           <ErrorBoundary fallback={<div style={{ ...card, padding: 18, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('mapUnavailable')}</div>}><FlightMap flights={yf} lang={lang} t={t} /></ErrorBoundary>
-          <HintCard icon={Mail} text={t('travelCrawlNote')} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <MiniStat label={t('flightsCount')} value={yf.length} color={module.color} />
             <MiniStat label={t('hoursFlown')} value={hours.toFixed(1)} color={C.accent} />
