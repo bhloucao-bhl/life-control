@@ -163,7 +163,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Upload
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Upload
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -209,7 +209,7 @@ const S = {
   noAttention: L('Nada urgente agora.', 'Nothing urgent right now.'), noLongTerm: L('Nada marcado à frente.', 'Nothing ahead yet.'),
   home: L('Hoje', 'Today'), messages: L('Mensagens', 'Messages'), calendar: L('Calendário', 'Calendar'),
   dashboard: L('Painel de Controle', 'Dashboard'), dashShort: L('Painel', 'Dashboard'), claude: L('Claude', 'Claude'),
-  tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
+  work: L('Trabalho', 'Work'), tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
   people: L('Pessoas', 'People'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'),
   readiness: L('Prontidão', 'Readiness'), sleepScore: L('Sono', 'Sleep'),
   connectOura: L('Conecte o Oura em Ajustes, ou toque para registrar.', 'Connect Oura in Settings, or tap to log.'),
@@ -439,6 +439,7 @@ const AIRPORTS = {
 };
 
 const MODULES = [
+  { key: 'work', icon: Briefcase, color: C.sky, filter: (i) => i.domain === 'work' || (i.meta && i.meta.moura), types: ['event', 'appointment', 'task', 'note'] },
   { key: 'tasks', icon: ListTodo, color: C.accent, filter: (i) => i.type === 'task', types: ['task'] },
   { key: 'health', icon: Heart, color: C.rose, filter: (i) => i.domain === 'health', types: ['appointment', 'meal', 'med', 'expense', 'document', 'note'], custom: 'health' },
   { key: 'house', icon: Home, color: C.blue, filter: (i) => i.domain === 'home', types: ['task', 'shopping', 'expense', 'note'], custom: 'house' },
@@ -472,7 +473,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v45 · 02ago';
+const APP_VERSION = 'v46 · 03ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -528,9 +529,25 @@ async function callClaude(system, messages) {
   const data = await res.json();
   return (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
 }
+async function classifyCaptureFile(b64, mime, lang) {
+  const langName = lang === 'pt' ? 'Brazilian Portuguese' : 'US English';
+  const system = `You are the capture classifier for a personal life app. Look at the attached image or document (a receipt, invoice, ticket, screenshot, note, etc.) and convert it into one or more items. Output ONLY a JSON array — no prose, no fences. Each item: {"type": one of [task,event,expense,meal,med,appointment,document,trip,flight,shopping,bill,note], "domain": one of [${DOMAINS.join(',')}], "title": short title in ${langName}, "date":"YYYY-MM-DD" or null, "time":"HH:MM" or null, "amount": number or null, "person": string or null, "priority":1|2|3, "confidence":0..1}. Today is ${todayISO()}. Extract amounts, dates and times you can read. If unsure, type "note".`;
+  const isPdf = mime === 'application/pdf';
+  const block = isPdf
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
+    : { type: 'image', source: { type: 'base64', media_type: mime || 'image/jpeg', data: b64 } };
+  const text = await callClaude(system, [{ role: 'user', content: [block, { type: 'text', text: lang === 'pt' ? 'Extraia os itens desta imagem/documento.' : 'Extract items from this.' }] }]);
+  let j = text; const a = text.indexOf('['), b = text.lastIndexOf(']'); if (a !== -1 && b !== -1) j = text.slice(a, b + 1);
+  const arr = JSON.parse(j);
+  return (Array.isArray(arr) ? arr : [arr]).map((x) => ({
+    type: TYPES.includes(x.type) ? x.type : 'note', domain: DOMAINS.includes(x.domain) ? x.domain : 'personal',
+    title: String(x.title || 'Item').slice(0, 160), date: x.date || null, time: x.time || null,
+    amount: x.amount != null ? Number(x.amount) : null, person: x.person || null, priority: [1, 2, 3].includes(x.priority) ? x.priority : 3, confidence: x.confidence,
+  }));
+}
 async function classifyCapture(raw, lang) {
   const langName = lang === 'pt' ? 'Brazilian Portuguese' : 'US English';
-  const system = `You are the capture classifier for a personal life app. Convert the raw note into one or more items, splitting compound notes. Output ONLY a JSON array — no prose, no fences. Each item: {"type": one of [task,event,expense,meal,med,appointment,document,trip,flight,shopping,bill,note], "domain": one of [${DOMAINS.join(',')}], "title": short title in ${langName}, "date":"YYYY-MM-DD" or null, "time":"HH:MM" or null, "amount": number or null, "person": string or null, "priority":1|2|3, "confidence":0..1}. Today is ${todayISO()}. Resolve relative dates. If unsure, type "note", domain "personal".`;
+  const system = `You are the capture classifier for a personal life app. Convert the raw note into one or more items, splitting compound notes. Output ONLY a JSON array — no prose, no fences. Each item: {"type": one of [task,event,expense,meal,med,appointment,document,trip,flight,shopping,bill,note], "domain": one of [${DOMAINS.join(',')}], "title": short title in ${langName}, "date":"YYYY-MM-DD" or null, "time":"HH:MM" or null, "amount": number or null, "person": string or null, "priority":1|2|3, "confidence":0..1}. Today is ${todayISO()}. Resolve relative dates. IMPORTANT for "time": always extract the time of day when present, converting Brazilian formats to 24h HH:MM. Examples: "14h"→"14:00", "14hs"→"14:00", "às 14"→"14:00", "9h30"→"09:30", "14:30"→"14:30", "2 da tarde"→"14:00", "meio-dia"→"12:00", "8 da manhã"→"08:00". If an event/appointment/meeting has a time, it MUST be in the time field. If unsure, type "note", domain "personal".`;
   const text = await callClaude(system, [{ role: 'user', content: raw }]);
   let j = text; const a = text.indexOf('['), b = text.lastIndexOf(']'); if (a !== -1 && b !== -1) j = text.slice(a, b + 1);
   const arr = JSON.parse(j);
@@ -644,6 +661,11 @@ function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: L
     </div>
   );
 }
+function MouraBadge({ size = 16 }) {
+  return (
+    <span title="Moura (trabalho)" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 4, background: 'linear-gradient(135deg,#E30613,#B0050F)', color: '#fff', fontSize: size * 0.62, fontWeight: 800, fontFamily: "'Outfit', sans-serif", lineHeight: 1, flexShrink: 0 }}>M</span>
+  );
+}
 function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
   const overdue = item.type === 'task' && item.status !== 'done' && item.date && item.date < todayISO();
   const Ic = typeIcon(item.type); const mile = item.meta && item.meta.milestone;
@@ -661,7 +683,8 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
           {item.person && <span style={{ fontSize: 11.5, color: C.text3 }}>· {item.person}</span>}
           {item.meta && item.meta.attachments && item.meta.attachments.length > 0 && <Paperclip size={11} style={{ color: C.text3 }} />}
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
-          {item.meta && item.meta.external === 'google' && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
+          {item.meta && item.meta.moura && <MouraBadge />}
+          {item.meta && item.meta.external === 'google' && !((item.meta && item.meta.moura)) && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
           {item.meta && item.meta.external === 'ticktick' && <span style={{ fontSize: 10, color: C.green, border: `1px solid ${C.green}44`, borderRadius: 999, padding: '1px 7px' }}>TickTick</span>}
         </div>
       </div>
@@ -948,13 +971,28 @@ function DraftReview({ drafts, lang, t, onDone, onCancel }) {
 }
 function QuickCapture({ lang, t, addItems, flash }) {
   const [text, setText] = useState(''); const [loading, setLoading] = useState(false); const [drafts, setDrafts] = useState(null);
+  const fileRef = useRef();
   const run = async () => { if (!text.trim()) return; setLoading(true);
     try { setDrafts(await classifyCapture(text.trim(), lang)); } catch (e) { addItems([{ type: 'note', domain: 'personal', title: text.trim(), priority: 3, status: 'inbox' }]); flash(t('couldntParse')); setText(''); }
     setLoading(false); };
+  const pickImage = (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    setLoading(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const b64 = String(reader.result).split(',')[1];
+      try { const d = await classifyCaptureFile(b64, file.type, lang); setDrafts(d); }
+      catch (err) { flash(lang === 'pt' ? 'Não consegui ler a imagem.' : "Couldn't read image."); }
+      setLoading(false);
+    };
+    reader.readAsDataURL(file);
+  };
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ ...card, padding: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder={t('capturePh')} onKeyDown={(e) => { if (e.key === 'Enter') run(); }} style={{ ...inputStyle, background: 'transparent', border: 'none' }} />
+        <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={pickImage} style={{ display: 'none' }} />
+        <button onClick={() => fileRef.current && fileRef.current.click()} disabled={loading} title={lang === 'pt' ? 'Anexar imagem' : 'Attach image'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}><ImageIcon size={17} /></button>
         <Btn onClick={run} disabled={loading || !text.trim()} style={{ padding: '9px 13px' }}>{loading ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}</Btn>
       </div>
       {drafts && <DraftReview drafts={drafts} lang={lang} t={t} onDone={(arr, status) => { if (arr.length) addItems(arr.map((x) => ({ ...x, status }))); flash(arr.length + ' ✓'); setDrafts(null); setText(''); }} onCancel={() => setDrafts(null)} />}
@@ -1277,12 +1315,12 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Newspaper size={14} style={{ color: C.blue }} />{t('news')}</span>
         <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
           {[
-            { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', fg: '#fff', label: 'in' },
-            { name: 'X', url: 'https://x.com', bg: '#000', fg: '#fff', label: '𝕏' },
-            { name: 'Instagram', url: 'https://instagram.com', bg: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)', fg: '#fff', label: 'IG' },
-            { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', fg: '#fff', label: '♪' },
+            { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', svg: <svg viewBox="0 0 24 24" width="14" height="14" fill="#fff"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z" /></svg> },
+            { name: 'X', url: 'https://x.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="#fff"><path d="M18.9 1.2h3.7l-8 9.1L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9zM17.6 20.6h2L6.5 3.3H4.3z" /></svg> },
+            { name: 'Instagram', url: 'https://instagram.com', bg: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', svg: <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none" /></svg> },
+            { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="#fff"><path d="M16.6 5.82a4.28 4.28 0 01-1-2.66V3h-3.09v12.4a2.59 2.59 0 01-2.59 2.5 2.59 2.59 0 01-2.59-2.59 2.59 2.59 0 013.2-2.51V9.66a5.66 5.66 0 00-.61-.03A5.68 5.68 0 003.6 15.3a5.68 5.68 0 0011.36 0V8.99a7.31 7.31 0 004.28 1.37V7.27a4.28 4.28 0 01-2.64-1.45z" /></svg> },
           ].map((s) => (
-            <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 26, height: 26, borderRadius: 7, background: s.bg, color: s.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}`, boxShadow: _theme === 'light' ? 'none' : '0 0 0 1px rgba(255,255,255,0.12)' }}>{s.label}</a>
+            <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 27, height: 27, borderRadius: 7, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}`, boxShadow: _theme === 'light' ? 'none' : '0 0 0 1px rgba(255,255,255,0.1)' }}>{s.svg}</a>
           ))}
           <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5, marginLeft: 2 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
         </div>
@@ -1935,7 +1973,7 @@ function periodFilter(list, period) {
   const from = addDays(todayISO(), -30); return list.filter((i) => (i.date || '') >= from);
 }
 function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, flash, goReport }) {
-  const [hidden, setHidden] = useState(false); const [period, setPeriod] = useState('month'); const [adding, setAdding] = useState(null);
+  const [hidden, setHidden] = useState(false); const [period, setPeriod] = useState('month'); const [adding, setAdding] = useState(null); const [importing, setImporting] = useState(false);
   const accounts = items.filter((i) => i.type === 'account');
   const all = items.filter(isTx).filter((i) => acc ? (i.meta && i.meta.accountId === acc.id) : true);
   const tx = periodFilter(all, period).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -1965,11 +2003,13 @@ function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, fla
       <div style={{ display: 'flex', gap: 8, margin: '8px 0' }}>
         <Btn kind="soft" onClick={() => setAdding('expense')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Wallet size={14} />{t('addExpense')}</Btn>
         <Btn kind="soft" onClick={() => setAdding('income')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><TrendingUp size={14} />{t('addIncome')}</Btn>
-        {goReport && <Btn kind="soft" onClick={goReport} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Activity size={14} />{t('reports')}</Btn>}
       </div>
+      <Btn kind="soft" onClick={() => setImporting(true)} style={{ width: '100%', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', marginBottom: 8, color: C.accent }}><Upload size={14} />{lang === 'pt' ? 'Importar extrato desta conta' : 'Import statement'}</Btn>
+      {goReport && <Btn kind="soft" onClick={goReport} style={{ width: '100%', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center', marginBottom: 8 }}><Activity size={14} />{t('reports')}</Btn>}
       <SectionTitle icon={Wallet} label={t('statement')} color={km ? km.color : C.accent} />
       <Extrato tx={tx} accounts={accounts} lang={lang} t={t} onOpen={onOpen} />
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'finance', date: todayISO(), meta: { accountId: acc ? acc.id : null } }} allowedTypes={[adding]} lang={lang} t={t} people={people} accounts={accounts} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'finance', ...x }); flash(t('savedOne')); setAdding(null); }} />}
+      {importing && <StatementImport lang={lang} t={t} existing={items} onClose={() => setImporting(false)} onImport={(txs) => { txs.forEach((tx) => addItem({ type: tx.type, domain: 'finance', title: tx.description, amount: tx.amount, date: tx.date, meta: { fingerprint: tx.fingerprint, source: 'extrato', accountId: acc ? acc.id : null } })); flash((lang === 'pt' ? 'Importadas ' : 'Imported ') + txs.length); setImporting(false); }} />}
     </div>
   );
 }
@@ -2096,19 +2136,20 @@ function StatementImport({ lang, t, existing, onClose, onImport }) {
 
   const existingFps = new Set((existing || []).filter((i) => i.meta && i.meta.fingerprint).map((i) => i.meta.fingerprint));
 
+  const [fileMime, setFileMime] = useState('');
   const pickFile = (e) => {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
-    setFileName(file.name);
+    setFileName(file.name); setFileMime(file.type || '');
     const reader = new FileReader();
-    reader.onload = () => { const b64 = String(reader.result).split(',')[1]; setFileData(b64); process(b64, ''); };
+    reader.onload = () => { const b64 = String(reader.result).split(',')[1]; setFileData(b64); process(b64, '', file.type || '', file.name); };
     reader.readAsDataURL(file);
   };
 
-  const process = async (b64, pwd) => {
+  const process = async (b64, pwd, mime, filename) => {
     setStage('loading'); setErr('');
     try {
-      const r = await authFetch('/api/statement', { method: 'POST', body: JSON.stringify({ pdfBase64: b64, password: pwd }) });
+      const r = await authFetch('/api/statement', { method: 'POST', body: JSON.stringify({ fileBase64: b64, mime: mime || fileMime, filename: filename || fileName, password: pwd }) });
       const j = await r.json();
       if (j.needPassword || j.error === 'senha') { setStage('password'); return; }
       if (j.error) { setErr(j.error); setStage('error'); return; }
@@ -2134,10 +2175,10 @@ function StatementImport({ lang, t, existing, onClose, onImport }) {
         <div>
           <div style={{ ...card, padding: 18, textAlign: 'center', marginBottom: 12 }}>
             <FileText size={26} style={{ color: C.accent, marginBottom: 10 }} />
-            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: C.text2 }}>{pt ? 'Envie o PDF do seu extrato ou fatura. O Claude lê as transações e evita duplicatas automaticamente.' : 'Upload your statement PDF. Claude reads transactions and avoids duplicates.'}</div>
+            <div style={{ fontSize: 13.5, lineHeight: 1.5, color: C.text2 }}>{pt ? 'Envie o extrato ou fatura em PDF, imagem (foto), CSV ou Excel. O Claude lê as transações e evita duplicatas automaticamente.' : 'Upload your statement as PDF, image, CSV or Excel. Claude reads it and avoids duplicates.'}</div>
           </div>
-          <input ref={fileRef} type="file" accept="application/pdf" onChange={pickFile} style={{ display: 'none' }} />
-          <Btn onClick={() => fileRef.current && fileRef.current.click()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Upload size={16} />{pt ? 'Escolher PDF' : 'Choose PDF'}</Btn>
+          <input ref={fileRef} type="file" accept="application/pdf,image/*,.csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={pickFile} style={{ display: 'none' }} />
+          <Btn onClick={() => fileRef.current && fileRef.current.click()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Upload size={16} />{pt ? 'Escolher arquivo' : 'Choose file'}</Btn>
         </div>
       )}
 
@@ -2145,7 +2186,7 @@ function StatementImport({ lang, t, existing, onClose, onImport }) {
         <div>
           <div style={{ ...card, padding: 14, marginBottom: 12, fontSize: 13, color: C.text2, display: 'flex', gap: 9, alignItems: 'center' }}><Lock size={16} style={{ color: C.accent, flexShrink: 0 }} />{pt ? 'Este extrato tem senha. Digite para abrir (não guardamos a senha).' : 'This PDF is password-protected.'}</div>
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={pt ? 'Senha do PDF' : 'PDF password'} style={{ ...inputStyle, marginBottom: 10 }} />
-          <Btn onClick={() => process(fileData, password)} disabled={!password} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Check size={16} />{pt ? 'Abrir extrato' : 'Open'}</Btn>
+          <Btn onClick={() => process(fileData, password, fileMime, fileName)} disabled={!password} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Check size={16} />{pt ? 'Abrir extrato' : 'Open'}</Btn>
         </div>
       )}
 
@@ -2978,6 +3019,41 @@ function tuyaSwitchCode(status) {
   // prioridade: switch_led (lâmpadas), switch_1 (tomadas), switch, qualquer switch*
   return keys.find((k) => k === 'switch_led') || keys.find((k) => k === 'switch_1') || keys.find((k) => k === 'switch') || keys.find((k) => k.startsWith('switch')) || null;
 }
+function TuyaACCard({ device, nome, irId, t, lang, onOpen, remote, onCloseRemote, Ic }) {
+  const [temp, setTemp] = useState(23); const [power, setPower] = useState(false); const [busy, setBusy] = useState(false);
+  const sendAc = async (patch) => {
+    const next = { power, temp, mode: 'cold', wind: 'auto', ...patch };
+    setPower(next.power); setTemp(next.temp); setBusy(true);
+    try {
+      await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'ac', infrared_id: irId, remote_id: device.id, acCode: 'all', acValue: { power: next.power ? 1 : 0, mode: next.mode, temp: next.temp, wind: next.wind } }) });
+    } catch (e) {}
+    setBusy(false);
+  };
+  const online = device.online;
+  return (
+    <>
+      <div style={{ ...card, padding: 13, opacity: online ? 1 : 0.55 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: (power ? C.accent : C.surface2) + (power ? '22' : ''), display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: power ? C.accent : C.text3 }} /></div>
+          <button onClick={() => online && sendAc({ power: !power })} disabled={!online} style={{ width: 42, height: 25, borderRadius: 999, border: 'none', background: power ? C.green : C.surface2, position: 'relative', cursor: online ? 'pointer' : 'not-allowed', transition: 'background .2s' }}>
+            <span style={{ position: 'absolute', top: 3, left: power ? 20 : 3, width: 19, height: 19, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
+          </button>
+        </div>
+        <div onClick={onOpen} style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}>{nome}</div>
+        {power ? (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+            <button onClick={() => sendAc({ temp: Math.max(16, temp - 1) })} disabled={busy} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>−</button>
+            <div style={{ fontSize: 20, fontWeight: 800, color: C.accent }}>{temp}°</div>
+            <button onClick={() => sendAc({ temp: Math.min(30, temp + 1) })} disabled={busy} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>＋</button>
+          </div>
+        ) : (
+          <div onClick={onOpen} style={{ fontSize: 10.5, color: online ? C.text3 : C.rose, marginTop: 2, cursor: 'pointer' }}>{online ? t('openRemote') : t('offline')}</div>
+        )}
+      </div>
+      {remote && <TuyaRemote device={device} kind="ac" label={nome} irId={irId} t={t} lang={lang} onClose={onCloseRemote} />}
+    </>
+  );
+}
 function TuyaCard({ device, t, lang, onCmd, kind, label, irId }) {
   const [remote, setRemote] = useState(false); const [light, setLight] = useState(false);
   const irKind = kind === 'tv' || kind === 'stb' || kind === 'ac' || kind === 'receiver';
@@ -2989,6 +3065,9 @@ function TuyaCard({ device, t, lang, onCmd, kind, label, irId }) {
   const kindIcon = { light: Lightbulb, plug: Power, switch: Power, climate: Wind, ac: Wind, tv: Tv, stb: Tv, receiver: Radio };
   const Ic = kindIcon[kind] || Power;
   const nome = label || device.name;
+  if (kind === 'ac') {
+    return <TuyaACCard device={device} nome={nome} irId={irId} t={t} lang={lang} onOpen={() => setRemote(true)} remote={remote} onCloseRemote={() => setRemote(false)} Ic={Ic} />;
+  }
   if (irKind) {
     return (
       <>
