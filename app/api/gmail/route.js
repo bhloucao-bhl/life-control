@@ -60,8 +60,13 @@ export async function GET(req) {
   } catch (e) {}
 
   try {
+    // Busca 1: não lidos recentes (pessoais). Busca 2: label corporativa "(M) Moura Backup" (lidos/arquivados pela regra do Gmail).
     const q = encodeURIComponent('is:unread newer_than:1d');
-    const r = await fetch(`${G}/messages?q=${q}&maxResults=25`, { headers: h, cache: 'no-store' });
+    const qWork = encodeURIComponent('label:"(M) Moura Backup" newer_than:2d');
+    const [r, rWork] = await Promise.all([
+      fetch(`${G}/messages?q=${q}&maxResults=25`, { headers: h, cache: 'no-store' }),
+      fetch(`${G}/messages?q=${qWork}&maxResults=25`, { headers: h, cache: 'no-store' }),
+    ]);
     if (!r.ok) {
       const txt = await r.text();
       let detail = txt.slice(0, 400);
@@ -74,7 +79,11 @@ export async function GET(req) {
       throw new Error('HTTP ' + r.status + ' — ' + detail);
     }
     const j = await r.json();
-    const ids = (j.messages || []).map((m) => m.id);
+    let jWork = { messages: [] };
+    try { if (rWork.ok) jWork = await rWork.json(); } catch (e) {}
+    const workIds = new Set((jWork.messages || []).map((m) => m.id));
+    // mescla os IDs das duas buscas, sem duplicar
+    const ids = [...new Set([...(j.messages || []).map((m) => m.id), ...(jWork.messages || []).map((m) => m.id)])];
 
     const messages = (await Promise.all(ids.map(async (id) => {
       try {
@@ -98,6 +107,7 @@ export async function GET(req) {
           messageId: header(m.payload, 'Message-ID'),
           references: header(m.payload, 'References'),
           date: new Date(when).toISOString(),
+          work: workIds.has(id) || /^\s*\(m\)/i.test(header(m.payload, 'Subject') || ''),
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
