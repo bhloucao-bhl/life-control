@@ -50,20 +50,32 @@ export async function GET(req) {
       const startRaw = (e.start && (e.start.dateTime || e.start.date)) || null;
       if (!startRaw) return null;
       const hasTime = !!(e.start && e.start.dateTime);
-      const dt = new Date(startRaw);
       const title = e.summary || '(sem título)';
       const work = isWork || /^\s*\(m\)/i.test(title);
+      // extrai data e hora LOCAL direto da string do Google (que já vem com o offset correto, ex: 2026-08-06T14:00:00-03:00)
+      // NÃO usar new Date().toTimeString() porque o servidor (Vercel) roda em UTC e desloca o horário.
+      let dateStr, timeStr = null, durationMin = null;
+      if (hasTime) {
+        const m = startRaw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+        if (m) { dateStr = m[1]; timeStr = m[2] + ':' + m[3]; }
+        else { const dt = new Date(startRaw); dateStr = isoDay(dt); timeStr = dt.toISOString().slice(11, 16); }
+        // duração a partir do end
+        const endRaw = e.end && (e.end.dateTime || e.end.date);
+        if (endRaw) { try { const diff = (new Date(endRaw) - new Date(startRaw)) / 60000; if (diff > 0 && diff < 1440) durationMin = Math.round(diff); } catch (x) {} }
+      } else {
+        dateStr = startRaw.slice(0, 10);
+      }
       return {
         id: 'g_' + e.id,
         type: 'event',
         domain: work ? 'work' : 'personal',
         title,
-        date: hasTime ? isoDay(dt) : startRaw.slice(0, 10),
-        time: hasTime ? dt.toTimeString().slice(0, 5) : null,
+        date: dateStr,
+        time: timeStr,
         notes: [e.location, e.description].filter(Boolean).join('\n').slice(0, 1500) || null,
         status: 'planned',
         priority: 2,
-        meta: { external: 'google', link: e.htmlLink || null, location: e.location || null, work, moura: work },
+        meta: { external: 'google', link: e.htmlLink || null, location: e.location || null, work, moura: work, durationMin },
       };
     };
 
