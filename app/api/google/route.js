@@ -20,6 +20,8 @@ export async function GET(req) {
   const errors = [];
   let events = [];
   let messages = [];
+  let calendarsFound = [];
+  let calendarErr = null;
 
   // ---------- Google Agenda: primary + calendário "Moura" (trabalho) ----------
   try {
@@ -32,12 +34,13 @@ export async function GET(req) {
       const rl = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250', { headers: h, cache: 'no-store' });
       if (rl.ok) {
         const jl = await rl.json();
+        calendarsFound = (jl.items || []).map((c) => c.summaryOverride || c.summary).filter(Boolean);
         (jl.items || []).forEach((c) => {
           const name = (c.summary || '') + ' ' + (c.summaryOverride || '');
           if (/moura/i.test(name)) calIds.push({ id: c.id, work: true });
         });
-      }
-    } catch (e) {}
+      } else { calendarErr = 'calendarList HTTP ' + rl.status; }
+    } catch (e) { calendarErr = String(e.message || e); }
 
     const mapEvent = (e, isWork) => {
       const startRaw = (e.start && (e.start.dateTime || e.start.date)) || null;
@@ -116,7 +119,7 @@ export async function GET(req) {
     errors.push(String(e.message || e));
   }
 
-  return Response.json({ connected: true, events, messages, errors }, {
+  return Response.json({ connected: true, events, messages, errors, calendarsFound, calendarErr }, {
     headers: { 'Cache-Control': 'no-store' },
   });
 }
