@@ -177,10 +177,10 @@ const THEMES = {
     teal: '#6ECDCD', sky: '#8FCFF7',
   },
   light: {
-    bg: '#F4F4F7', bg2: '#FFFFFF', surface: '#FFFFFF', surface2: '#EEEEF3',
-    border: '#DADAE2', borderSoft: '#E7E7EE',
-    text: '#1A1A22', text2: '#54546A', text3: '#8A8A99',
-    accent: '#C8912E', accentSoft: 'rgba(200,145,46,0.14)',
+    bg: '#EEEFF3', bg2: '#FFFFFF', surface: '#FFFFFF', surface2: '#F2F3F7',
+    border: '#C8CAD4', borderSoft: '#D6D8E0',
+    text: '#1A1A22', text2: '#4A4A5E', text3: '#7C7C8C',
+    accent: '#B87E1E', accentSoft: 'rgba(184,126,30,0.12)',
     rose: '#D6484D', green: '#1F9D63', blue: '#2C79D6', violet: '#6B57E0',
     teal: '#1F9D9D', sky: '#2C90D6',
   },
@@ -472,7 +472,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v44 · 02ago';
+const APP_VERSION = 'v45 · 02ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -549,8 +549,23 @@ function buildContext(items) {
 }
 
 /* ---------------- primitives ---------------- */
-const card = { background: C.surface, border: `1px solid ${C.borderSoft}`, borderRadius: 16, boxShadow: '0 1px 0 rgba(255,255,255,0.03) inset' };
-const inputStyle = { width: '100%', background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 10, color: C.text, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
+const card = new Proxy({}, { get: (_, k) => {
+  const t = THEMES[_theme] || THEMES.dark;
+  if (k === 'background') return t.surface;
+  if (k === 'border') return `1px solid ${t.borderSoft}`;
+  if (k === 'borderRadius') return 16;
+  if (k === 'boxShadow') return _theme === 'light' ? '0 1px 3px rgba(0,0,0,0.06)' : '0 1px 0 rgba(255,255,255,0.03) inset';
+  return undefined;
+}, ownKeys: () => ['background', 'border', 'borderRadius', 'boxShadow'], getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
+const inputStyle = new Proxy({}, { get: (_, k) => {
+  const t = THEMES[_theme] || THEMES.dark;
+  const base = { width: '100%', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
+  if (k in base) return base[k];
+  if (k === 'background') return t.bg2;
+  if (k === 'border') return `1px solid ${t.border}`;
+  if (k === 'color') return t.text;
+  return undefined;
+}, ownKeys: () => ['width', 'background', 'border', 'borderRadius', 'color', 'padding', 'fontSize', 'outline', 'boxSizing'], getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
 const inputStyleBig = { ...inputStyle, padding: '14px 15px', fontSize: 16, borderRadius: 12 };
 function haptic(ms = 8) {
   try { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
@@ -1258,19 +1273,19 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <ChevronRight size={16} style={{ color: C.text3 }} />
         </div>
       ))}
-      <div style={{ display: 'flex', justifycontent: 'center', gap: 10, margin: '4px 0 2px', justifyContent: 'center' }}>
-        {[
-          { name: 'X', url: 'https://x.com', bg: '#000', fg: '#fff', label: '𝕏' },
-          { name: 'Instagram', url: 'https://instagram.com', bg: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)', fg: '#fff', label: 'IG' },
-          { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', fg: '#fff', label: '♪' },
-          { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', fg: '#fff', label: 'in' },
-        ].map((s) => (
-          <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 30, height: 30, borderRadius: 8, background: s.bg, color: s.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, textDecoration: 'none', flexShrink: 0 }}>{s.label}</a>
-        ))}
-      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Newspaper size={14} style={{ color: C.blue }} />{t('news')}</span>
-        <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}{lang === 'pt' ? 'Atualizar' : 'Refresh'}</button>
+        <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
+          {[
+            { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', fg: '#fff', label: 'in' },
+            { name: 'X', url: 'https://x.com', bg: '#000', fg: '#fff', label: '𝕏' },
+            { name: 'Instagram', url: 'https://instagram.com', bg: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)', fg: '#fff', label: 'IG' },
+            { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', fg: '#fff', label: '♪' },
+          ].map((s) => (
+            <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 26, height: 26, borderRadius: 7, background: s.bg, color: s.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11.5, fontWeight: 800, textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}`, boxShadow: _theme === 'light' ? 'none' : '0 0 0 1px rgba(255,255,255,0.12)' }}>{s.label}</a>
+          ))}
+          <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5, marginLeft: 2 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
+        </div>
       </div>
       <div style={{ ...card, overflow: 'hidden' }}>
         {news === null ? (
@@ -3005,7 +3020,7 @@ function TuyaCard({ device, t, lang, onCmd, kind, label, irId }) {
           {device.online ? (sw ? (on ? t('on') : t('off')) : (temp != null ? temp + '°' : '—')) : t('offline')}
           {bright != null && device.online ? ` · ${Math.round((bright / 1000) * 100)}%` : ''}
         </div>
-        {kind === 'light' && device.online && on && <button onClick={() => setLight(true)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', padding: 2 }}><Sparkles size={14} /></button>}
+        {kind === 'light' && device.online && on && <button onClick={() => setLight(true)} style={{ background: C.accentSoft, border: 'none', color: C.accent, cursor: 'pointer', padding: '3px 9px', borderRadius: 999, display: 'flex', gap: 4, alignItems: 'center', fontSize: 10.5, fontWeight: 600 }}><Sparkles size={12} />{lang === 'pt' ? 'Cores' : 'Colors'}</button>}
       </div>
       {kind === 'light' && light && <TuyaLight device={device} label={nome} t={t} onCmd={onCmd} onClose={() => setLight(false)} />}
     </div>
@@ -4086,7 +4101,7 @@ function App() {
       <div style={{ height: refreshing ? 44 : pull, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: pullRef.current.active ? 'none' : 'height .2s', color: C.text3 }}>
         {(refreshing || pull > 10) && <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12 }}><RefreshCw size={15} className={refreshing ? 'spin' : ''} style={{ transform: refreshing ? 'none' : `rotate(${pull * 4}deg)` }} />{refreshing ? t('refreshing') : (pull > 55 ? t('releaseRefresh') : t('pullRefresh'))}</div>}
       </div>
-      <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:#16161E}`}</style>
+      <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:${_theme === 'light' ? '#FFFFFF' : '#16161E'};color:${_theme === 'light' ? '#1A1A22' : '#ECECEF'}}`}</style>
       <div style={{ padding: '16px 18px 8px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life in Control</div>
         <div style={{ display: 'flex', gap: 6 }}>
@@ -4116,7 +4131,7 @@ function App() {
         </div>
       )}
 
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: 'rgba(11,11,15,.9)', backdropFilter: 'blur(12px)', borderTop: `1px solid ${C.borderSoft}`, zIndex: 20 }}>
+      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: _theme === 'light' ? 'rgba(255,255,255,.92)' : 'rgba(11,11,15,.9)', backdropFilter: 'blur(12px)', borderTop: `1px solid ${C.borderSoft}`, zIndex: 20 }}>
         <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', justifyContent: 'space-around', padding: '9px 4px 12px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
           {dock.map((k) => {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
