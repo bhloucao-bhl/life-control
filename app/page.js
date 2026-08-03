@@ -487,7 +487,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v47 · 03ago';
+const APP_VERSION = 'v48 · 03ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -778,9 +778,9 @@ function PhotoCropper({ src, onCancel, onSave }) {
           <img ref={imgRef} src={src} alt="" draggable={false} style={{ position: 'absolute', left: '50%', top: '50%', transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px)) scale(${scale})`, minWidth: '100%', minHeight: '100%', width: 'auto', height: 'auto', objectFit: 'cover', userSelect: 'none' }} />
         </div>
       </div>
-      <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>Zoom</div>
-      <input type="range" min="1" max="3" step="0.02" value={scale} onChange={(e) => setScale(Number(e.target.value))} style={{ width: '100%', accentColor: C.accent, marginBottom: 6 }} />
-      <div style={{ fontSize: 11, color: C.text3, marginBottom: 16, textAlign: 'center' }}>Arraste a foto para centralizar e use o zoom.</div>
+      <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}><span>Zoom</span><span style={{ color: C.text3 }}>{Math.round(scale * 100)}%</span></div>
+      <input type="range" min="0.5" max="3" step="0.02" value={scale} onChange={(e) => setScale(Number(e.target.value))} style={{ width: '100%', accentColor: C.accent, marginBottom: 6 }} />
+      <div style={{ fontSize: 11, color: C.text3, marginBottom: 16, textAlign: 'center' }}>Arraste para centralizar. Diminua o zoom para caber mais, aumente para focar.</div>
       <div style={{ display: 'flex', gap: 8 }}>
         <Btn kind="ghost" onClick={onCancel} style={{ flex: 1 }}>Cancelar</Btn>
         <Btn onClick={doSave} style={{ flex: 1.4 }}>Salvar foto</Btn>
@@ -1749,9 +1749,9 @@ function DashboardScreen({ items, lang, t, open, gmailCount, goNews, order, setO
         <button onClick={() => setEditing((v) => !v)} style={{ ...card, padding: '7px 11px', color: editing ? C.accent : C.text2, cursor: 'pointer', fontSize: 12, display: 'flex', gap: 5, alignItems: 'center' }}>{editing ? <><Check size={13} />{lang === 'pt' ? 'Pronto' : 'Done'}</> : <><Pencil size={13} />{lang === 'pt' ? 'Ordenar' : 'Reorder'}</>}</button>
       </div>
       {/* Card de Noticias em destaque */}
-      <button onClick={goNews} style={{ ...card, padding: 15, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, width: '100%', marginBottom: 10, border: `1px solid ${C.blue}33` }}>
+      <button onClick={goNews} style={{ ...card, padding: 15, textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12, width: '100%', marginBottom: 10, border: `1px solid ${C.blue}33`, color: C.text }}>
         <div style={{ width: 38, height: 38, borderRadius: 10, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Newspaper size={19} style={{ color: C.blue }} /></div>
-        <div style={{ flex: 1 }}><div style={{ fontSize: 14.5, fontWeight: 600 }}>{t('news')}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Curadoria do seu interesse' : 'Curated for you'}</div></div>
+        <div style={{ flex: 1 }}><div style={{ fontSize: 14.5, fontWeight: 600, color: C.text }}>{t('news')}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Curadoria do seu interesse' : 'Curated for you'}</div></div>
         <ChevronRight size={18} style={{ color: C.text3 }} />
       </button>
       <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr' : '1fr 1fr', gap: 10 }}>
@@ -1971,25 +1971,46 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
         ? <div style={{ ...card, padding: 26, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={15} className="spin" />…</div>
         : state.messages.length === 0
           ? <Empty icon={Mail} text={state.connected ? t('gmailEmpty') : t('nothingHere')} />
-          : state.messages.map((m) => (
-            <SwipeRow key={m.id}
-              onRight={() => { haptic(15); act(m.id, 'trash'); flash(lang === 'pt' ? 'Movido para lixeira' : 'Trashed'); }}
-              rightLabel={lang === 'pt' ? 'Excluir' : 'Delete'} rightColor={C.rose} rightIcon={Trash2}
-              onLeft={() => { haptic(15); act(m.id, 'read'); flash(lang === 'pt' ? 'Marcado como lido' : 'Marked read'); }}
-              leftLabel={lang === 'pt' ? 'Marcar como lida' : 'Mark read'} leftColor={C.blue} leftIcon={CheckCheck}>
-              <div onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
-                <div style={{ width: 34, height: 34, borderRadius: 10, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: C.blue }}>{initials(m.sender)}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sender}</span>
-                    <span style={{ fontSize: 10.5, color: C.text3, flexShrink: 0 }}>{m.date.slice(11, 16)}</span>
+          : (() => {
+            const isMoura = (m) => /^\s*\(m\)/i.test(m.subject || '');
+            const work = state.messages.filter(isMoura);
+            const personal = state.messages.filter((m) => !isMoura(m));
+            const renderMsg = (m) => (
+              <SwipeRow key={m.id}
+                onRight={() => { haptic(15); act(m.id, 'trash'); flash(lang === 'pt' ? 'Movido para lixeira' : 'Trashed'); }}
+                rightLabel={lang === 'pt' ? 'Excluir' : 'Delete'} rightColor={C.rose} rightIcon={Trash2}
+                onLeft={() => { haptic(15); act(m.id, 'read'); flash(lang === 'pt' ? 'Marcado como lido' : 'Marked read'); }}
+                leftLabel={lang === 'pt' ? 'Marcar como lida' : 'Mark read'} leftColor={C.blue} leftIcon={CheckCheck}>
+                <div onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: (isMoura(m) ? C.accent : C.blue) + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: isMoura(m) ? C.accent : C.blue }}>{initials(m.sender)}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>{isMoura(m) && <MouraBadge size={14} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.sender}</span></span>
+                      <span style={{ fontSize: 10.5, color: C.text3, flexShrink: 0 }}>{m.date.slice(11, 16)}</span>
+                    </div>
+                    <div style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isMoura(m) ? (m.subject || '').replace(/^\s*\(m\)\s*/i, '') : m.subject}</div>
+                    <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet}</div>
                   </div>
-                  <div style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</div>
-                  <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet}</div>
                 </div>
-              </div>
-            </SwipeRow>
-          ))}
+              </SwipeRow>
+            );
+            return (
+              <>
+                {work.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', margin: '4px 2px 8px' }}><MouraBadge size={15} /><span style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>{lang === 'pt' ? 'Corporativo' : 'Work'}</span><span style={{ fontSize: 11, color: C.text3 }}>· {work.length}</span></div>
+                    {work.map(renderMsg)}
+                  </>
+                )}
+                {personal.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', margin: (work.length > 0 ? '18px' : '4px') + ' 2px 8px' }}><Mail size={14} style={{ color: C.blue }} /><span style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>{lang === 'pt' ? 'Pessoal' : 'Personal'}</span><span style={{ fontSize: 11, color: C.text3 }}>· {personal.length}</span></div>
+                    {personal.map(renderMsg)}
+                  </>
+                )}
+              </>
+            );
+          })()}
       {composing && <GmailCompose lang={lang} t={t} onClose={() => setComposing(false)} />}
       {current && <GmailThread m={current} lang={lang} t={t} onClose={() => setSel(null)} onAction={act} onReplied={(id) => setState((p) => ({ ...p, messages: p.messages.filter((x) => x.id !== id) }))} />}
     </div>
@@ -2080,7 +2101,7 @@ function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, fla
       <SectionTitle icon={Wallet} label={t('statement')} color={km ? km.color : C.accent} />
       <Extrato tx={tx} accounts={accounts} lang={lang} t={t} onOpen={onOpen} />
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'finance', date: todayISO(), meta: { accountId: acc ? acc.id : null } }} allowedTypes={[adding]} lang={lang} t={t} people={people} accounts={accounts} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'finance', ...x }); flash(t('savedOne')); setAdding(null); }} />}
-      {importing && <StatementImport lang={lang} t={t} existing={items} onClose={() => setImporting(false)} onImport={(txs) => { txs.forEach((tx) => addItem({ type: tx.type, domain: 'finance', title: tx.description, amount: tx.amount, date: tx.date, meta: { fingerprint: tx.fingerprint, source: 'extrato', accountId: acc ? acc.id : null } })); flash((lang === 'pt' ? 'Importadas ' : 'Imported ') + txs.length); setImporting(false); }} />}
+      {importing && <StatementImport lang={lang} t={t} existing={items} accounts={items.filter((i) => i.type === 'account')} fixedAccountId={acc ? acc.id : null} onClose={() => setImporting(false)} onImport={(txs, accId) => { txs.forEach((tx) => addItem({ type: tx.type, domain: 'finance', title: tx.description, amount: tx.amount, date: tx.date, meta: { fingerprint: tx.fingerprint, source: 'extrato', accountId: accId || (acc ? acc.id : null) } })); flash((lang === 'pt' ? 'Importadas ' : 'Imported ') + txs.length); setImporting(false); }} />}
     </div>
   );
 }
@@ -2197,11 +2218,12 @@ function FinanceAssistant({ items, lang, t, back }) {
     </div>
   );
 }
-function StatementImport({ lang, t, existing, onClose, onImport }) {
+function StatementImport({ lang, t, existing, accounts, fixedAccountId, onClose, onImport }) {
   const [stage, setStage] = useState('pick'); // pick | password | loading | review | error
   const [fileData, setFileData] = useState(null); const [fileName, setFileName] = useState('');
   const [password, setPassword] = useState(''); const [err, setErr] = useState('');
   const [txs, setTxs] = useState([]); const [account, setAccount] = useState(null);
+  const [linkAccount, setLinkAccount] = useState(fixedAccountId || '');
   const fileRef = useRef();
   const pt = lang === 'pt';
 
@@ -2274,7 +2296,16 @@ function StatementImport({ lang, t, existing, onClose, onImport }) {
 
       {stage === 'review' && (
         <div>
-          {account && <div style={{ fontSize: 12, color: C.text3, marginBottom: 8 }}>{pt ? 'Conta identificada' : 'Account'}: {account}</div>}
+          {account && <div style={{ fontSize: 12, color: C.text3, marginBottom: 8 }}>{pt ? 'Conta identificada no extrato' : 'Account'}: {account}</div>}
+          {!fixedAccountId && accounts && accounts.length > 0 && (
+            <div style={{ ...card, padding: 12, marginBottom: 10 }}>
+              <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 7, fontWeight: 600 }}>{pt ? 'Vincular estas transações à conta:' : 'Link to account:'}</div>
+              <select value={linkAccount} onChange={(e) => setLinkAccount(e.target.value)} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+                <option value="">{pt ? '— Sem conta (avulsas) —' : '— None —'}</option>
+                {accounts.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+              </select>
+            </div>
+          )}
           <div style={{ ...card, padding: 12, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: 12.5, color: C.text2 }}>{pt ? 'Novas transações' : 'New'}: <b style={{ color: C.text }}>{txs.length}</b></span>
             <span style={{ fontSize: 11.5, color: C.green }}>{pt ? 'Duplicatas já filtradas ✓' : 'Duplicates filtered ✓'}</span>
@@ -2292,7 +2323,7 @@ function StatementImport({ lang, t, existing, onClose, onImport }) {
               ))}
             </div>
           )}
-          {toImport.length > 0 && <Btn onClick={() => onImport(toImport)} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Download size={16} />{pt ? `Importar ${toImport.length} transações` : `Import ${toImport.length}`}</Btn>}
+          {toImport.length > 0 && <Btn onClick={() => onImport(toImport, linkAccount || null)} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Download size={16} />{pt ? `Importar ${toImport.length} transações` : `Import ${toImport.length}`}</Btn>}
         </div>
       )}
     </Modal>
@@ -2375,7 +2406,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
       ); })}
       <Btn kind="soft" onClick={() => setAdding('account')} style={{ width: '100%', marginTop: 4, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={15} />{t('addAccount')}</Btn>
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'finance', meta: adding === 'account' ? { kind: 'checking' } : {} }} allowedTypes={[adding]} lang={lang} t={t} people={people} accounts={accounts} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'finance', ...x }); flash(t('savedOne')); setAdding(null); }} />}
-      {importing && <StatementImport lang={lang} t={t} existing={items} onClose={() => setImporting(false)} onImport={(txs) => { txs.forEach((tx) => addItem({ type: tx.type, domain: 'finance', title: tx.description, amount: tx.amount, date: tx.date, meta: { fingerprint: tx.fingerprint, source: 'extrato' } })); flash((lang === 'pt' ? 'Importadas ' : 'Imported ') + txs.length); setImporting(false); }} />}
+      {importing && <StatementImport lang={lang} t={t} existing={items} accounts={accounts} onClose={() => setImporting(false)} onImport={(txs, accId) => { txs.forEach((tx) => addItem({ type: tx.type, domain: 'finance', title: tx.description, amount: tx.amount, date: tx.date, meta: { fingerprint: tx.fingerprint, source: 'extrato', accountId: accId || null } })); flash((lang === 'pt' ? 'Importadas ' : 'Imported ') + txs.length); setImporting(false); }} />}
     </div>
   );
 }
@@ -3967,7 +3998,7 @@ function Connections({ lang, t }) {
             </div>
             {(d.calendarsFound || []).length > 0 && <div>{lang === 'pt' ? 'Agendas visíveis: ' : 'Calendars: '}{(d.calendarsFound || []).join(', ')}</div>}
             <div style={{ marginTop: 2 }}>{lang === 'pt' ? 'Eventos carregados: ' : 'Events loaded: '}{d.count}</div>
-            {d.calendarErr && <div style={{ color: C.rose, marginTop: 2 }}>{d.calendarErr}</div>}
+            {d.calendarErr && <div style={{ color: C.rose, marginTop: 3 }}>{d.calendarErr}{/403/.test(d.calendarErr) ? (lang === 'pt' ? ' — Reconecte o Google abaixo (Desconectar e Conectar de novo) para renovar as permissões.' : ' — Reconnect Google to refresh permissions.') : ''}</div>}
           </div>
         );
       })()}
@@ -4303,6 +4334,24 @@ function App() {
           {dock.map((k) => {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
             const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
+            if (k === 'dashboard') {
+              return (
+                <div key={k}>
+                  <button onClick={() => navTo(k)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
+                    <Ic size={19} />{navLabel(k, t)}
+                  </button>
+                  <div style={{ marginLeft: 12, marginTop: 2, borderLeft: `1px solid ${C.borderSoft}`, paddingLeft: 6 }}>
+                    {MODULES.map((mo) => {
+                      const on = active.screen === 'dashboard' && active.module && active.module.key === mo.key;
+                      const MIc = mo.icon;
+                      return <button key={mo.key} onClick={() => setActive({ screen: 'dashboard', module: mo })} style={{ background: on ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: on ? C.accent : C.text3, display: 'flex', alignItems: 'center', gap: 9, padding: '7px 11px', borderRadius: 9, fontSize: 12.5, fontWeight: on ? 600 : 400, width: '100%', textAlign: 'left' }}>
+                        <MIc size={15} />{t(mo.key)}
+                      </button>;
+                    })}
+                  </div>
+                </div>
+              );
+            }
             return <button key={k} onClick={() => navTo(k)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
               <Ic size={19} />{navLabel(k, t)}
             </button>;
