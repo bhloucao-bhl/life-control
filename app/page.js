@@ -163,7 +163,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Upload
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -257,7 +257,7 @@ const S = {
   emailBody: L('Mensagem', 'Message'), sendingE: L('Enviando…', 'Sending…'), saveError: L('Erro ao salvar. Tente de novo.', 'Save failed. Try again.'),
   externalItem: L('Item externo — edite no app de origem.', 'External item — edit in the source app.'),
   openThere: L('Abrir no app de origem', 'Open in source app'),
-  onlyCommitments: L('Compromissos', 'Commitments'), everything: L('Tudo', 'Everything'),
+  onlyCommitments: L('Só reuniões', 'Meetings only'), everything: L('Tudo', 'Everything'),
   exams: L('Últimos exames', 'Recent exams'), support: L('Suporte (carteirinhas, vacinação)', 'Support (cards, vaccination)'),
   myKids: L('Minha prole', 'My kids'),
   company: L('Empresa', 'Company'), address: L('Endereço', 'Address'), contact: L('Contato', 'Contact'),
@@ -487,7 +487,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v48 · 03ago';
+const APP_VERSION = 'v49 · 03ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -755,18 +755,25 @@ function PhotoCropper({ src, onCancel, onSave }) {
   const onUp = () => { drag.current = null; };
   const doSave = () => {
     const img = imgRef.current; if (!img) return;
+    if (!img.naturalWidth || !img.complete) { setTimeout(doSave, 100); return; } // espera a imagem carregar
     const out = 320;
     const canvas = document.createElement('canvas'); canvas.width = out; canvas.height = out;
     const ctx = canvas.getContext('2d');
+    // fundo (caso a foto não cubra tudo com zoom-out)
+    ctx.fillStyle = '#1A1A25'; ctx.fillRect(0, 0, out, out);
+    ctx.save();
     ctx.beginPath(); ctx.arc(out / 2, out / 2, out / 2, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
-    // relação entre a caixa de preview (BOX) e a saída
     const k = out / BOX;
     const iw = img.naturalWidth, ih = img.naturalHeight;
     const base = Math.max(BOX / iw, BOX / ih); // cover
     const drawW = iw * base * scale * k, drawH = ih * base * scale * k;
     const cx = out / 2 + pos.x * k, cy = out / 2 + pos.y * k;
     ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
-    onSave(canvas.toDataURL('image/jpeg', 0.9));
+    ctx.restore();
+    try {
+      const url = canvas.toDataURL('image/jpeg', 0.9);
+      if (url && url.length > 100) onSave(url); else onSave(src); // fallback: imagem original
+    } catch (e) { onSave(src); }
   };
   return (
     <Modal onClose={onCancel}>
@@ -1666,7 +1673,66 @@ function MiniCalendar({ items, lang, t, toggleTask, onOpen }) {
         </div>
       </div>
       <div style={{ fontSize: 13.5, fontWeight: 600, margin: '4px 2px 10px', textTransform: 'capitalize', color: sel === today ? C.accent : C.text }}>{sel === today ? t('home') : fmtLong(sel, lang)}</div>
-      {dayItems.length === 0 ? <Empty icon={CalIcon} text={t('noItemsDay')} /> : dayItems.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {mode === 'week' ? <DayPlanner dayItems={dayItems} lang={lang} t={t} onOpen={onOpen} /> : (dayItems.length === 0 ? <Empty icon={CalIcon} text={t('noItemsDay')} /> : dayItems.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />))}
+    </div>
+  );
+}
+function eventColors(i) {
+  const work = i.domain === 'work' || (i.meta && i.meta.moura);
+  if (work) return { bg: _theme === 'light' ? '#FBEFD0' : 'rgba(245,194,99,0.16)', border: C.accent, text: _theme === 'light' ? '#5A4410' : C.accent };
+  const map = { personal: C.blue, kids: C.violet, health: C.green, home: C.teal };
+  const col = map[i.domain] || C.text2;
+  return { bg: col + (_theme === 'light' ? '20' : '1e'), border: col, text: col };
+}
+function teamsLink(notes) {
+  if (!notes) return null;
+  const m = String(notes).match(/https:\/\/teams\.microsoft\.com\/[^\s)>\]"']+/i);
+  return m ? m[0] : null;
+}
+function DayPlanner({ dayItems, lang, t, onOpen }) {
+  const timed = dayItems.filter((i) => i.time && /^\d{2}:\d{2}/.test(i.time));
+  const allDay = dayItems.filter((i) => !i.time || !/^\d{2}:\d{2}/.test(i.time));
+  const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+  const dur = (i) => (i.meta && i.meta.durationMin) || (i.type === 'event' || i.type === 'appointment' ? 60 : 30);
+  // detecta conflitos (sobreposição)
+  const withConf = timed.map((i) => ({ ...i, _s: toMin(i.time), _e: toMin(i.time) + dur(i) }));
+  withConf.forEach((a) => { a._conf = withConf.some((b) => b.id !== a.id && a._s < b._e && b._s < a._e); });
+  if (timed.length === 0 && allDay.length === 0) return <Empty icon={CalIcon} text={t('noItemsDay')} />;
+  const startH = Math.max(0, Math.min(...withConf.map((i) => Math.floor(i._s / 60)), 8));
+  const endH = Math.min(24, Math.max(...withConf.map((i) => Math.ceil(i._e / 60)), 19));
+  const hours = []; for (let h = startH; h <= endH; h++) hours.push(h);
+  const PX = 52; // altura por hora
+  return (
+    <div>
+      {allDay.length > 0 && <div style={{ marginBottom: 10 }}>{allDay.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={() => {}} onOpen={onOpen} />)}</div>}
+      {timed.length > 0 && (
+        <div style={{ ...card, padding: '8px 8px 8px 0', position: 'relative' }}>
+          <div style={{ position: 'relative', height: (endH - startH + 1) * PX }}>
+            {hours.map((h, idx) => (
+              <div key={h} style={{ position: 'absolute', top: idx * PX, left: 0, right: 0, height: PX, borderTop: `1px solid ${C.borderSoft}`, display: 'flex' }}>
+                <span style={{ fontSize: 10, color: C.text3, width: 42, textAlign: 'right', paddingRight: 8, marginTop: -6 }}>{pad2(h)}:00</span>
+              </div>
+            ))}
+            {withConf.map((i) => {
+              const top = ((i._s - startH * 60) / 60) * PX;
+              const height = Math.max(24, (dur(i) / 60) * PX - 3);
+              const col = eventColors(i);
+              const link = teamsLink(i.notes);
+              const isWork = i.domain === 'work' || (i.meta && i.meta.moura);
+              return (
+                <div key={i.id} onClick={() => onOpen(i)} style={{ position: 'absolute', top, height, left: i._conf ? '55%' : 50, right: 6, background: col.bg, borderLeft: `3px solid ${col.border}`, borderRadius: 8, padding: '5px 8px', cursor: 'pointer', overflow: 'hidden' }}>
+                  <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+                    {isWork && <MouraBadge size={12} />}
+                    <span style={{ fontSize: 11.5, fontWeight: 600, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span>
+                    {link && <Video size={11} style={{ color: col.text, flexShrink: 0 }} />}
+                  </div>
+                  <div style={{ fontSize: 10, color: col.text, opacity: 0.8 }}>{i.time}{i._conf ? ' · ⚠' : ''}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1711,11 +1777,12 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
           {cells.map((iso, idx) => {
             if (!iso) return <div key={idx} />;
-            const list = onDay(iso); const n = list.length; const hasMile = list.some((i) => i.meta && i.meta.milestone); const isToday = iso === today, isSel = iso === sel;
+            const list = onDay(iso); const n = list.length; const isToday = iso === today, isSel = iso === sel;
+            const pinColor = (i) => (i.domain === 'work' || (i.meta && i.meta.moura)) ? C.accent : (i.domain === 'personal' ? C.blue : i.domain === 'kids' ? C.violet : i.domain === 'health' ? C.green : C.text2);
             return (
               <button key={idx} onClick={() => setSel(iso)} style={{ aspectRatio: '1', border: isSel ? `1px solid ${C.accent}` : '1px solid transparent', background: isSel ? C.accentSoft : isToday ? C.surface2 : 'transparent', borderRadius: 9, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: 2 }}>
                 <span style={{ fontSize: 13, color: isToday ? C.accent : C.text, fontWeight: isToday ? 700 : 400 }}>{Number(iso.slice(-2))}</span>
-                {n > 0 && <div style={{ display: 'flex', gap: 2 }}>{Array.from({ length: Math.min(n, 3) }).map((_, k) => <span key={k} style={{ width: 4, height: 4, borderRadius: 999, background: hasMile ? C.accent : C.text2 }} />)}</div>}
+                {n > 0 && <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center', maxWidth: 30 }}>{list.slice(0, 4).map((it, k) => <span key={k} style={{ width: 4, height: 4, borderRadius: 999, background: pinColor(it) }} />)}</div>}
               </button>
             );
           })}
@@ -1948,6 +2015,8 @@ function GmailCompose({ lang, t, onClose, initial }) {
 function GmailScreen({ module, lang, t, back, state, setState, load }) {
   const [composing, setComposing] = useState(false);
   const [sel, setSel] = useState(null);
+  const [gfilter, setGfilter] = useState('all'); // all | work | personal
+  const [showAll, setShowAll] = useState(false);
   const act = async (id, action) => {
     setState((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== id) }));
     try { await authFetch('/api/gmail', { method: 'POST', body: JSON.stringify({ id, action }) }); } catch (e) {}
@@ -1967,14 +2036,19 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
       </div>
       {!state.loading && !state.connected && <HintCard icon={Mail} text={t('gmailConnect')} />}
       {state.error && <HintCard icon={AlertTriangle} text={state.error} />}
+      {state.connected && state.messages.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+          <Chip active={gfilter === 'all'} onClick={() => { setGfilter('all'); setShowAll(false); }}>{lang === 'pt' ? 'Todos' : 'All'}</Chip>
+          <Chip active={gfilter === 'work'} onClick={() => { setGfilter('work'); setShowAll(true); }} color={C.accent}>{lang === 'pt' ? 'Trabalho' : 'Work'}</Chip>
+          <Chip active={gfilter === 'personal'} onClick={() => { setGfilter('personal'); setShowAll(true); }} color={C.blue}>{lang === 'pt' ? 'Pessoal' : 'Personal'}</Chip>
+        </div>
+      )}
       {state.loading
         ? <div style={{ ...card, padding: 26, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={15} className="spin" />…</div>
         : state.messages.length === 0
           ? <Empty icon={Mail} text={state.connected ? t('gmailEmpty') : t('nothingHere')} />
           : (() => {
             const isMoura = (m) => /^\s*\(m\)/i.test(m.subject || '');
-            const work = state.messages.filter(isMoura);
-            const personal = state.messages.filter((m) => !isMoura(m));
             const renderMsg = (m) => (
               <SwipeRow key={m.id}
                 onRight={() => { haptic(15); act(m.id, 'trash'); flash(lang === 'pt' ? 'Movido para lixeira' : 'Trashed'); }}
@@ -1984,9 +2058,9 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
                 <div onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
                   <div style={{ width: 34, height: 34, borderRadius: 10, background: (isMoura(m) ? C.accent : C.blue) + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: isMoura(m) ? C.accent : C.blue }}>{initials(m.sender)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center', minWidth: 0 }}>{isMoura(m) && <MouraBadge size={14} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.sender}</span></span>
-                      <span style={{ fontSize: 10.5, color: C.text3, flexShrink: 0 }}>{m.date.slice(11, 16)}</span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
+                      <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{m.sender}</span>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>{isMoura(m) && <MouraBadge size={14} />}<span style={{ fontSize: 10.5, color: C.text3 }}>{m.date.slice(11, 16)}</span></div>
                     </div>
                     <div style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isMoura(m) ? (m.subject || '').replace(/^\s*\(m\)\s*/i, '') : m.subject}</div>
                     <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet}</div>
@@ -1994,18 +2068,28 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
                 </div>
               </SwipeRow>
             );
+            const work = state.messages.filter(isMoura);
+            const personal = state.messages.filter((m) => !isMoura(m));
+            const LIM = 5;
+
+            if (gfilter === 'work') return <>{work.length === 0 ? <Empty icon={Mail} text={lang === 'pt' ? 'Sem e-mails de trabalho.' : 'No work emails.'} /> : work.map(renderMsg)}</>;
+            if (gfilter === 'personal') return <>{personal.length === 0 ? <Empty icon={Mail} text={lang === 'pt' ? 'Sem e-mails pessoais.' : 'No personal emails.'} /> : personal.map(renderMsg)}</>;
+
+            // 'all': 5 de cada seção com "ver mais"
             return (
               <>
                 {work.length > 0 && (
                   <>
                     <div style={{ display: 'flex', gap: 7, alignItems: 'center', margin: '4px 2px 8px' }}><MouraBadge size={15} /><span style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>{lang === 'pt' ? 'Corporativo' : 'Work'}</span><span style={{ fontSize: 11, color: C.text3 }}>· {work.length}</span></div>
-                    {work.map(renderMsg)}
+                    {work.slice(0, LIM).map(renderMsg)}
+                    {work.length > LIM && <button onClick={() => { setGfilter('work'); }} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12.5, padding: '6px 2px 12px', display: 'flex', alignItems: 'center', gap: 4 }}>{lang === 'pt' ? `Ver todos os ${work.length} de trabalho` : `See all ${work.length}`}<ChevronRight size={14} /></button>}
                   </>
                 )}
                 {personal.length > 0 && (
                   <>
                     <div style={{ display: 'flex', gap: 7, alignItems: 'center', margin: (work.length > 0 ? '18px' : '4px') + ' 2px 8px' }}><Mail size={14} style={{ color: C.blue }} /><span style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>{lang === 'pt' ? 'Pessoal' : 'Personal'}</span><span style={{ fontSize: 11, color: C.text3 }}>· {personal.length}</span></div>
-                    {personal.map(renderMsg)}
+                    {personal.slice(0, LIM).map(renderMsg)}
+                    {personal.length > LIM && <button onClick={() => { setGfilter('personal'); }} style={{ background: 'none', border: 'none', color: C.blue, cursor: 'pointer', fontSize: 12.5, padding: '6px 2px 12px', display: 'flex', alignItems: 'center', gap: 4 }}>{lang === 'pt' ? `Ver todos os ${personal.length} pessoais` : `See all ${personal.length}`}<ChevronRight size={14} /></button>}
                   </>
                 )}
               </>
@@ -2064,10 +2148,11 @@ function periodFilter(list, period) {
   if (period === 'month') { const m = todayISO().slice(0, 7); return list.filter((i) => (i.date || '').startsWith(m)); }
   const from = addDays(todayISO(), -30); return list.filter((i) => (i.date || '') >= from);
 }
-function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, flash, goReport }) {
+function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, updateItem, flash, goReport }) {
   const [hidden, setHidden] = useState(false); const [period, setPeriod] = useState('month'); const [adding, setAdding] = useState(null); const [importing, setImporting] = useState(false);
   const accounts = items.filter((i) => i.type === 'account');
   const all = items.filter(isTx).filter((i) => acc ? (i.meta && i.meta.accountId === acc.id) : true);
+  const orphans = acc ? items.filter(isTx).filter((i) => !i.meta || !i.meta.accountId) : [];
   const tx = periodFilter(all, period).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const income = tx.filter(isCredit).reduce((a, b) => a + (Number(b.amount) || 0), 0);
   const outflow = tx.filter(isDebit).reduce((a, b) => a + (Number(b.amount) || 0), 0);
@@ -2096,6 +2181,9 @@ function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, fla
         <Btn kind="soft" onClick={() => setAdding('expense')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Wallet size={14} />{t('addExpense')}</Btn>
         <Btn kind="soft" onClick={() => setAdding('income')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><TrendingUp size={14} />{t('addIncome')}</Btn>
       </div>
+      {acc && orphans.length > 0 && (
+        <Btn kind="soft" onClick={() => { if (confirm(lang === 'pt' ? `Vincular ${orphans.length} transação(ões) sem conta a "${acc.title}"?` : `Link ${orphans.length} transactions to this account?`)) { orphans.forEach((o) => updateItem(o.id, { meta: { ...(o.meta || {}), accountId: acc.id } })); flash(lang === 'pt' ? 'Vinculadas ✓' : 'Linked ✓'); } }} style={{ width: '100%', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', marginBottom: 8, color: C.accent }}><LinkIcon size={14} />{lang === 'pt' ? `Vincular ${orphans.length} transação(ões) avulsas a esta conta` : `Link ${orphans.length} orphan transactions`}</Btn>
+      )}
       <Btn kind="soft" onClick={() => setImporting(true)} style={{ width: '100%', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', marginBottom: 8, color: C.accent }}><Upload size={14} />{lang === 'pt' ? 'Importar extrato desta conta' : 'Import statement'}</Btn>
       {goReport && <Btn kind="soft" onClick={goReport} style={{ width: '100%', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center', marginBottom: 8 }}><Activity size={14} />{t('reports')}</Btn>}
       <SectionTitle icon={Wallet} label={t('statement')} color={km ? km.color : C.accent} />
@@ -2330,7 +2418,7 @@ function StatementImport({ lang, t, existing, accounts, fixedAccountId, onClose,
   );
 }
 
-function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash }) {
+function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, flash }) {
   const [sub, setSub] = useState({ v: 'home' }); const [adding, setAdding] = useState(null); const [hidden, setHidden] = useState(true); const [importing, setImporting] = useState(false);
   useEffect(() => {
     if (typeof window !== 'undefined' && window.__lccOpenAccount) {
@@ -2339,7 +2427,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
     }
   }, []);
   const accounts = items.filter((i) => i.type === 'account');
-  if (sub.v === 'account') { const acc = sub.id ? items.find((i) => i.id === sub.id) : null; return <AccountDetail acc={acc} items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} onOpen={onOpen} addItem={addItem} flash={flash} goReport={() => setSub({ v: 'reports' })} />; }
+  if (sub.v === 'account') { const acc = sub.id ? items.find((i) => i.id === sub.id) : null; return <AccountDetail acc={acc} items={items} people={people} lang={lang} t={t} back={() => setSub({ v: "home" })} onOpen={onOpen} addItem={addItem} updateItem={updateItem} flash={flash} goReport={() => setSub({ v: "reports" })} />; }
   if (sub.v === 'reports') return <ReportsScreen items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
   if (sub.v === 'assistant') return <FinanceAssistant items={items} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
   const month = todayISO().slice(0, 7);
@@ -3832,6 +3920,15 @@ function ItemView({ item, lang, t, onAct }) {
       )}
       {actions.length > 0 && <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>{actions.map((a, i) => <Btn key={i} kind={a.primary ? 'primary' : 'soft'} onClick={a.on} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><a.icon size={15} />{a.label}</Btn>)}</div>}
       {rows.length > 0 && <div style={{ ...card, padding: 4, marginBottom: 12 }}>{rows.map(([l, v], i) => <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '9px 12px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none' }}><span style={{ fontSize: 12.5, color: C.text3 }}>{l}</span><span style={{ fontSize: 13, textAlign: 'right' }}>{v}</span></div>)}</div>}
+      {(() => {
+        const tl = teamsLink(item.notes) || (mt.link && /teams\.microsoft\.com/.test(mt.link) ? mt.link : null);
+        if (!tl) return null;
+        return <a href={tl} target="_blank" rel="noreferrer" style={{ ...card, padding: '13px 16px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 11, textDecoration: 'none', background: 'linear-gradient(135deg, #5059C9, #4B53BC)', border: 'none' }}>
+          <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(255,255,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Video size={18} style={{ color: '#fff' }} /></div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{lang === 'pt' ? 'Entrar na reunião' : 'Join meeting'}</div><div style={{ fontSize: 11.5, color: 'rgba(255,255,255,0.85)' }}>Microsoft Teams</div></div>
+          <ChevronRight size={18} style={{ color: '#fff' }} />
+        </a>;
+      })()}
       {item.notes && <div style={{ ...card, padding: 14, marginBottom: 12, fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{item.notes}</div>}
       {atts.length > 0 && <><div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>{t('attachments')}</div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{atts.map((a) => <AttachThumb key={a.id} att={a} />)}</div></>}
       {mt.isExam && <ExamAnalysis item={item} lang={lang} t={t} onAct={onAct} />}
@@ -4149,6 +4246,7 @@ const SEED_SETTINGS = { health: { [todayISO()]: { readiness: 82, sleep: 76 } }, 
 function App() {
   const [ready, setReady] = useState(false);
   const [wide, setWide] = useState(false);
+  const [sideDash, setSideDash] = useState(false);
   useEffect(() => {
     const check = () => setWide(typeof window !== 'undefined' && window.innerWidth >= 900);
     check(); window.addEventListener('resize', check);
@@ -4337,18 +4435,20 @@ function App() {
             if (k === 'dashboard') {
               return (
                 <div key={k}>
-                  <button onClick={() => navTo(k)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
-                    <Ic size={19} />{navLabel(k, t)}
+                  <button onClick={() => setSideDash((v) => !v)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
+                    <Ic size={19} />{navLabel(k, t)}<ChevronRight size={15} style={{ marginLeft: 'auto', transform: sideDash ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
                   </button>
-                  <div style={{ marginLeft: 12, marginTop: 2, borderLeft: `1px solid ${C.borderSoft}`, paddingLeft: 6 }}>
-                    {MODULES.map((mo) => {
-                      const on = active.screen === 'dashboard' && active.module && active.module.key === mo.key;
-                      const MIc = mo.icon;
-                      return <button key={mo.key} onClick={() => setActive({ screen: 'dashboard', module: mo })} style={{ background: on ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: on ? C.accent : C.text3, display: 'flex', alignItems: 'center', gap: 9, padding: '7px 11px', borderRadius: 9, fontSize: 12.5, fontWeight: on ? 600 : 400, width: '100%', textAlign: 'left' }}>
-                        <MIc size={15} />{t(mo.key)}
-                      </button>;
-                    })}
-                  </div>
+                  {sideDash && (
+                    <div style={{ marginLeft: 12, marginTop: 2, borderLeft: `1px solid ${C.borderSoft}`, paddingLeft: 6 }}>
+                      {MODULES.map((mo) => {
+                        const on = active.screen === 'dashboard' && active.module && active.module.key === mo.key;
+                        const MIc = mo.icon;
+                        return <button key={mo.key} onClick={() => setActive({ screen: 'dashboard', module: mo })} style={{ background: on ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: on ? C.accent : C.text3, display: 'flex', alignItems: 'center', gap: 9, padding: '7px 11px', borderRadius: 9, fontSize: 12.5, fontWeight: on ? 600 : 400, width: '100%', textAlign: 'left' }}>
+                          <MIc size={15} />{t(mo.key)}
+                        </button>;
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             }
