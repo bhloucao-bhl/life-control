@@ -430,6 +430,13 @@ function catOf(i) { return CATEGORIES[deriveCat(i)]; }
 const isDebit = (i) => i.type === 'expense' || i.type === 'bill' || i.type === 'maintenance';
 const isCredit = (i) => i.type === 'income';
 const isTx = (i) => isDebit(i) || isCredit(i);
+// saldo calculado: saldo base (digitado ao criar a conta) + soma das transações vinculadas à conta
+function accountBalance(acc, items) {
+  const base = Number(acc.meta && acc.meta.balance) || 0;
+  const txs = items.filter(isTx).filter((i) => i.meta && i.meta.accountId === acc.id);
+  const delta = txs.reduce((sum, t) => sum + (isCredit(t) ? 1 : -1) * (Number(t.amount) || 0), 0);
+  return base + delta;
+}
 const monthOf = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - n); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; };
 const WD = { pt: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
 const isMilestoneType = (ty) => ['event', 'appointment', 'trip', 'flight', 'note'].includes(ty);
@@ -487,7 +494,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v49 · 03ago';
+const APP_VERSION = 'v50 · 03ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -749,31 +756,29 @@ function Attachments({ list, lang, t, onAdd, onRemove }) {
 /* ---------------- photo avatar ---------------- */
 function PhotoCropper({ src, onCancel, onSave }) {
   const [scale, setScale] = useState(1); const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [nat, setNat] = useState({ w: 0, h: 0 });
   const drag = useRef(null); const imgRef = useRef(null); const BOX = 240;
   const onDown = (e) => { const p = e.touches ? e.touches[0] : e; drag.current = { sx: p.clientX, sy: p.clientY, ox: pos.x, oy: pos.y }; };
   const onMove = (e) => { if (!drag.current) return; const p = e.touches ? e.touches[0] : e; setPos({ x: drag.current.ox + (p.clientX - drag.current.sx), y: drag.current.oy + (p.clientY - drag.current.sy) }); };
   const onUp = () => { drag.current = null; };
+  // dimensão "cover" base (a imagem preenche o círculo em scale=1)
+  const base = nat.w && nat.h ? Math.max(BOX / nat.w, BOX / nat.h) : 1;
+  const dispW = nat.w * base * scale, dispH = nat.h * base * scale;
   const doSave = () => {
-    const img = imgRef.current; if (!img) return;
-    if (!img.naturalWidth || !img.complete) { setTimeout(doSave, 100); return; } // espera a imagem carregar
-    const out = 320;
+    const img = imgRef.current; if (!img || !nat.w) { setTimeout(doSave, 100); return; }
+    const out = 320; const k = out / BOX;
     const canvas = document.createElement('canvas'); canvas.width = out; canvas.height = out;
     const ctx = canvas.getContext('2d');
-    // fundo (caso a foto não cubra tudo com zoom-out)
     ctx.fillStyle = '#1A1A25'; ctx.fillRect(0, 0, out, out);
     ctx.save();
     ctx.beginPath(); ctx.arc(out / 2, out / 2, out / 2, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
-    const k = out / BOX;
-    const iw = img.naturalWidth, ih = img.naturalHeight;
-    const base = Math.max(BOX / iw, BOX / ih); // cover
-    const drawW = iw * base * scale * k, drawH = ih * base * scale * k;
+    // replica exatamente a preview: imagem centrada + deslocada por pos, dimensão dispW/dispH
+    const drawW = dispW * k, drawH = dispH * k;
     const cx = out / 2 + pos.x * k, cy = out / 2 + pos.y * k;
     ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
     ctx.restore();
-    try {
-      const url = canvas.toDataURL('image/jpeg', 0.9);
-      if (url && url.length > 100) onSave(url); else onSave(src); // fallback: imagem original
-    } catch (e) { onSave(src); }
+    try { const url = canvas.toDataURL('image/jpeg', 0.9); onSave(url && url.length > 100 ? url : src); }
+    catch (e) { onSave(src); }
   };
   return (
     <Modal onClose={onCancel}>
@@ -782,7 +787,7 @@ function PhotoCropper({ src, onCancel, onSave }) {
         <div style={{ width: BOX, height: BOX, borderRadius: 999, overflow: 'hidden', position: 'relative', background: '#000', touchAction: 'none', cursor: 'grab', border: `2px solid ${C.accent}` }}
           onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
           onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}>
-          <img ref={imgRef} src={src} alt="" draggable={false} style={{ position: 'absolute', left: '50%', top: '50%', transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px)) scale(${scale})`, minWidth: '100%', minHeight: '100%', width: 'auto', height: 'auto', objectFit: 'cover', userSelect: 'none' }} />
+          <img ref={imgRef} src={src} alt="" draggable={false} onLoad={(e) => setNat({ w: e.target.naturalWidth, h: e.target.naturalHeight })} style={{ position: 'absolute', left: '50%', top: '50%', transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px))`, width: dispW || '100%', height: dispH || '100%', maxWidth: 'none', userSelect: 'none' }} />
         </div>
       </div>
       <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6, display: 'flex', justifyContent: 'space-between' }}><span>Zoom</span><span style={{ color: C.text3 }}>{Math.round(scale * 100)}%</span></div>
@@ -1369,7 +1374,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         <CompactScore label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => !ouraOn && setLogOpen(true)} />
         {(() => {
           const acc = (todayAccountId && items.find((i) => i.id === todayAccountId && i.type === 'account')) || items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
-          const val = acc && acc.meta ? acc.meta.balance : null;
+          const val = acc ? accountBalance(acc, items) : null;
           const nome = acc ? acc.title.replace(/\s*-.*$/, '').slice(0, 10) : 'Alelo';
           return (
             <button onClick={() => acc ? openAccount(acc.id) : goModule('finance')} style={{ ...card, flex: 1, padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -1856,6 +1861,7 @@ function ModuleHeader({ module, t, back }) {
 const TASK_FILTERS = [['fAll', (i) => i.status !== 'done'], ['fWork', (i) => i.domain === 'work' && i.status !== 'done'], ['fPersonal', (i) => !['work', 'home', 'kids'].includes(i.domain) && i.status !== 'done'], ['fHouse', (i) => i.domain === 'home' && i.status !== 'done'], ['fKids', (i) => i.domain === 'kids' && i.status !== 'done'], ['fDone', (i) => i.status === 'done']];
 function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick }) {
   const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0); const [toTick, setToTick] = useState(true);
+  const [workFilter, setWorkFilter] = useState('all'); // para aba trabalho: all | events | tasks
   const [grace, setGrace] = useState({}); // id -> true: recem concluida, ainda visivel por 5s
   const graceToggle = (id) => {
     const it = items.find((x) => x.id === id) || {};
@@ -1869,7 +1875,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     }
   };
   const base = items.filter(module.filter);
-  const list = (module.key === 'tasks' ? base.filter((i) => TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list = (module.key === 'tasks' ? base.filter((i) => TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
   if (module.key === 'docs') { const soon = items.filter((i) => i.type === 'document' && i.date && i.date <= addDays(todayISO(), 60)).length; hi = { label: `${t('expiring')} (60d)`, value: String(soon), color: soon ? C.rose : C.text2 }; }
   else if (module.key === 'tasks') hi = { label: t('open'), value: String(items.filter((i) => i.type === 'task' && i.status !== 'done').length), color: C.accent };
@@ -1883,6 +1889,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       )}
       {module.key === 'tasks' && !ttConnected && <HintCard icon={RefreshCw} text={t('tickHint')} />}
       {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
+      {module.key === 'work' && <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}><Chip active={workFilter === 'all'} onClick={() => setWorkFilter('all')}>{lang === 'pt' ? 'Tudo' : 'All'}</Chip><Chip active={workFilter === 'events'} onClick={() => setWorkFilter('events')} color={C.accent}>{lang === 'pt' ? 'Reuniões' : 'Meetings'}</Chip><Chip active={workFilter === 'tasks'} onClick={() => setWorkFilter('tasks')} color={C.blue}>{lang === 'pt' ? 'Tarefas' : 'Tasks'}</Chip></div>}
       {hi && <div style={{ ...card, padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{hi.label}</span><span style={{ fontSize: 22, fontWeight: 600, color: hi.color }}>{hi.value}</span></div>}
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
       {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={module.key === 'tasks' ? graceToggle : toggleTask} onOpen={onOpen} />)}
@@ -2048,7 +2055,7 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
         : state.messages.length === 0
           ? <Empty icon={Mail} text={state.connected ? t('gmailEmpty') : t('nothingHere')} />
           : (() => {
-            const isMoura = (m) => /^\s*\(m\)/i.test(m.subject || '');
+            const isMoura = (m) => m.work || /^\s*\(m\)/i.test(m.subject || '');
             const renderMsg = (m) => (
               <SwipeRow key={m.id}
                 onRight={() => { haptic(15); act(m.id, 'trash'); flash(lang === 'pt' ? 'Movido para lixeira' : 'Trashed'); }}
@@ -2165,8 +2172,8 @@ function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, upd
           <div style={{ display: 'flex', gap: 9, alignItems: 'center' }}>{km && <km.icon size={17} style={{ color: km.color }} />}<span style={{ fontSize: 13.5, fontWeight: 600 }}>{acc ? acc.title : t('statement')}</span></div>
           <button onClick={() => setHidden((h) => !h)} title={t('hideBalance')} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer' }}>{hidden ? '👁' : '••'}</button>
         </div>
-        <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-.02em' }}>{acc ? amountStr(Number(acc.meta && acc.meta.balance) || 0, lang, hidden) : amountStr(income - outflow, lang, hidden)}</div>
-        <div style={{ fontSize: 11.5, color: C.text3, marginTop: 3 }}>{acc ? (acc.meta && acc.meta.institution || t('balance')) : t('statement')}</div>
+        <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-.02em' }}>{acc ? amountStr(accountBalance(acc, items), lang, hidden) : amountStr(income - outflow, lang, hidden)}</div>
+        <div style={{ fontSize: 11.5, color: C.text3, marginTop: 3 }}>{acc ? (acc.meta && acc.meta.institution || t('balance')) : t('statement')}{acc && (acc.meta && acc.meta.balance != null) ? ` · ${lang === 'pt' ? 'base' : 'base'} ${amountStr(Number(acc.meta.balance) || 0, lang, hidden)}` : ''}</div>
       </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
         <MiniStat label={t('incomeL')} value={amountStr(income, lang, hidden)} color={C.green} small />
@@ -2430,11 +2437,12 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
   if (sub.v === 'account') { const acc = sub.id ? items.find((i) => i.id === sub.id) : null; return <AccountDetail acc={acc} items={items} people={people} lang={lang} t={t} back={() => setSub({ v: "home" })} onOpen={onOpen} addItem={addItem} updateItem={updateItem} flash={flash} goReport={() => setSub({ v: "reports" })} />; }
   if (sub.v === 'reports') return <ReportsScreen items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
   if (sub.v === 'assistant') return <FinanceAssistant items={items} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
+  const [finPeriod, setFinPeriod] = useState('all');
   const month = todayISO().slice(0, 7);
-  const inAccounts = accounts.filter((a) => (a.meta && a.meta.kind) !== 'credit').reduce((s, a) => s + (Number(a.meta && a.meta.balance) || 0), 0);
+  const inAccounts = accounts.filter((a) => (a.meta && a.meta.kind) !== 'credit').reduce((s, a) => s + accountBalance(a, items), 0);
   const invested = accounts.filter((a) => a.meta && a.meta.kind === 'investment').reduce((s, a) => s + (Number(a.meta.balance) || 0), 0);
   const creditOwed = accounts.filter((a) => a.meta && a.meta.kind === 'credit').reduce((s, a) => s + (Number(a.meta.balance) || 0), 0);
-  const monthTx = items.filter(isTx).filter((i) => (i.date || '').startsWith(month));
+  const monthTx = items.filter(isTx).filter((i) => finPeriod === 'all' ? true : (i.date || '').startsWith(month));
   const income = monthTx.filter(isCredit).reduce((a, b) => a + (Number(b.amount) || 0), 0);
   const outflow = monthTx.filter(isDebit).reduce((a, b) => a + (Number(b.amount) || 0), 0);
   const byCat = {}; monthTx.filter(isDebit).forEach((i) => { const k = deriveCat(i); byCat[k] = (byCat[k] || 0) + (Number(i.amount) || 0); });
@@ -2458,9 +2466,13 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         {SHORT.map((s) => <button key={s.k} onClick={s.on} style={{ ...card, flex: 1, padding: '12px 4px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><s.icon size={19} style={{ color: C.accent }} /><span style={{ fontSize: 11 }}>{t(s.k)}</span></button>)}
       </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, justifyContent: 'flex-end' }}>
+        <Chip active={finPeriod === 'month'} onClick={() => setFinPeriod('month')}>{t('thisMonth')}</Chip>
+        <Chip active={finPeriod === 'all'} onClick={() => setFinPeriod('all')}>{lang === 'pt' ? 'Tudo' : 'All'}</Chip>
+      </div>
       <div style={{ display: 'flex', gap: 10, marginBottom: 6 }}>
-        <MiniStat label={`${t('incomeL')} · ${t('thisMonth')}`} value={amountStr(income, lang, hidden)} color={C.green} small />
-        <MiniStat label={`${t('outflow')} · ${t('thisMonth')}`} value={amountStr(outflow, lang, hidden)} color={C.rose} small />
+        <MiniStat label={`${t('incomeL')} · ${finPeriod === 'all' ? (lang === 'pt' ? 'tudo' : 'all') : t('thisMonth')}`} value={amountStr(income, lang, hidden)} color={C.green} small />
+        <MiniStat label={`${t('outflow')} · ${finPeriod === 'all' ? (lang === 'pt' ? 'tudo' : 'all') : t('thisMonth')}`} value={amountStr(outflow, lang, hidden)} color={C.rose} small />
       </div>
       {bills.length > 0 && <><SectionTitle icon={Clock} label={t('upcomingBills')} color={C.accent} />{bills.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} hideAmount={hidden} />)}</>}
       {catRows.length > 0 && (
@@ -2489,7 +2501,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
         <div key={a.id} onClick={() => setSub({ v: 'account', id: a.id })} style={{ ...card, padding: '13px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
           <div style={{ width: 36, height: 36, borderRadius: 10, background: km.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><km.icon size={17} style={{ color: km.color }} /></div>
           <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{a.title}</div><div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{ACCOUNT_KINDS.find(([kk]) => kk === (a.meta && a.meta.kind || 'checking'))[lang === 'pt' ? 1 : 2]}</div></div>
-          <span style={{ fontSize: 15, fontWeight: 700, color: (a.meta && a.meta.kind) === 'credit' ? C.rose : C.text }}>{amountStr(Number(a.meta && a.meta.balance) || 0, lang, hidden)}</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: (a.meta && a.meta.kind) === 'credit' ? C.rose : C.text }}>{amountStr(accountBalance(a, items), lang, hidden)}</span>
         </div>
       ); })}
       <Btn kind="soft" onClick={() => setAdding('account')} style={{ width: '100%', marginTop: 4, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={15} />{t('addAccount')}</Btn>
@@ -4083,22 +4095,6 @@ function Connections({ lang, t }) {
     <div style={{ marginBottom: 14 }}>
       <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
       <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
-      {(() => {
-        const d = typeof window !== 'undefined' && window.__lccGoogleDiag;
-        if (!d || !d.connected) return null;
-        const hasMoura = (d.calendarsFound || []).some((n) => /moura/i.test(n));
-        return (
-          <div style={{ ...card, padding: '10px 13px', marginBottom: 8, marginTop: -2, fontSize: 11, color: C.text3, lineHeight: 1.5 }}>
-            <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: hasMoura ? C.green : C.accent, marginBottom: 3 }}>
-              {hasMoura ? <Check size={12} /> : <AlertTriangle size={12} />}
-              {hasMoura ? (lang === 'pt' ? 'Calendário Moura encontrado' : 'Moura calendar found') : (lang === 'pt' ? 'Calendário "Moura" não encontrado' : 'Moura calendar not found')}
-            </div>
-            {(d.calendarsFound || []).length > 0 && <div>{lang === 'pt' ? 'Agendas visíveis: ' : 'Calendars: '}{(d.calendarsFound || []).join(', ')}</div>}
-            <div style={{ marginTop: 2 }}>{lang === 'pt' ? 'Eventos carregados: ' : 'Events loaded: '}{d.count}</div>
-            {d.calendarErr && <div style={{ color: C.rose, marginTop: 3 }}>{d.calendarErr}{/403/.test(d.calendarErr) ? (lang === 'pt' ? ' — Reconecte o Google abaixo (Desconectar e Conectar de novo) para renovar as permissões.' : ' — Reconnect Google to refresh permissions.') : ''}</div>}
-          </div>
-        );
-      })()}
       <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
     </div>
   );
