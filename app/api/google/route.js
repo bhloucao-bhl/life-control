@@ -39,7 +39,11 @@ export async function GET(req) {
           const name = (c.summary || '') + ' ' + (c.summaryOverride || '');
           if (/moura/i.test(name)) calIds.push({ id: c.id, work: true });
         });
-      } else { calendarErr = 'calendarList HTTP ' + rl.status; }
+      } else {
+        let detail = '';
+        try { const eb = await rl.json(); detail = (eb.error && (eb.error.message || eb.error.status)) || ''; } catch (e) {}
+        calendarErr = 'calendarList HTTP ' + rl.status + (detail ? ' — ' + detail : '');
+      }
     } catch (e) { calendarErr = String(e.message || e); }
 
     const mapEvent = (e, isWork) => {
