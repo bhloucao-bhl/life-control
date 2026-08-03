@@ -183,7 +183,7 @@ const S = {
   capturePh: L('O que precisa entrar? Uma tarefa, gasto, evento, ideia…', 'What needs to go in? A task, expense, event, idea…'),
   interpret: L('Interpretar', 'Interpret'), thinking: L('Pensando…', 'Thinking…'), save: L('Salvar', 'Save'), confirm: L('Confirmar', 'Confirm'),
   toInbox: L('Guardar', 'Save'), discard: L('Descartar', 'Discard'), cancel: L('Cancelar', 'Cancel'),
-  delete: L('Excluir', 'Delete'), edit: L('Editar', 'Edit'), resolve: L('Resolver', 'Resolve'),
+  delete: L('Excluir', 'Delete'), edit: L('Editar', 'Edit'), resolve: L('Buscar', 'Search'),
   attention: L('Precisa da sua atenção', 'Needs your attention'), todayPlan: L('O que vai rolar hoje', "Today's plan"),
   longTerm: L('Longo prazo', 'Long term'), nothingToday: L('Nenhum compromisso à frente hoje.', 'Nothing left today.'),
   noAttention: L('Nada urgente agora.', 'Nothing urgent right now.'), noLongTerm: L('Nada marcado à frente.', 'Nothing ahead yet.'),
@@ -439,7 +439,7 @@ const DEFAULT_DOCK = ['home', 'messages', 'calendar', 'dashboard', 'claude'];
 function navIcon(k) { return SCREEN_ICONS[k] || (moduleByKey(k) ? moduleByKey(k).icon : Circle); }
 function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
 const TUYA_SEED = {
-  'ebd25cb250d51d988bfmgd': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'plug' },
+  'eb2a4a8b85c2a8deadb1g8': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'plug' },
   'ebce584d586201f762d4ag': { show: true, alias: 'Subwoofer', room: 'Home-office', kind: 'plug' },
   'ebbc591b7da959062dm9im': { show: true, alias: 'TV Suíte', room: 'Suíte', kind: 'tv', ir: '534436288caab546bacb' },
   'eb35a5d8aab7cb6a92jpzr': { show: true, alias: 'Vivo Suíte', room: 'Suíte', kind: 'stb', ir: '534436288caab546bacb' },
@@ -452,7 +452,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v42 · 02ago';
+const APP_VERSION = 'v43 · 02ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -579,6 +579,36 @@ function HintCard({ icon: Icon, text }) {
 function typeIcon(type) {
   const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift };
   return m[type] || FileText;
+}
+function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: LI, rightLabel, rightColor, rightIcon: RI }) {
+  const [dx, setDx] = useState(0);
+  const start = useRef(null);
+  const onStart = (e) => { start.current = e.touches[0].clientX; };
+  const onMove = (e) => {
+    if (start.current == null) return;
+    const d = e.touches[0].clientX - start.current;
+    // limita e só permite direção com ação definida
+    let nd = d;
+    if (d > 0 && !onRight) nd = 0;
+    if (d < 0 && !onLeft) nd = 0;
+    setDx(Math.max(-96, Math.min(96, nd)));
+  };
+  const onEnd = () => {
+    if (dx <= -60 && onLeft) onLeft();
+    else if (dx >= 60 && onRight) onRight();
+    setDx(0); start.current = null;
+  };
+  return (
+    <div style={{ position: 'relative', marginBottom: 8, borderRadius: 14, overflow: 'hidden' }}>
+      {/* fundo esquerdo (revelado ao arrastar p/ esquerda) */}
+      {onLeft && <div style={{ position: 'absolute', inset: 0, background: leftColor || C.rose, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 20, gap: 6, color: '#fff', fontSize: 12.5, fontWeight: 600 }}>{LI && <LI size={16} />}{leftLabel}</div>}
+      {/* fundo direito (revelado ao arrastar p/ direita) */}
+      {onRight && <div style={{ position: 'absolute', inset: 0, background: rightColor || C.green, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 20, gap: 6, color: '#fff', fontSize: 12.5, fontWeight: 600 }}>{RI && <RI size={16} />}{rightLabel}</div>}
+      <div onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} style={{ transform: `translateX(${dx}px)`, transition: start.current == null ? 'transform .2s ease' : 'none' }}>
+        {children}
+      </div>
+    </div>
+  );
 }
 function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
   const overdue = item.type === 'task' && item.status !== 'done' && item.date && item.date < todayISO();
@@ -720,7 +750,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{t('flightCode')}</div>
           <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}><input value={fcode} onChange={(e) => setFcode(e.target.value)} placeholder="LA 3414" style={inputStyle} /><Btn kind="soft" onClick={doResolve} disabled={resolving} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{resolving ? <Loader2 size={14} className="spin" /> : <Search size={14} />}{t('resolve')}</Btn></div>
           <div style={{ fontSize: 10.5, color: C.text3, marginBottom: 4 }}>{lang === 'pt' ? 'Data do voo (melhora a busca da aeronave e horário)' : 'Flight date'}</div>
-          <input type="date" value={f.date || ''} onChange={(e) => up({ date: e.target.value })} style={{ ...inputStyle, colorScheme: 'dark' }} />
+          <input type="date" value={f.date || ''} onChange={(e) => up({ date: e.target.value })} style={{ ...inputStyle, colorScheme: 'dark', width: '100%', maxWidth: '100%', boxSizing: 'border-box', WebkitAppearance: 'none' }} />
           {resolveMsg && <div style={{ fontSize: 11.5, color: resolveMsg.startsWith('✓') ? C.green : C.text3, marginTop: 7 }}>{resolveMsg}</div>}
           {f.meta.aircraft && <div style={{ fontSize: 12, color: C.text2, marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}><Plane size={13} style={{ color: C.violet }} />{lang === 'pt' ? 'Aeronave' : 'Aircraft'}: <b>{f.meta.aircraft}</b>{f.meta.aircraftReg ? ` (${f.meta.aircraftReg})` : ''}</div>}
           {f.meta.depTime && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 4 }}>{lang === 'pt' ? 'Partida' : 'Departure'}: {new Date(f.meta.depTime).toLocaleString(lang === 'pt' ? 'pt-BR' : 'en', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}{f.meta.arrTime ? ` → ${new Date(f.meta.arrTime).toLocaleTimeString(lang === 'pt' ? 'pt-BR' : 'en', { hour: '2-digit', minute: '2-digit' })}` : ''}</div>}
@@ -1179,6 +1209,16 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       <div style={{ display: 'flex', gap: 8, margin: '10px 0' }}>
         <CompactScore label={t('readiness')} value={w.readiness ?? null} color={C.green} onClick={() => !ouraOn && setLogOpen(true)} />
         <CompactScore label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => !ouraOn && setLogOpen(true)} />
+        {(() => {
+          const alelo = items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
+          const val = alelo && alelo.meta ? alelo.meta.balance : null;
+          return (
+            <button onClick={() => goModule('finance')} style={{ ...card, flex: 1, padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 999, background: C.accent + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={16} style={{ color: C.accent }} /></div>
+              <div style={{ textAlign: 'left', minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: val != null ? C.accent : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val != null ? fmtMoney(val, lang) : '—'}</div><div style={{ fontSize: 10.5, color: C.text3 }}>Alelo</div></div>
+            </button>
+          );
+        })()}
       </div>
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
@@ -1770,17 +1810,23 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
         : state.messages.length === 0
           ? <Empty icon={Mail} text={state.connected ? t('gmailEmpty') : t('nothingHere')} />
           : state.messages.map((m) => (
-            <div key={m.id} onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
-              <div style={{ width: 34, height: 34, borderRadius: 10, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: C.blue }}>{initials(m.sender)}</div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sender}</span>
-                  <span style={{ fontSize: 10.5, color: C.text3, flexShrink: 0 }}>{m.date.slice(11, 16)}</span>
+            <SwipeRow key={m.id}
+              onLeft={() => { haptic(15); act(m.id, 'trash'); flash(lang === 'pt' ? 'Movido para lixeira' : 'Trashed'); }}
+              leftLabel={lang === 'pt' ? 'Excluir' : 'Delete'} leftColor={C.rose} leftIcon={Trash2}
+              onRight={() => { haptic(15); act(m.id, 'archive'); flash(lang === 'pt' ? 'Arquivado' : 'Archived'); }}
+              rightLabel={lang === 'pt' ? 'Arquivar' : 'Archive'} rightColor={C.green} rightIcon={Check}>
+              <div onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: C.blue }}>{initials(m.sender)}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sender}</span>
+                    <span style={{ fontSize: 10.5, color: C.text3, flexShrink: 0 }}>{m.date.slice(11, 16)}</span>
+                  </div>
+                  <div style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</div>
+                  <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet}</div>
                 </div>
-                <div style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.subject}</div>
-                <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet}</div>
               </div>
-            </div>
+            </SwipeRow>
           ))}
       {composing && <GmailCompose lang={lang} t={t} onClose={() => setComposing(false)} />}
       {current && <GmailThread m={current} lang={lang} t={t} onClose={() => setSel(null)} onAction={act} onReplied={(id) => setState((p) => ({ ...p, messages: p.messages.filter((x) => x.id !== id) }))} />}
@@ -2964,6 +3010,8 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
         if (j.devices && j.devices.length) {
           setTuyaPrefs((prev) => {
             const next = { ...prev }; let changed = false;
+            // remove preferência órfã do abajur antigo (dispositivo removido do SmartLife)
+            if (next['ebd25cb250d51d988bfmgd']) { delete next['ebd25cb250d51d988bfmgd']; changed = true; }
             j.devices.forEach((d) => {
               const seed = TUYA_SEED[d.id];
               if (!next[d.id] && seed) { next[d.id] = seed; changed = true; }
@@ -2972,7 +3020,6 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
                 if (seed.ir && !next[d.id].ir) { next[d.id] = { ...next[d.id], ir: seed.ir }; changed = true; }
                 if (seed.kind && (!next[d.id].kind || next[d.id].kind === 'auto')) { next[d.id] = { ...next[d.id], kind: seed.kind }; changed = true; }
                 // correção específica: Abajur Carol foi salvo como 'light' mas é interruptor (switch_1)
-                if (d.id === 'ebd25cb250d51d988bfmgd' && next[d.id].kind === 'light') { next[d.id] = { ...next[d.id], kind: 'plug' }; changed = true; }
               }
             });
             return changed ? next : prev;
@@ -3255,16 +3302,11 @@ function FlightRow({ f, lang, t, onOpen }) {
 
 // Silhuetas simplificadas dos continentes na projecao equiretangular (viewBox 360x180).
 // x = (lon+180)/2 ; y = (90-lat). Formas aproximadas, so para dar contexto geografico.
-const WORLD = {
-  na: 'M40,38 L92,34 L104,44 L96,60 L82,72 L70,68 L58,80 L48,72 L44,58 L36,50 Z',
-  sa: 'M96,96 L112,92 L118,104 L114,128 L104,140 L98,128 L94,110 Z',
-  eu: 'M168,40 L196,36 L204,44 L198,54 L184,58 L172,52 Z',
-  af: 'M170,70 L200,66 L212,84 L206,112 L192,124 L182,110 L176,88 Z',
-  as: 'M204,32 L300,30 L316,48 L300,66 L262,64 L232,56 L210,50 Z',
-  oc: 'M292,116 L324,112 L332,124 L320,134 L300,130 Z',
-};
 function FlightMap({ flights, lang, t }) {
-  // Mapa-mundi fixo (projecao equiretangular) com continentes + rotas por cima.
+  const mapRef = useRef(null); const elRef = useRef(null);
+  const [failed, setFailed] = useState(false);
+
+  // coleta rotas e cidades a partir dos voos
   const pts = {}; const routes = [];
   (flights || []).forEach((f) => {
     const a = ((f && f.meta && f.meta.from) || '').toUpperCase();
@@ -3272,53 +3314,48 @@ function FlightMap({ flights, lang, t }) {
     if (AIRPORTS[a] && AIRPORTS[b]) { pts[a] = AIRPORTS[a]; pts[b] = AIRPORTS[b]; routes.push([a, b]); }
   });
   const keys = Object.keys(pts);
-  if (routes.length === 0) {
+
+  useEffect(() => {
+    if (keys.length === 0) return;
+    let tries = 0;
+    const init = () => {
+      const L = typeof window !== 'undefined' && window.L;
+      if (!L) { tries++; if (tries > 40) { setFailed(true); return; } setTimeout(init, 150); return; }
+      if (!elRef.current || mapRef.current) return;
+      try {
+        const map = L.map(elRef.current, { attributionControl: false, zoomControl: true, scrollWheelZoom: false });
+        mapRef.current = map;
+        // tiles escuros (CARTO dark) — gratis, sem chave
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+        const latlngs = keys.map((k) => [pts[k][1], pts[k][0]]);
+        // marcadores (pins) das cidades/aeroportos
+        keys.forEach((k) => {
+          const m = L.circleMarker([pts[k][1], pts[k][0]], { radius: 5, color: '#F5C263', weight: 2, fillColor: '#F5C263', fillOpacity: 1 }).addTo(map);
+          m.bindTooltip(k, { permanent: true, direction: 'top', className: 'lcc-tip', offset: [0, -6] });
+        });
+        // linhas das rotas
+        routes.forEach(([a, b]) => {
+          L.polyline([[pts[a][1], pts[a][0]], [pts[b][1], pts[b][0]]], { color: '#F5C263', weight: 2, opacity: 0.85 }).addTo(map);
+        });
+        // enquadrar
+        const bounds = L.latLngBounds(latlngs);
+        map.fitBounds(bounds.pad(0.35));
+        setTimeout(() => map.invalidateSize(), 200);
+      } catch (e) { setFailed(true); }
+    };
+    init();
+    return () => { if (mapRef.current) { try { mapRef.current.remove(); } catch (e) {} mapRef.current = null; } };
+  }, [flights]);
+
+  if (keys.length === 0) {
     return <div style={{ ...card, padding: 20, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('nothingHere')}</div>;
   }
-  // projecao equiretangular do mundo inteiro: lon -180..180 -> 0..W, lat 90..-90 -> 0..H
-  const W = 360, H = 180;
-  const px = (lon) => (lon + 180) / 360 * W;
-  const py = (lat) => (90 - lat) / 180 * H;
-
+  if (failed) {
+    return <div style={{ ...card, padding: 18, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Mapa indisponível (sem conexão). Suas rotas: ' : 'Map unavailable. Routes: '}{routes.map(([a, b]) => a + '→' + b).join(', ')}</div>;
+  }
   return (
-    <div style={{ ...card, padding: 10, marginBottom: 10, overflow: 'hidden' }}>
-      <div style={{ borderRadius: 10, overflow: 'hidden', background: 'linear-gradient(160deg,#0d1a2b,#0b1018)' }}>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', display: 'block' }}>
-          {/* oceano com leve grade de meridianos/paralelos */}
-          <defs>
-            <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
-              <path d="M30 0H0V30" fill="none" stroke="#ffffff08" strokeWidth="0.5" />
-            </pattern>
-          </defs>
-          <rect x="0" y="0" width={W} height={H} fill="url(#grid)" />
-          {/* continentes simplificados (silhuetas) */}
-          <g fill="#1e3048" opacity="0.9">
-            <path d={WORLD.na} fill="#1e3048" />
-            <path d={WORLD.sa} fill="#1e3048" />
-            <path d={WORLD.eu} fill="#1e3048" />
-            <path d={WORLD.af} fill="#1e3048" />
-            <path d={WORLD.as} fill="#1e3048" />
-            <path d={WORLD.oc} fill="#1e3048" />
-          </g>
-          {/* rotas */}
-          {routes.map(([a, b], i) => {
-            const x1 = px(pts[a][0]), y1 = py(pts[a][1]), x2 = px(pts[b][0]), y2 = py(pts[b][1]);
-            const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - Math.abs(x2 - x1) * 0.18 - 6;
-            return <path key={i} d={`M${x1},${y1} Q${mx},${my} ${x2},${y2}`} fill="none" stroke={C.accent} strokeWidth="1.4" opacity="0.9" strokeLinecap="round" />;
-          })}
-          {keys.map((k) => {
-            const x = px(pts[k][0]), y = py(pts[k][1]);
-            const right = x > W * 0.7;
-            return (
-              <g key={k}>
-                <circle cx={x} cy={y} r="3.2" fill={C.accent} stroke="#0b1018" strokeWidth="1" />
-                <text x={right ? x - 5 : x + 5} y={y + 3} textAnchor={right ? 'end' : 'start'} fill="#E8E8EE" fontSize="8.5" fontWeight="700" style={{ paintOrder: 'stroke', stroke: '#0b1018', strokeWidth: 2.5 }}>{k}</text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-      <div style={{ fontSize: 9.5, color: C.text3, marginTop: 7, textAlign: 'center' }}>{t('routeMapNote')}</div>
+    <div style={{ ...card, padding: 0, marginBottom: 10, overflow: 'hidden' }}>
+      <div ref={elRef} style={{ width: '100%', height: 230, background: '#0b1018' }} />
     </div>
   );
 }
@@ -3636,7 +3673,7 @@ function TuyaIrDiag({ t, lang }) {
     setBusy(true);
     try { const r = await authFetch('/api/tuya?ir=1'); setData(await r.json()); } catch (e) { setData({ error: String(e) }); }
     // status cru do Abajur Carol para diagnostico
-    try { const r2 = await authFetch('/api/tuya?status=ebd25cb250d51d988bfmgd'); setLamp(await r2.json()); } catch (e) { setLamp({ error: String(e) }); }
+    try { const r2 = await authFetch('/api/tuya?status=eb2a4a8b85c2a8deadb1g8'); setLamp(await r2.json()); } catch (e) { setLamp({ error: String(e) }); }
     setBusy(false);
   };
   return (
