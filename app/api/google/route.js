@@ -21,35 +21,57 @@ export async function GET(req) {
   let events = [];
   let messages = [];
 
-  // ---------- Google Agenda: proximos 60 dias ----------
+  // ---------- Google Agenda: primary + calendário "Moura" (trabalho) ----------
   try {
     const timeMin = new Date(Date.now() - 86400000).toISOString();
     const timeMax = new Date(Date.now() + 60 * 86400000).toISOString();
-    const u = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=50`;
-    const r = await fetch(u, { headers: h, cache: 'no-store' });
-    if (!r.ok) throw new Error('calendar HTTP ' + r.status);
-    const j = await r.json();
-    events = (j.items || [])
-      .filter((e) => e.status !== 'cancelled')
-      .map((e) => {
-        const startRaw = (e.start && (e.start.dateTime || e.start.date)) || null;
-        if (!startRaw) return null;
-        const hasTime = !!(e.start && e.start.dateTime);
-        const dt = new Date(startRaw);
-        return {
-          id: 'g_' + e.id,
-          type: 'event',
-          domain: 'work',
-          title: e.summary || '(sem título)',
-          date: hasTime ? isoDay(dt) : startRaw.slice(0, 10),
-          time: hasTime ? dt.toTimeString().slice(0, 5) : null,
-          notes: [e.location, e.description].filter(Boolean).join('\n').slice(0, 500) || null,
-          status: 'planned',
-          priority: 2,
-          meta: { external: 'google', link: e.htmlLink || null, location: e.location || null },
-        };
-      })
-      .filter(Boolean);
+
+    // descobre os calendários do usuário para achar o "Moura"
+    let calIds = [{ id: 'primary', work: false }];
+    try {
+      const rl = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=250', { headers: h, cache: 'no-store' });
+      if (rl.ok) {
+        const jl = await rl.json();
+        (jl.items || []).forEach((c) => {
+          const name = (c.summary || '') + ' ' + (c.summaryOverride || '');
+          if (/moura/i.test(name)) calIds.push({ id: c.id, work: true });
+        });
+      }
+    } catch (e) {}
+
+    const mapEvent = (e, isWork) => {
+      const startRaw = (e.start && (e.start.dateTime || e.start.date)) || null;
+      if (!startRaw) return null;
+      const hasTime = !!(e.start && e.start.dateTime);
+      const dt = new Date(startRaw);
+      const title = e.summary || '(sem título)';
+      const work = isWork || /^\s*\(m\)/i.test(title);
+      return {
+        id: 'g_' + e.id,
+        type: 'event',
+        domain: work ? 'work' : 'personal',
+        title,
+        date: hasTime ? isoDay(dt) : startRaw.slice(0, 10),
+        time: hasTime ? dt.toTimeString().slice(0, 5) : null,
+        notes: [e.location, e.description].filter(Boolean).join('\n').slice(0, 1500) || null,
+        status: 'planned',
+        priority: 2,
+        meta: { external: 'google', link: e.htmlLink || null, location: e.location || null, work, moura: work },
+      };
+    };
+
+    for (const cal of calIds) {
+      try {
+        const u = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`;
+        const r = await fetch(u, { headers: h, cache: 'no-store' });
+        if (!r.ok) continue;
+        const j = await r.json();
+        const evs = (j.items || []).filter((e) => e.status !== 'cancelled').map((e) => mapEvent(e, cal.work)).filter(Boolean);
+        events = events.concat(evs);
+      } catch (e) {}
+    }
+    const seen = new Set();
+    events = events.filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
   } catch (e) {
     errors.push(String(e.message || e));
   }
