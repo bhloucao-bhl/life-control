@@ -382,6 +382,20 @@ const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d
 const loc = (lang) => (lang === 'pt' ? 'pt-BR' : 'en-US');
 function fmtDate(iso, lang) { if (!iso) return ''; return new Date(iso + 'T00:00:00').toLocaleDateString(loc(lang), { weekday: 'short', day: '2-digit', month: 'short' }); }
 function fmtLong(iso, lang) { return new Date(iso + 'T00:00:00').toLocaleDateString(loc(lang), { weekday: 'long', day: 'numeric', month: 'long' }); }
+function fmtLongPretty(iso, lang) {
+  // Capitaliza só o dia da semana e o mês; mantém "de" minúsculo. Ex: "Segunda-feira, 03 de Agosto, 2026"
+  const d = new Date(iso + 'T00:00:00');
+  const cap = (s) => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+  if (lang === 'pt') {
+    const wd = cap(d.toLocaleDateString('pt-BR', { weekday: 'long' }));
+    const day = String(d.getDate()).padStart(2, '0');
+    const mon = cap(d.toLocaleDateString('pt-BR', { month: 'long' }));
+    return `${wd}, ${day} de ${mon}, ${d.getFullYear()}`;
+  }
+  const wd = d.toLocaleDateString('en-US', { weekday: 'long' });
+  const mon = d.toLocaleDateString('en-US', { month: 'long' });
+  return `${wd}, ${mon} ${d.getDate()}, ${d.getFullYear()}`;
+}
 function fmtMoney(n, lang) { if (n == null || isNaN(n)) return ''; return new Intl.NumberFormat(loc(lang), { style: 'currency', currency: 'BRL' }).format(n); }
 const TYPES = ['task', 'event', 'expense', 'income', 'meal', 'med', 'appointment', 'document', 'vehicle', 'maintenance', 'trip', 'flight', 'shopping', 'bill', 'note', 'person', 'account', 'message', 'gift'];
 const DOMAINS = ['personal', 'today', 'health', 'home', 'finance', 'kids', 'docs', 'cars', 'travel', 'work'];
@@ -473,7 +487,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v46 · 03ago';
+const APP_VERSION = 'v47 · 03ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -661,9 +675,16 @@ function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: L
     </div>
   );
 }
-function MouraBadge({ size = 16 }) {
+function MouraBadge({ size = 15 }) {
   return (
-    <span title="Moura (trabalho)" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: size, height: size, borderRadius: 4, background: 'linear-gradient(135deg,#E30613,#B0050F)', color: '#fff', fontSize: size * 0.62, fontWeight: 800, fontFamily: "'Outfit', sans-serif", lineHeight: 1, flexShrink: 0 }}>M</span>
+    <span title="Moura (trabalho)" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <svg width={size} height={size} viewBox="0 0 48 48" style={{ display: 'block' }}>
+        <path d="M2 34 L14 10 L22 10 L10 34 Z" fill="#FFC20E" />
+        <path d="M16 34 L28 10 L30 10 L30 34 Z" fill="#F5A800" />
+        <path d="M30 34 L30 10 L38 10 L46 34 Z" fill="#0090D4" />
+        <path d="M32 34 L44 10 L46 10 L46 34 Z" fill="#1B2C7A" opacity="0.92" />
+      </svg>
+    </span>
   );
 }
 function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
@@ -726,18 +747,67 @@ function Attachments({ list, lang, t, onAdd, onRemove }) {
 }
 
 /* ---------------- photo avatar ---------------- */
+function PhotoCropper({ src, onCancel, onSave }) {
+  const [scale, setScale] = useState(1); const [pos, setPos] = useState({ x: 0, y: 0 });
+  const drag = useRef(null); const imgRef = useRef(null); const BOX = 240;
+  const onDown = (e) => { const p = e.touches ? e.touches[0] : e; drag.current = { sx: p.clientX, sy: p.clientY, ox: pos.x, oy: pos.y }; };
+  const onMove = (e) => { if (!drag.current) return; const p = e.touches ? e.touches[0] : e; setPos({ x: drag.current.ox + (p.clientX - drag.current.sx), y: drag.current.oy + (p.clientY - drag.current.sy) }); };
+  const onUp = () => { drag.current = null; };
+  const doSave = () => {
+    const img = imgRef.current; if (!img) return;
+    const out = 320;
+    const canvas = document.createElement('canvas'); canvas.width = out; canvas.height = out;
+    const ctx = canvas.getContext('2d');
+    ctx.beginPath(); ctx.arc(out / 2, out / 2, out / 2, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
+    // relação entre a caixa de preview (BOX) e a saída
+    const k = out / BOX;
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const base = Math.max(BOX / iw, BOX / ih); // cover
+    const drawW = iw * base * scale * k, drawH = ih * base * scale * k;
+    const cx = out / 2 + pos.x * k, cy = out / 2 + pos.y * k;
+    ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
+    onSave(canvas.toDataURL('image/jpeg', 0.9));
+  };
+  return (
+    <Modal onClose={onCancel}>
+      <SheetHead title="Ajustar foto" onClose={onCancel} icon={Camera} />
+      <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 16 }}>
+        <div style={{ width: BOX, height: BOX, borderRadius: 999, overflow: 'hidden', position: 'relative', background: '#000', touchAction: 'none', cursor: 'grab', border: `2px solid ${C.accent}` }}
+          onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp}
+          onTouchStart={onDown} onTouchMove={onMove} onTouchEnd={onUp}>
+          <img ref={imgRef} src={src} alt="" draggable={false} style={{ position: 'absolute', left: '50%', top: '50%', transform: `translate(calc(-50% + ${pos.x}px), calc(-50% + ${pos.y}px)) scale(${scale})`, minWidth: '100%', minHeight: '100%', width: 'auto', height: 'auto', objectFit: 'cover', userSelect: 'none' }} />
+        </div>
+      </div>
+      <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>Zoom</div>
+      <input type="range" min="1" max="3" step="0.02" value={scale} onChange={(e) => setScale(Number(e.target.value))} style={{ width: '100%', accentColor: C.accent, marginBottom: 6 }} />
+      <div style={{ fontSize: 11, color: C.text3, marginBottom: 16, textAlign: 'center' }}>Arraste a foto para centralizar e use o zoom.</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn kind="ghost" onClick={onCancel} style={{ flex: 1 }}>Cancelar</Btn>
+        <Btn onClick={doSave} style={{ flex: 1.4 }}>Salvar foto</Btn>
+      </div>
+    </Modal>
+  );
+}
 function PhotoPicker({ value, t, onChange }) {
-  const ref = useRef(); const [busy, setBusy] = useState(false);
+  const ref = useRef(); const [busy, setBusy] = useState(false); const [cropSrc, setCropSrc] = useState(null);
   const pick = async (e) => {
-    const f = e.target.files[0]; if (!f) return; setBusy(true);
-    try { const url = await fileToDataUrl(f, 600); const att = await saveAttachment(url, f.name, 'image'); if (att) onChange(att); } catch (err) {}
-    setBusy(false); e.target.value = '';
+    const f = e.target.files[0]; if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(String(reader.result));
+    reader.readAsDataURL(f);
+    e.target.value = '';
+  };
+  const saveCropped = async (dataUrl) => {
+    setBusy(true); setCropSrc(null);
+    try { const att = await saveAttachment(dataUrl, 'foto.jpg', 'image'); if (att) onChange(att); } catch (err) {}
+    setBusy(false);
   };
   return (
     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
       {value ? <AttachThumb att={value} onRemove={() => onChange(null)} />
         : <button onClick={() => ref.current && ref.current.click()} style={{ width: 66, height: 66, borderRadius: 999, border: `1px dashed ${C.border}`, background: 'transparent', color: C.text3, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, fontSize: 10 }}>{busy ? <Loader2 size={16} className="spin" /> : <><Camera size={16} />{t('addPhoto')}</>}</button>}
       <input ref={ref} type="file" accept="image/*" onChange={pick} style={{ display: 'none' }} />
+      {cropSrc && <PhotoCropper src={cropSrc} onCancel={() => setCropSrc(null)} onSave={saveCropped} />}
     </div>
   );
 }
@@ -1229,7 +1299,7 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
 
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
@@ -1269,7 +1339,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 26, fontWeight: 300, letterSpacing: '-.02em' }}>{greeting()}, <span style={{ fontWeight: 600 }}>{name}</span>.</div>
-          <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2, textTransform: 'capitalize' }}>{fmtLong(today, lang)}</div>
+          <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2 }}>{fmtLongPretty(today, lang)}</div>
         </div>
         <div title={t('fxHint')} style={{ ...card, padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, minWidth: 104 }}>
           {live && live.fx ? live.fx.map((fx) => (
@@ -1291,12 +1361,13 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         <CompactScore label={t('readiness')} value={w.readiness ?? null} color={C.green} onClick={() => !ouraOn && setLogOpen(true)} />
         <CompactScore label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => !ouraOn && setLogOpen(true)} />
         {(() => {
-          const alelo = items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
-          const val = alelo && alelo.meta ? alelo.meta.balance : null;
+          const acc = (todayAccountId && items.find((i) => i.id === todayAccountId && i.type === 'account')) || items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
+          const val = acc && acc.meta ? acc.meta.balance : null;
+          const nome = acc ? acc.title.replace(/\s*-.*$/, '').slice(0, 10) : 'Alelo';
           return (
-            <button onClick={() => goModule('finance')} style={{ ...card, flex: 1, padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
+            <button onClick={() => acc ? openAccount(acc.id) : goModule('finance')} style={{ ...card, flex: 1, padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
               <div style={{ width: 34, height: 34, borderRadius: 999, background: C.accent + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={16} style={{ color: C.accent }} /></div>
-              <div style={{ textAlign: 'left', minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: val != null ? C.accent : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val != null ? fmtMoney(val, lang) : '—'}</div><div style={{ fontSize: 10.5, color: C.text3 }}>Alelo</div></div>
+              <div style={{ textAlign: 'left', minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: val != null ? C.accent : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val != null ? fmtMoney(val, lang) : '—'}</div><div style={{ fontSize: 10.5, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div></div>
             </button>
           );
         })()}
@@ -2230,6 +2301,12 @@ function StatementImport({ lang, t, existing, onClose, onImport }) {
 
 function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash }) {
   const [sub, setSub] = useState({ v: 'home' }); const [adding, setAdding] = useState(null); const [hidden, setHidden] = useState(true); const [importing, setImporting] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.__lccOpenAccount) {
+      const id = window.__lccOpenAccount; window.__lccOpenAccount = null;
+      setSub({ v: 'account', id });
+    }
+  }, []);
   const accounts = items.filter((i) => i.type === 'account');
   if (sub.v === 'account') { const acc = sub.id ? items.find((i) => i.id === sub.id) : null; return <AccountDetail acc={acc} items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} onOpen={onOpen} addItem={addItem} flash={flash} goReport={() => setSub({ v: 'reports' })} />; }
   if (sub.v === 'reports') return <ReportsScreen items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
@@ -2276,6 +2353,17 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
           <div style={{ ...card, padding: 14 }}>{catRows.slice(0, 4).map(([k, v]) => { const cc = CATEGORIES[k]; return <BarRow key={k} label={cc[lang]} value={v} max={catRows[0][1]} color={cc.color} icon={cc.icon} right={amountStr(v, lang, hidden)} />; })}</div>
         </>
       )}
+
+      {(() => {
+        const recentTx = items.filter(isTx).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
+        if (recentTx.length === 0) return null;
+        return (
+          <>
+            <SectionTitle icon={Wallet} label={lang === 'pt' ? 'Últimos lançamentos' : 'Recent transactions'} color={C.accent} />
+            {recentTx.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} hideAmount={hidden} />)}
+          </>
+        );
+      })()}
 
       <SectionTitle icon={CreditCard} label={t('accounts')} color={C.green} />
       {accounts.length === 0 ? <Empty icon={CreditCard} text={t('nothingHere')} /> : accounts.map((a) => { const km = KIND_META[(a.meta && a.meta.kind) || 'checking']; return (
@@ -3867,6 +3955,22 @@ function Connections({ lang, t }) {
     <div style={{ marginBottom: 14 }}>
       <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
       <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
+      {(() => {
+        const d = typeof window !== 'undefined' && window.__lccGoogleDiag;
+        if (!d || !d.connected) return null;
+        const hasMoura = (d.calendarsFound || []).some((n) => /moura/i.test(n));
+        return (
+          <div style={{ ...card, padding: '10px 13px', marginBottom: 8, marginTop: -2, fontSize: 11, color: C.text3, lineHeight: 1.5 }}>
+            <div style={{ display: 'flex', gap: 6, alignItems: 'center', color: hasMoura ? C.green : C.accent, marginBottom: 3 }}>
+              {hasMoura ? <Check size={12} /> : <AlertTriangle size={12} />}
+              {hasMoura ? (lang === 'pt' ? 'Calendário Moura encontrado' : 'Moura calendar found') : (lang === 'pt' ? 'Calendário "Moura" não encontrado' : 'Moura calendar not found')}
+            </div>
+            {(d.calendarsFound || []).length > 0 && <div>{lang === 'pt' ? 'Agendas visíveis: ' : 'Calendars: '}{(d.calendarsFound || []).join(', ')}</div>}
+            <div style={{ marginTop: 2 }}>{lang === 'pt' ? 'Eventos carregados: ' : 'Events loaded: '}{d.count}</div>
+            {d.calendarErr && <div style={{ color: C.rose, marginTop: 2 }}>{d.calendarErr}</div>}
+          </div>
+        );
+      })()}
       <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
     </div>
   );
@@ -3897,6 +4001,14 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
+      <div style={{ ...card, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Saldo na tela Hoje' : 'Balance on Today'}</div>
+        <select value={settings.todayAccountId || ''} onChange={(e) => setSettings((s) => ({ ...s, todayAccountId: e.target.value || null }))} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+          <option value="">{lang === 'pt' ? 'Automático (conta Alelo)' : 'Auto (Alelo)'}</option>
+          {items.filter((i) => i.type === 'account').map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+        </select>
+        <div style={{ fontSize: 11, color: C.text3, marginTop: 6, lineHeight: 1.4 }}>{lang === 'pt' ? 'Escolha qual conta ou cartão aparece no terceiro card da tela Hoje.' : 'Pick which account shows on Today.'}</div>
+      </div>
       <div style={{ ...card, padding: 14, marginBottom: 12 }}>
         <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Aparência' : 'Appearance'}</div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -4005,6 +4117,12 @@ const SEED_SETTINGS = { health: { [todayISO()]: { readiness: 82, sleep: 76 } }, 
 /* ---------------- App ---------------- */
 function App() {
   const [ready, setReady] = useState(false);
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    const check = () => setWide(typeof window !== 'undefined' && window.innerWidth >= 900);
+    check(); window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
   const [items, setItems] = useState([]);
   const [settings, setSettings] = useState({ lang: 'pt', name: 'Bruno', health: {}, profile: {}, dock: DEFAULT_DOCK, devices: DEFAULT_DEVICES });
   const [active, setActive] = useState({ screen: 'home', module: null });
@@ -4039,6 +4157,7 @@ function App() {
       if (!alive || !j) return;
       if (Array.isArray(j.events)) setGEvents(j.events);
       if (Array.isArray(j.messages)) setGMsgs(j.messages);
+      if (typeof window !== 'undefined') window.__lccGoogleDiag = { calendarsFound: j.calendarsFound, calendarErr: j.calendarErr, connected: j.connected, count: (j.events || []).length };
     }).catch(() => {});
     return () => { alive = false; };
   }, [ready]);
@@ -4143,6 +4262,7 @@ function App() {
   const setDevices = (fn) => setSettings((s) => ({ ...s, devices: typeof fn === 'function' ? fn(s.devices || DEFAULT_DEVICES) : fn }));
   const setTuyaPrefs = (fn) => setSettings((s) => ({ ...s, tuyaPrefs: typeof fn === 'function' ? fn(s.tuyaPrefs || {}) : fn }));
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
+  const openAccount = (accId) => { if (typeof window !== 'undefined') window.__lccOpenAccount = accId; setActive({ screen: 'dashboard', module: moduleByKey('finance') }); };
   const greeting = () => { const h = new Date().getHours(); return h < 12 ? t('goodMorning') : h < 18 ? t('goodAfternoon') : t('goodEvening'); };
   const navTo = (k) => { if (SCREEN_ICONS[k]) setActive({ screen: k, module: k === 'dashboard' ? null : null }); else setActive({ screen: 'dashboard', module: moduleByKey(k) }); };
 
@@ -4176,20 +4296,43 @@ function App() {
   };
 
   return (
-    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: 480, margin: '0 auto', position: 'relative', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 84px)' }}>
+    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: wide ? 1080 : 480, margin: '0 auto', position: 'relative', paddingBottom: wide ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)', display: wide ? 'flex' : 'block', gap: wide ? 0 : undefined, alignItems: 'flex-start' }}>
+      {wide && (
+        <div style={{ width: 210, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: `1px solid ${C.borderSoft}`, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px 16px' }}><span style={{ width: 9, height: 9, borderRadius: 2, background: C.accent }} />Life in Control</button>
+          {dock.map((k) => {
+            const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
+            const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
+            return <button key={k} onClick={() => navTo(k)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
+              <Ic size={19} />{navLabel(k, t)}
+            </button>;
+          })}
+          <div style={{ flex: 1 }} />
+          <button onClick={() => setShowCapture(true)} style={{ background: C.accent, color: '#171200', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600, width: '100%', marginBottom: 8 }}><Plus size={18} />{lang === 'pt' ? 'Capturar' : 'Capture'}</button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setSettings((s) => ({ ...s, lang: s.lang === 'pt' ? 'en' : 'pt' }))} style={{ ...card, flex: 1, padding: '8px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><Globe size={13} />{lang.toUpperCase()}</button>
+            <button onClick={() => setShowSettings(true)} style={{ ...card, flex: 1, padding: '8px', color: C.text2, cursor: 'pointer', display: 'flex', justifyContent: 'center' }}><Cog size={15} /></button>
+          </div>
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0, maxWidth: wide ? 720 : undefined, margin: wide ? '0 auto' : undefined, width: '100%' }}>
+      {!wide && (
       <div style={{ height: refreshing ? 44 : pull, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: pullRef.current.active ? 'none' : 'height .2s', color: C.text3 }}>
         {(refreshing || pull > 10) && <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12 }}><RefreshCw size={15} className={refreshing ? 'spin' : ''} style={{ transform: refreshing ? 'none' : `rotate(${pull * 4}deg)` }} />{refreshing ? t('refreshing') : (pull > 55 ? t('releaseRefresh') : t('pullRefresh'))}</div>}
       </div>
+      )}
       <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:${_theme === 'light' ? '#FFFFFF' : '#16161E'};color:${_theme === 'light' ? '#1A1A22' : '#ECECEF'}}`}</style>
+      {!wide && (
       <div style={{ padding: '16px 18px 8px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life in Control</div>
+        <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7, padding: 0 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life in Control</button>
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={() => setSettings((s) => ({ ...s, lang: s.lang === 'pt' ? 'en' : 'pt' }))} style={{ ...card, padding: '5px 10px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Globe size={13} />{lang.toUpperCase()}</button>
           <button onClick={() => setShowSettings(true)} style={{ ...card, padding: 7, color: C.text2, cursor: 'pointer' }}><Cog size={15} /></button>
         </div>
       </div>
-      <div style={{ padding: '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} />}
+      )}
+      <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
+        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
           savedNews={items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news')}
@@ -4201,8 +4344,9 @@ function App() {
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
         {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} goNews={() => setActive({ screen: 'news', module: null })} order={settings.moduleOrder || []} setOrder={(o) => setSettings((st) => ({ ...st, moduleOrder: o }))} />)}
       </div>
+      </div>
 
-      {active.screen !== 'claude' && (
+      {!wide && active.screen !== 'claude' && (
         <div style={{ position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)', left: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
           <div style={{ maxWidth: 480, margin: '0 auto', position: 'relative', height: 0 }}>
             <button onClick={() => { haptic(12); setShowCapture(true); }} style={{ position: 'absolute', right: 18, bottom: 0, pointerEvents: 'auto', background: C.accent, color: '#171200', border: 'none', width: 52, height: 52, borderRadius: 16, cursor: 'pointer', boxShadow: '0 8px 24px rgba(230,180,80,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} /></button>
@@ -4210,7 +4354,7 @@ function App() {
         </div>
       )}
 
-      <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: _theme === 'light' ? 'rgba(255,255,255,.92)' : 'rgba(11,11,15,.9)', backdropFilter: 'blur(12px)', borderTop: `1px solid ${C.borderSoft}`, zIndex: 20 }}>
+      {!wide && <div style={{ position: 'fixed', bottom: 0, left: 0, right: 0, background: _theme === 'light' ? 'rgba(255,255,255,.92)' : 'rgba(11,11,15,.9)', backdropFilter: 'blur(12px)', borderTop: `1px solid ${C.borderSoft}`, zIndex: 20 }}>
         <div style={{ maxWidth: 480, margin: '0 auto', display: 'flex', justifyContent: 'space-around', padding: '9px 4px 12px', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 10px)' }}>
           {dock.map((k) => {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
@@ -4222,7 +4366,7 @@ function App() {
             </button>;
           })}
         </div>
-      </div>
+      </div>}
 
       {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
