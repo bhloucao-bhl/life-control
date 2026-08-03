@@ -163,18 +163,38 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, Upload
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Upload
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
-const C = {
-  bg: '#08080C', bg2: '#12121B', surface: '#1A1A25', surface2: '#24242F',
-  border: '#353543', borderSoft: '#2A2A36',
-  text: '#F7F7FA', text2: '#B8B8C6', text3: '#8A8A99',
-  accent: '#F5C263', accentSoft: 'rgba(245,194,99,0.16)',
-  rose: '#FF8A8E', green: '#6FD9A4', blue: '#7FBAF5', violet: '#B0A2FF',
-  teal: '#6ECDCD', sky: '#8FCFF7',
+const THEMES = {
+  dark: {
+    bg: '#08080C', bg2: '#12121B', surface: '#1A1A25', surface2: '#24242F',
+    border: '#353543', borderSoft: '#2A2A36',
+    text: '#F7F7FA', text2: '#B8B8C6', text3: '#8A8A99',
+    accent: '#F5C263', accentSoft: 'rgba(245,194,99,0.16)',
+    rose: '#FF8A8E', green: '#6FD9A4', blue: '#7FBAF5', violet: '#B0A2FF',
+    teal: '#6ECDCD', sky: '#8FCFF7',
+  },
+  light: {
+    bg: '#F4F4F7', bg2: '#FFFFFF', surface: '#FFFFFF', surface2: '#EEEEF3',
+    border: '#DADAE2', borderSoft: '#E7E7EE',
+    text: '#1A1A22', text2: '#54546A', text3: '#8A8A99',
+    accent: '#C8912E', accentSoft: 'rgba(200,145,46,0.14)',
+    rose: '#D6484D', green: '#1F9D63', blue: '#2C79D6', violet: '#6B57E0',
+    teal: '#1F9D9D', sky: '#2C90D6',
+  },
 };
+let _theme = 'dark';
+if (typeof window !== 'undefined') {
+  try { _theme = window.localStorage.getItem('lcc_theme') || 'dark'; } catch (e) {}
+}
+const C = new Proxy({}, { get: (_, k) => (THEMES[_theme] || THEMES.dark)[k] });
+function setTheme(name) {
+  _theme = name === 'light' ? 'light' : 'dark';
+  try { if (typeof window !== 'undefined') { window.localStorage.setItem('lcc_theme', _theme); document.body.style.background = THEMES[_theme].bg; document.documentElement.style.background = THEMES[_theme].bg; } } catch (e) {}
+}
+if (typeof window !== 'undefined') { try { document.body.style.background = THEMES[_theme].bg; } catch (e) {} }
 
 /* ---------------- i18n ---------------- */
 const L = (pt, en) => ({ pt, en });
@@ -439,7 +459,7 @@ const DEFAULT_DOCK = ['home', 'messages', 'calendar', 'dashboard', 'claude'];
 function navIcon(k) { return SCREEN_ICONS[k] || (moduleByKey(k) ? moduleByKey(k).icon : Circle); }
 function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
 const TUYA_SEED = {
-  'eb2a4a8b85c2a8deadb1g8': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'plug' },
+  'eb2a4a8b85c2a8deadb1g8': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'light' },
   'ebce584d586201f762d4ag': { show: true, alias: 'Subwoofer', room: 'Home-office', kind: 'plug' },
   'ebbc591b7da959062dm9im': { show: true, alias: 'TV Suíte', room: 'Suíte', kind: 'tv', ir: '534436288caab546bacb' },
   'eb35a5d8aab7cb6a92jpzr': { show: true, alias: 'Vivo Suíte', room: 'Suíte', kind: 'stb', ir: '534436288caab546bacb' },
@@ -452,7 +472,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v43 · 02ago';
+const APP_VERSION = 'v44 · 02ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -600,11 +620,10 @@ function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: L
   };
   return (
     <div style={{ position: 'relative', marginBottom: 8, borderRadius: 14, overflow: 'hidden' }}>
-      {/* fundo esquerdo (revelado ao arrastar p/ esquerda) */}
-      {onLeft && <div style={{ position: 'absolute', inset: 0, background: leftColor || C.rose, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 20, gap: 6, color: '#fff', fontSize: 12.5, fontWeight: 600 }}>{LI && <LI size={16} />}{leftLabel}</div>}
-      {/* fundo direito (revelado ao arrastar p/ direita) */}
-      {onRight && <div style={{ position: 'absolute', inset: 0, background: rightColor || C.green, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 20, gap: 6, color: '#fff', fontSize: 12.5, fontWeight: 600 }}>{RI && <RI size={16} />}{rightLabel}</div>}
-      <div onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} style={{ transform: `translateX(${dx}px)`, transition: start.current == null ? 'transform .2s ease' : 'none' }}>
+      {/* fundos só aparecem enquanto arrasta (evita "glance" de cor nas bordas) */}
+      {onLeft && dx < 0 && <div style={{ position: 'absolute', inset: 0, background: leftColor || C.rose, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 20, gap: 6, color: '#fff', fontSize: 12.5, fontWeight: 600 }}>{LI && <LI size={16} />}{leftLabel}</div>}
+      {onRight && dx > 0 && <div style={{ position: 'absolute', inset: 0, background: rightColor || C.green, display: 'flex', alignItems: 'center', justifyContent: 'flex-start', paddingLeft: 20, gap: 6, color: '#fff', fontSize: 12.5, fontWeight: 600 }}>{RI && <RI size={16} />}{rightLabel}</div>}
+      <div onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} style={{ transform: `translateX(${dx}px)`, transition: start.current == null ? 'transform .2s ease' : 'none', position: 'relative', zIndex: 1 }}>
         {children}
       </div>
     </div>
@@ -816,7 +835,16 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
       {isMoney(type) && <Field label={type === 'maintenance' ? t('cost') : t('amount')}><input type="number" value={f.amount ?? ''} onChange={(e) => up({ amount: e.target.value })} style={inputStyle} placeholder="0,00" /></Field>}
       {metaFields.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {metaFields.map(([k, ptL, enL, it]) => <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type={it === 'number' ? 'number' : it === 'date' ? 'date' : 'text'} value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: 'dark' }} /></Field></div>)}
+          {metaFields.map(([k, ptL, enL, it]) => {
+            const OPTS = {
+              relationship: lang === 'pt' ? ['', 'Cônjuge', 'Filho', 'Filha', 'Pai', 'Mãe', 'Irmão', 'Irmã', 'Avô', 'Avó', 'Primo(a)', 'Tio(a)', 'Terceiro'] : ['', 'Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Grandfather', 'Grandmother', 'Cousin', 'Uncle/Aunt', 'Other'],
+              role: lang === 'pt' ? ['', 'Babá', 'Empregada', 'Motorista', 'Porteiro', 'Outro'] : ['', 'Nanny', 'Housekeeper', 'Driver', 'Doorman', 'Other'],
+            };
+            if (OPTS[k]) {
+              return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark', appearance: 'none', WebkitAppearance: 'none' }}>{OPTS[k].map((o) => <option key={o} value={o}>{o || (lang === 'pt' ? '— selecione —' : '— select —')}</option>)}</select></Field></div>;
+            }
+            return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type={it === 'number' ? 'number' : it === 'date' ? 'date' : 'text'} value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field></div>;
+          })}
         </div>
       )}
       {(type === 'person' || type === 'vehicle' || type === 'gift' || type === 'shopping') && (
@@ -1230,6 +1258,16 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <ChevronRight size={16} style={{ color: C.text3 }} />
         </div>
       ))}
+      <div style={{ display: 'flex', justifycontent: 'center', gap: 10, margin: '4px 0 2px', justifyContent: 'center' }}>
+        {[
+          { name: 'X', url: 'https://x.com', bg: '#000', fg: '#fff', label: '𝕏' },
+          { name: 'Instagram', url: 'https://instagram.com', bg: 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)', fg: '#fff', label: 'IG' },
+          { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', fg: '#fff', label: '♪' },
+          { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', fg: '#fff', label: 'in' },
+        ].map((s) => (
+          <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 30, height: 30, borderRadius: 8, background: s.bg, color: s.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, textDecoration: 'none', flexShrink: 0 }}>{s.label}</a>
+        ))}
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Newspaper size={14} style={{ color: C.blue }} />{t('news')}</span>
         <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}{lang === 'pt' ? 'Atualizar' : 'Refresh'}</button>
@@ -1811,10 +1849,10 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
           ? <Empty icon={Mail} text={state.connected ? t('gmailEmpty') : t('nothingHere')} />
           : state.messages.map((m) => (
             <SwipeRow key={m.id}
-              onLeft={() => { haptic(15); act(m.id, 'trash'); flash(lang === 'pt' ? 'Movido para lixeira' : 'Trashed'); }}
-              leftLabel={lang === 'pt' ? 'Excluir' : 'Delete'} leftColor={C.rose} leftIcon={Trash2}
-              onRight={() => { haptic(15); act(m.id, 'archive'); flash(lang === 'pt' ? 'Arquivado' : 'Archived'); }}
-              rightLabel={lang === 'pt' ? 'Arquivar' : 'Archive'} rightColor={C.green} rightIcon={Check}>
+              onRight={() => { haptic(15); act(m.id, 'trash'); flash(lang === 'pt' ? 'Movido para lixeira' : 'Trashed'); }}
+              rightLabel={lang === 'pt' ? 'Excluir' : 'Delete'} rightColor={C.rose} rightIcon={Trash2}
+              onLeft={() => { haptic(15); act(m.id, 'read'); flash(lang === 'pt' ? 'Marcado como lido' : 'Marked read'); }}
+              leftLabel={lang === 'pt' ? 'Marcar como lida' : 'Mark read'} leftColor={C.blue} leftIcon={CheckCheck}>
               <div onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
                 <div style={{ width: 34, height: 34, borderRadius: 10, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: C.blue }}>{initials(m.sender)}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -2527,11 +2565,15 @@ function LgAcRemote({ device, host, t, lang, flash, onClose }) {
   );
 }
 
+function isBlockedTuya(d) {
+  const n = ((d && (d.name || d.alias)) || '').toLowerCase();
+  return /port[aã]o|mod[-_ ]?port|garagem|gate/.test(n);
+}
 function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
   // decide quais mostrar: se ha alguma preferencia salva, respeita "show";
   // se nao ha NENHUMA pref ainda, mostra todos (primeiro uso).
   const hasPrefs = prefs && Object.keys(prefs).length > 0;
-  const visible = devices.filter((d) => {
+  const visible = devices.filter((d) => !isBlockedTuya(d)).filter((d) => {
     const p = prefs && prefs[d.id];
     if (!hasPrefs) return true;
     return p ? p.show !== false : false; // sem pref = escondido depois que o usuario ja configurou algo
@@ -2606,7 +2648,7 @@ function TuyaConfig({ devices, prefs, setPrefs, lang, t, onClose }) {
         <button onClick={() => devices.forEach((d) => patch(d.id, { show: !allShown }))} style={{ ...card, padding: '5px 10px', color: C.accent, cursor: 'pointer', fontSize: 11.5 }}>{allShown ? (lang === 'pt' ? 'Ocultar todos' : 'Hide all') : (lang === 'pt' ? 'Mostrar todos' : 'Show all')}</button>
       </div>
       <div style={{ maxHeight: '60vh', overflowY: 'auto', margin: '0 -4px', padding: '0 4px' }}>
-        {devices.map((d) => {
+        {devices.filter((d) => !isBlockedTuya(d)).map((d) => {
           const p = get(d.id); const show = p.show !== false;
           return (
             <div key={d.id} style={{ ...card, padding: 12, marginBottom: 8, opacity: show ? 1 : 0.6 }}>
@@ -3736,7 +3778,7 @@ function Connections({ lang, t }) {
   );
 }
 
-function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClose }) {
+function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme, applyTheme, onClose }) {
   const [name, setName] = useState(settings.name);
   const dock = settings.dock || DEFAULT_DOCK;
   const toggleDock = (k) => setSettings((s) => { const cur = s.dock || DEFAULT_DOCK; const has = cur.includes(k); if (has) return { ...s, dock: cur.filter((x) => x !== k) }; if (cur.length >= 5) return s; return { ...s, dock: [...cur, k] }; });
@@ -3761,6 +3803,13 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, onClos
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
+      <div style={{ ...card, padding: 14, marginBottom: 12 }}>
+        <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Aparência' : 'Appearance'}</div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => applyTheme && applyTheme('dark')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme !== 'light' ? C.accent : C.border}`, color: theme !== 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Moon size={15} />{lang === 'pt' ? 'Escuro' : 'Dark'}</button>
+          <button onClick={() => applyTheme && applyTheme('light')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme === 'light' ? C.accent : C.border}`, color: theme === 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Sun size={15} />{lang === 'pt' ? 'Claro' : 'Light'}</button>
+        </div>
+      </div>
       <div style={{ marginBottom: 12 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
       <Btn kind="soft" onClick={() => { if (confirm(lang === 'pt' ? 'Apagar TODOS os dados do app e começar do zero? As conexões (Google, Oura, TickTick, Tuya, LG) permanecem.' : 'Erase all app data and start fresh? Connections stay.')) { setItems([]); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', color: C.rose }}><Trash2 size={15} />{lang === 'pt' ? 'Zerar app (começar do zero)' : 'Reset app'}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
@@ -3869,6 +3918,7 @@ function App() {
   const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null);
   const [newsData, setNewsData] = useState(null); const [newsLoading, setNewsLoading] = useState(false);
   const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
+  const [theme, setThemeState] = useState(_theme); const applyTheme = (name) => { setTheme(name); setThemeState(name); };
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
@@ -4082,7 +4132,7 @@ function App() {
 
       {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
-      {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} />}
       {detail && <ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} />}
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
       {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
