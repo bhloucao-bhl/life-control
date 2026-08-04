@@ -210,7 +210,7 @@ const S = {
   home: L('Hoje', 'Today'), messages: L('Mensagens', 'Messages'), calendar: L('Calendário', 'Calendar'),
   dashboard: L('Painel de Controle', 'Dashboard'), dashShort: L('Painel', 'Dashboard'), claude: L('Claude', 'Claude'),
   work: L('Trabalho', 'Work'), tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
-  people: L('Pessoas', 'People'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'),
+  people: L('Contatos', 'Contacts'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'),
   readiness: L('Prontidão', 'Readiness'), sleepScore: L('Sono', 'Sleep'),
   connectOura: L('Conecte o Oura em Ajustes, ou toque para registrar.', 'Connect Oura in Settings, or tap to log.'),
   weather: L('Clima', 'Weather'), weatherSoon: L('Tempo real (open-meteo) na versão no celular.', 'Live weather in the phone version.'),
@@ -344,7 +344,7 @@ const META = {
   flight: [['airline', 'Companhia', 'Airline'], ['flightNumber', 'Nº do voo', 'Flight #'], ['from', 'Origem', 'From'], ['to', 'Destino', 'To'], ['seat', 'Assento', 'Seat'], ['locator', 'Localizador', 'Locator'], ['aircraft', 'Aeronave', 'Aircraft'], ['durationMin', 'Duração (min)', 'Duration (min)', 'number']],
   trip: [['destination', 'Destino', 'Destination'], ['endDate', 'Volta', 'Return', 'date'], ['locator', 'Reserva', 'Booking'], ['hotel', 'Hotel', 'Hotel']],
   vehicle: [['make', 'Montadora', 'Make'], ['model', 'Modelo', 'Model'], ['year', 'Ano', 'Year', 'number'], ['km', 'KM', 'Odometer', 'number']],
-  document: [['number', 'Número', 'Number'], ['issuer', 'Emissor', 'Issuer'], ['holder', 'Titular', 'Holder']],
+  document: [['number', 'Número', 'Number'], ['issuer', 'Emissor', 'Issuer'], ['holder', 'De quem é', 'Belongs to']],
   med: [['dose', 'Dose', 'Dose'], ['frequency', 'Frequência', 'Frequency']],
   appointment: [['doctor', 'Médico', 'Doctor'], ['specialty', 'Especialidade', 'Specialty'], ['location', 'Local', 'Location']],
   bill: [['payee', 'Beneficiário', 'Payee']],
@@ -494,7 +494,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v50 · 03ago';
+const APP_VERSION = 'v51 · 04ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -738,16 +738,20 @@ function AttachThumb({ att, onRemove }) {
 }
 function Attachments({ list, lang, t, onAdd, onRemove }) {
   const ref = useRef(); const [busy, setBusy] = useState(false);
-  const pick = async (e) => { const f = e.target.files[0]; if (!f) return; setBusy(true);
-    try { const url = await fileToDataUrl(f); const att = await saveAttachment(url, f.name, f.type.startsWith('image/') ? 'image' : 'pdf'); if (att) onAdd(att); } catch (err) {}
-    setBusy(false); e.target.value = ''; };
+  const pick = async (e) => {
+    const files = Array.from(e.target.files || []); if (!files.length) return; setBusy(true);
+    for (const f of files) {
+      try { const url = await fileToDataUrl(f); const att = await saveAttachment(url, f.name, f.type.startsWith('image/') ? 'image' : 'pdf'); if (att) onAdd(att); } catch (err) {}
+    }
+    setBusy(false); e.target.value = '';
+  };
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>{t('attachments')}</div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         {(list || []).map((a) => <AttachThumb key={a.id} att={a} onRemove={onRemove} />)}
         <button onClick={() => ref.current && ref.current.click()} style={{ width: 66, height: 66, borderRadius: 10, border: `1px dashed ${C.border}`, background: 'transparent', color: C.text3, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, fontSize: 10 }}>{busy ? <Loader2 size={18} className="spin" /> : <><Paperclip size={16} />{t('addFile')}</>}</button>
-        <input ref={ref} type="file" accept="image/*,application/pdf" onChange={pick} style={{ display: 'none' }} />
+        <input ref={ref} type="file" accept="image/*,application/pdf" multiple onChange={pick} style={{ display: 'none' }} />
       </div>
     </div>
   );
@@ -930,6 +934,13 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
       {type === 'account' && (
         <Field label={t('kind')}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{ACCOUNT_KINDS.map(([kk, ptn, enn]) => <Chip key={kk} active={f.meta.kind === kk} onClick={() => upMeta({ kind: kk })}>{lang === 'pt' ? ptn : enn}</Chip>)}</div></Field>
       )}
+      {type === 'account' && (
+        <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ flex: 1 }}><Field label={lang === 'pt' ? 'Saldo inicial' : 'Initial balance'}><input type="number" step="0.01" value={f.meta.balance ?? ''} onChange={(e) => upMeta({ balance: e.target.value === '' ? null : Number(e.target.value) })} style={inputStyle} placeholder="0,00" /></Field></div>
+          <div style={{ flex: 1 }}><Field label={lang === 'pt' ? 'Data inicial' : 'Start date'}><input type="date" value={f.meta.startDate || ''} onChange={(e) => upMeta({ startDate: e.target.value || null })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field></div>
+        </div>
+      )}
+      {type === 'account' && <div style={{ fontSize: 11, color: C.text3, marginTop: -4, marginBottom: 10, lineHeight: 1.4 }}>{lang === 'pt' ? 'O saldo inicial é o ponto de partida. As transações importadas depois somam/subtraem sobre ele. A data inicial ajuda o Claude a entender a linha do tempo do extrato.' : 'Initial balance is the starting point; imported transactions adjust it.'}</div>}
       {['expense', 'income', 'bill'].includes(type) && (
         <>
           {accounts.length > 0 && <Field label={t('accountL')}><select value={f.meta.accountId || ''} onChange={(e) => upMeta({ accountId: e.target.value || null })} style={{ ...inputStyle, colorScheme: 'dark' }}><option value="">—</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}</select></Field>}
@@ -957,11 +968,21 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {metaFields.map(([k, ptL, enL, it]) => {
             const OPTS = {
-              relationship: lang === 'pt' ? ['', 'Cônjuge', 'Filho', 'Filha', 'Pai', 'Mãe', 'Irmão', 'Irmã', 'Avô', 'Avó', 'Primo(a)', 'Tio(a)', 'Terceiro'] : ['', 'Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Grandfather', 'Grandmother', 'Cousin', 'Uncle/Aunt', 'Other'],
-              role: lang === 'pt' ? ['', 'Babá', 'Empregada', 'Motorista', 'Porteiro', 'Outro'] : ['', 'Nanny', 'Housekeeper', 'Driver', 'Doorman', 'Other'],
+              relationship: lang === 'pt' ? ['', 'Eu mesmo', 'Cônjuge', 'Filho', 'Filha', 'Pai', 'Mãe', 'Irmão', 'Irmã', 'Avô', 'Avó', 'Primo(a)', 'Tio(a)', 'Terceiro'] : ['', 'Myself', 'Spouse', 'Son', 'Daughter', 'Father', 'Mother', 'Brother', 'Sister', 'Grandfather', 'Grandmother', 'Cousin', 'Uncle/Aunt', 'Other'],
+              role: lang === 'pt' ? ['', 'Usuário', 'Médico', 'Babá', 'Empregada', 'Motorista', 'Porteiro', 'Outro'] : ['', 'User', 'Doctor', 'Nanny', 'Housekeeper', 'Driver', 'Doorman', 'Other'],
             };
             if (OPTS[k]) {
               return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark', appearance: 'none', WebkitAppearance: 'none' }}>{OPTS[k].map((o) => <option key={o} value={o}>{o || (lang === 'pt' ? '— selecione —' : '— select —')}</option>)}</select></Field></div>;
+            }
+            if (k === 'phone') {
+              const fmtPhone = (v) => {
+                const d = String(v).replace(/\D/g, '').slice(0, 13);
+                let n = d; if (!n.startsWith('55')) n = '55' + n;
+                const ddd = n.slice(2, 4), p1 = n.slice(4, 9), p2 = n.slice(9, 13);
+                let out = '+55'; if (ddd) out += ` (${ddd}`; if (ddd.length === 2) out += ')'; if (p1) out += ` ${p1}`; if (p2) out += `-${p2}`;
+                return out;
+              };
+              return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type="tel" value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: fmtPhone(e.target.value) })} placeholder="+55 (11) 99999-9999" style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field></div>;
             }
             return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type={it === 'number' ? 'number' : it === 'date' ? 'date' : 'text'} value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field></div>;
           })}
@@ -980,10 +1001,13 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
       )}
       {type === 'document' && f.domain === 'health' && (
         <div onClick={() => upMeta({ isExam: !f.meta.isExam })} style={{ ...card, padding: '11px 13px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <div style={{ width: 40, height: 24, borderRadius: 999, background: f.meta.isExam ? C.blue : C.surface2, position: 'relative', flexShrink: 0 }}>
+          <div style={{ width: 40, height: 24, borderRadius: 999, background: f.meta.isExam ? C.green : C.surface2, position: 'relative', flexShrink: 0 }}>
             <span style={{ position: 'absolute', top: 3, left: f.meta.isExam ? 19 : 3, width: 18, height: 18, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
           </div>
-          <span style={{ fontSize: 13, color: C.text2 }}>{t('isExam')}</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: C.text, fontWeight: 600 }}>{lang === 'pt' ? 'É um exame médico' : 'Medical exam'}</div>
+            <div style={{ fontSize: 11, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Marque para o Dr. Claude analisar os indicadores' : 'Mark so Dr. Claude analyzes it'}</div>
+          </div>
         </div>
       )}
       {type === 'vehicle' && (
@@ -1174,10 +1198,24 @@ function WeatherDetail({ wx, lang, t, onClose }) {
     const W = 300, H = 60;
     const pts = temps.map((h, i) => [temps.length === 1 ? W / 2 : (i / (temps.length - 1)) * W, H - ((h.temp - min) / span) * (H - 16) - 8]);
     const dPath = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+    const hasRain = temps.some((h) => h.rain != null && h.rain > 0);
+    const barW = W / temps.length * 0.6;
     chart = (
       <div style={{ ...card, padding: 14, marginBottom: 12 }}>
-        <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Temperatura ao longo do dia' : 'Temperature through the day'}</div>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 66, display: 'block' }} preserveAspectRatio="none">
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 11.5, color: C.text2, fontWeight: 600 }}>{lang === 'pt' ? 'Temperatura e chuva ao longo do dia' : 'Temperature & rain'}</span>
+          <span style={{ fontSize: 10, color: C.text3, display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.accent, display: 'inline-block' }} />°C</span>
+            <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 7, height: 7, background: C.sky + '99', display: 'inline-block', borderRadius: 1 }} />% chuva</span>
+          </span>
+        </div>
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 72, display: 'block' }} preserveAspectRatio="none">
+          {hasRain && temps.map((h, i) => {
+            if (h.rain == null || h.rain <= 0) return null;
+            const x = temps.length === 1 ? W / 2 : (i / (temps.length - 1)) * W;
+            const bh = (h.rain / 100) * (H - 10);
+            return <rect key={i} x={x - barW / 2} y={H - bh} width={barW} height={bh} fill={C.sky} opacity="0.28" rx="1" />;
+          })}
           <path d={dPath} fill="none" stroke={C.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2" fill={C.accent} />)}
         </svg>
@@ -1343,7 +1381,13 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   // Contas vencendo hoje primeiro, depois tarefas 'Importante' do TickTick, depois locais urgentes
   const attention = [...billsDue, ...ttImportant, ...localAttention].slice(0, 5);
   const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
-  const next5 = todayItems.filter((i) => !i.time || i.time >= hm).slice(0, 5);
+  // próximas 24h: de agora até a mesma hora de amanhã
+  const tomorrow = addDays(today, 1);
+  const in24hItems = items.filter((i) => i.status !== 'done' && i.type !== 'task' && (
+    (i.date === today && (!i.time || i.time >= hm)) ||
+    (i.date === tomorrow && (!i.time || i.time <= hm))
+  )).sort((a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99')));
+  const next5 = in24hItems.slice(0, 6);
   const balances = items.filter((i) => i.type === 'account' && i.meta && i.meta.showOnToday);
   const longTerm = items.filter((i) => i.date && i.date > today && ((i.meta && i.meta.milestone) || i.type === 'trip')).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
   return (
@@ -1386,14 +1430,21 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       </div>
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
-      <SectionTitle icon={Clock} label={t('todayPlan')} color={C.accent} />
-      {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : next5.map((i) => (
+      <SectionTitle icon={Clock} label={lang === 'pt' ? 'O que vai rolar nas próximas 24h' : 'Next 24 hours'} color={C.accent} />
+      {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : next5.map((i) => {
+        const isTom = i.date === addDays(today, 1);
+        const isWork = i.domain === 'work' || (i.meta && i.meta.moura);
+        return (
         <div key={i.id} onClick={() => onOpen(i)} style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.accent, width: 44, flexShrink: 0 }}>{i.time || '—'}</div>
-          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, display: 'flex', gap: 6, alignItems: 'center' }}>{i.meta && i.meta.milestone && <Star size={12} style={{ color: C.accent }} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</span></div><div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{t('t_' + i.type)}</div></div>
+          <div style={{ width: 50, flexShrink: 0, textAlign: 'center' }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{i.time || '—'}</div>
+            {isTom && <div style={{ fontSize: 9, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{lang === 'pt' ? 'amanhã' : 'tmrw'}</div>}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, display: 'flex', gap: 6, alignItems: 'center' }}>{isWork && <MouraBadge size={13} />}{i.meta && i.meta.milestone && <Star size={12} style={{ color: C.accent }} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span></div><div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{t('t_' + i.type)}</div></div>
           <ChevronRight size={16} style={{ color: C.text3 }} />
         </div>
-      ))}
+        );
+      })}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Newspaper size={14} style={{ color: C.blue }} />{t('news')}</span>
         <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
@@ -1862,6 +1913,7 @@ const TASK_FILTERS = [['fAll', (i) => i.status !== 'done'], ['fWork', (i) => i.d
 function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick }) {
   const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0); const [toTick, setToTick] = useState(true);
   const [workFilter, setWorkFilter] = useState('all'); // para aba trabalho: all | events | tasks
+  const [docCat, setDocCat] = useState('all'); // para aba documentos: all | work | health | personal | kids
   const [grace, setGrace] = useState({}); // id -> true: recem concluida, ainda visivel por 5s
   const graceToggle = (id) => {
     const it = items.find((x) => x.id === id) || {};
@@ -1875,7 +1927,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     }
   };
   const base = items.filter(module.filter);
-  const list = (module.key === 'tasks' ? base.filter((i) => TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list = (module.key === 'tasks' ? base.filter((i) => TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
   if (module.key === 'docs') { const soon = items.filter((i) => i.type === 'document' && i.date && i.date <= addDays(todayISO(), 60)).length; hi = { label: `${t('expiring')} (60d)`, value: String(soon), color: soon ? C.rose : C.text2 }; }
   else if (module.key === 'tasks') hi = { label: t('open'), value: String(items.filter((i) => i.type === 'task' && i.status !== 'done').length), color: C.accent };
@@ -1890,6 +1942,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       {module.key === 'tasks' && !ttConnected && <HintCard icon={RefreshCw} text={t('tickHint')} />}
       {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
       {module.key === 'work' && <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}><Chip active={workFilter === 'all'} onClick={() => setWorkFilter('all')}>{lang === 'pt' ? 'Tudo' : 'All'}</Chip><Chip active={workFilter === 'events'} onClick={() => setWorkFilter('events')} color={C.accent}>{lang === 'pt' ? 'Reuniões' : 'Meetings'}</Chip><Chip active={workFilter === 'tasks'} onClick={() => setWorkFilter('tasks')} color={C.blue}>{lang === 'pt' ? 'Tarefas' : 'Tasks'}</Chip></div>}
+      {module.key === 'docs' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 6 }}>{[['all', 'Tudo', 'All'], ['work', 'Trabalho', 'Work'], ['health', 'Saúde', 'Health'], ['personal', 'Pessoais', 'Personal'], ['kids', 'Filhos', 'Kids']].map(([k, ptL, enL]) => <Chip key={k} active={docCat === k} onClick={() => setDocCat(k)}>{lang === 'pt' ? ptL : enL}</Chip>)}</div>}
       {hi && <div style={{ ...card, padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{hi.label}</span><span style={{ fontSize: 22, fontWeight: 600, color: hi.color }}>{hi.value}</span></div>}
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
       {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={module.key === 'tasks' ? graceToggle : toggleTask} onOpen={onOpen} />)}
@@ -2674,30 +2727,58 @@ function tuyaLabel(device, prefs) {
 function LgCard({ device, host, t, lang, flash, label }) {
   const [remote, setRemote] = useState(false); const [wash, setWash] = useState(false);
   const [quick, setQuick] = useState(null); // {on, temp, mode}
+  const [busy, setBusy] = useState(false);
   const isAc = device.type === 'DEVICE_AIR_CONDITIONER';
   const isWasher = device.type === 'DEVICE_WASHER' || device.type === 'DEVICE_DRYER';
   const Ic = isAc ? Wind : isWasher ? Waves : Power;
-  // busca status resumido do ar para exibir no proprio card
-  useEffect(() => {
+  const loadQuick = () => {
     if (!isAc || !device.online) return;
-    let alive = true;
     authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
-      .then((r) => r.json()).then((j) => { if (!alive || !j.state) return; const st = j.state;
+      .then((r) => r.json()).then((j) => { if (!j.state) return; const st = j.state;
         setQuick({ on: st.operation && st.operation.airConOperationMode === 'POWER_ON', temp: st.temperature && st.temperature.targetTemperature, cur: st.temperature && st.temperature.currentTemperature }); })
       .catch(() => {});
-    return () => { alive = false; };
-  }, [device.id]);
+  };
+  useEffect(() => { let alive = true; if (isAc && device.online) loadQuick(); return () => { alive = false; }; }, [device.id]);
+  const cmd = async (op, value) => {
+    setBusy(true);
+    try { await authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op, value }) }); setTimeout(loadQuick, 800); }
+    catch (e) {}
+    setBusy(false);
+  };
+  if (isAc) {
+    return (
+      <>
+        <div style={{ ...card, padding: 13, opacity: device.online ? 1 : 0.55 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: (quick && quick.on) ? '#A50034' + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: (quick && quick.on) ? '#FF3B6B' : '#A50034' }} /></div>
+            <button onClick={() => device.online && cmd('power', quick && quick.on ? 'POWER_OFF' : 'POWER_ON')} disabled={!device.online || busy} style={{ width: 42, height: 25, borderRadius: 999, border: 'none', background: (quick && quick.on) ? C.green : C.surface2, position: 'relative', cursor: device.online ? 'pointer' : 'not-allowed' }}>
+              <span style={{ position: 'absolute', top: 3, left: (quick && quick.on) ? 20 : 3, width: 19, height: 19, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
+            </button>
+          </div>
+          <div onClick={() => device.online && setRemote(true)} style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}>{label || device.name}</div>
+          {quick && quick.on ? (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+              <button onClick={() => cmd('temp', Math.max(16, (quick.temp || 23) - 1))} disabled={busy} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>−</button>
+              <div style={{ fontSize: 19, fontWeight: 800, color: '#FF3B6B' }}>{quick.temp}°{quick.cur != null && <span style={{ fontSize: 10, color: C.text3, fontWeight: 400 }}> · amb {quick.cur}°</span>}</div>
+              <button onClick={() => cmd('temp', Math.min(30, (quick.temp || 23) + 1))} disabled={busy} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>＋</button>
+            </div>
+          ) : (
+            <div onClick={() => device.online && setRemote(true)} style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2, cursor: 'pointer' }}>{!device.online ? t('offline') : t('openRemote')}</div>
+          )}
+        </div>
+        {remote && <LgAcRemote device={device} host={host} t={t} lang={lang} flash={flash} onClose={() => { setRemote(false); loadQuick(); }} />}
+      </>
+    );
+  }
   return (
     <>
-      <button onClick={() => { if (!device.online) return; if (isAc) setRemote(true); else setWash(true); }} disabled={!device.online} style={{ ...card, padding: 13, textAlign: 'left', cursor: device.online ? 'pointer' : 'default', opacity: device.online ? 1 : 0.55, border: 'none', width: '100%', color: C.text }}>
+      <button onClick={() => { if (!device.online) return; setWash(true); }} disabled={!device.online} style={{ ...card, padding: 13, textAlign: 'left', cursor: device.online ? 'pointer' : 'default', opacity: device.online ? 1 : 0.55, border: 'none', width: '100%', color: C.text }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: (isAc && quick && quick.on) ? '#A50034' + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: (isAc && quick && quick.on) ? '#FF3B6B' : '#A50034' }} /></div>
-          {isAc && quick && <span style={{ fontSize: 9.5, fontWeight: 700, color: quick.on ? C.green : C.text3, border: `1px solid ${quick.on ? C.green : C.text3}44`, borderRadius: 999, padding: '2px 7px' }}>{quick.on ? (lang === 'pt' ? 'LIGADO' : 'ON') : (lang === 'pt' ? 'DESL.' : 'OFF')}</span>}
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: '#A50034' }} /></div>
         </div>
         <div style={{ fontSize: 13, fontWeight: 600, marginTop: 10, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label || device.name}</div>
-        <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{!device.online ? t('offline') : isAc ? (quick ? (quick.on ? `${quick.temp}°${quick.cur != null ? ' · amb ' + quick.cur + '°' : ''}` : t('openRemote')) : t('openRemote')) : (isWasher ? (lang === 'pt' ? 'Ver status' : 'Status') : 'LG')}</div>
+        <div style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2 }}>{!device.online ? t('offline') : (isWasher ? (lang === 'pt' ? 'Ver status' : 'Status') : 'LG')}</div>
       </button>
-      {remote && isAc && <LgAcRemote device={device} host={host} t={t} lang={lang} flash={flash} onClose={() => setRemote(false)} />}
       {wash && <LgWasherStatus device={device} host={host} label={label} t={t} lang={lang} onClose={() => setWash(false)} />}
     </>
   );
@@ -3903,6 +3984,18 @@ function VehicleDetail({ vehicle, items, people, lang, t, back, onOpen, toggleTa
 function ItemView({ item, lang, t, onAct }) {
   const Ic = typeIcon(item.type); const mt = item.meta || {}; const metaFields = META[item.type] || [];
   const rows = metaFields.filter(([k]) => k !== 'attachments' && (mt[k] || mt[k] === 0) && mt[k] !== '').map(([k, ptL, enL]) => [lang === 'pt' ? ptL : enL, String(mt[k])]);
+  // horário + duração para eventos/compromissos
+  if ((item.type === 'event' || item.type === 'appointment') && item.time) {
+    const d = mt.durationMin;
+    if (d) {
+      const [h, mm] = item.time.split(':').map(Number);
+      const endMin = h * 60 + mm + d;
+      const endStr = pad2(Math.floor(endMin / 60) % 24) + ':' + pad2(endMin % 60);
+      rows.unshift([lang === 'pt' ? 'Horário' : 'Time', `${item.time} – ${endStr} (${d} min)`]);
+    } else {
+      rows.unshift([lang === 'pt' ? 'Horário' : 'Time', item.time]);
+    }
+  }
   const atts = mt.attachments || [];
   const done = item.status === 'done';
   const actions = [];
