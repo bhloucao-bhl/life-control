@@ -97,8 +97,10 @@ export async function GET(req) {
         let sender = from.replace(/<.*>/, '').replace(/"/g, '').trim() || from;
         let email = (from.match(/<(.+)>/) || [null, from])[1];
         if (isWork) {
-          // e-mail corporativo encaminhado: tenta extrair o remetente ORIGINAL do corpo (formato "De: Nome <email>" / "From: Nome <email>")
-          const m1 = bodyText.match(/^\s*(?:De|From)\s*:\s*(.+)$/im);
+          // e-mail corporativo encaminhado: tenta extrair o remetente ORIGINAL do corpo (rótulos De/From/Sender/Remetente)
+          const re = /^\s*(?:De|From|Sender|Remetente)\s*:\s*(.+)$/im;
+          let m1 = bodyText.match(re);
+          if (!m1 && html) { const stripped = html.replace(/<[^>]+>/g, '\n').replace(/&nbsp;/g, ' '); m1 = stripped.match(re); }
           if (m1) {
             const raw = m1[1].trim();
             const em = (raw.match(/<([^>]+)>/) || [null, null])[1];
