@@ -92,8 +92,21 @@ export async function GET(req) {
         const m = await rr.json();
         const from = header(m.payload, 'From');
         const html = htmlBody(m.payload);
-        const sender = from.replace(/<.*>/, '').replace(/"/g, '').trim() || from;
-        const email = (from.match(/<(.+)>/) || [null, from])[1];
+        const bodyText = plainBody(m.payload) || m.snippet || '';
+        const isWork = workIds.has(id) || /^\s*\(m\)/i.test(header(m.payload, 'Subject') || '');
+        let sender = from.replace(/<.*>/, '').replace(/"/g, '').trim() || from;
+        let email = (from.match(/<(.+)>/) || [null, from])[1];
+        if (isWork) {
+          // e-mail corporativo encaminhado: tenta extrair o remetente ORIGINAL do corpo (formato "De: Nome <email>" / "From: Nome <email>")
+          const m1 = bodyText.match(/^\s*(?:De|From)\s*:\s*(.+)$/im);
+          if (m1) {
+            const raw = m1[1].trim();
+            const em = (raw.match(/<([^>]+)>/) || [null, null])[1];
+            const nm = raw.replace(/<.*>/, '').replace(/"/g, '').trim();
+            if (nm) sender = nm;
+            if (em) email = em;
+          }
+        }
         const when = m.internalDate ? Number(m.internalDate) : Date.now();
         return {
           id,
@@ -107,7 +120,7 @@ export async function GET(req) {
           messageId: header(m.payload, 'Message-ID'),
           references: header(m.payload, 'References'),
           date: new Date(when).toISOString(),
-          work: workIds.has(id) || /^\s*\(m\)/i.test(header(m.payload, 'Subject') || ''),
+          work: isWork,
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
