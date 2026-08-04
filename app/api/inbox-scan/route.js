@@ -48,15 +48,21 @@ export async function GET(req) {
   const days = new URL(req.url).searchParams.get('days') || '30';
 
   try {
-    // Busca dirigida: assuntos tipicos de viagem/reserva
+    // Busca 1: dirigida por palavras-chave (fallback). Busca 2: label "(V) Viagens" criada pelo usuário (mais precisa).
     const query = `newer_than:${days}d (voo OR passagem OR reserva OR embarque OR itinerário OR itinerario OR hotel OR check-in OR flight OR booking OR reservation OR boarding OR itinerary)`;
-    const r = await fetch(`${G}/messages?q=${encodeURIComponent(query)}&maxResults=15`, { headers: h, cache: 'no-store' });
+    const queryLabel = `label:"(V) Viagens" newer_than:${days}d`;
+    const [r, rLabel] = await Promise.all([
+      fetch(`${G}/messages?q=${encodeURIComponent(query)}&maxResults=15`, { headers: h, cache: 'no-store' }),
+      fetch(`${G}/messages?q=${encodeURIComponent(queryLabel)}&maxResults=15`, { headers: h, cache: 'no-store' }),
+    ]);
     if (!r.ok) {
       const txt = await r.text();
       throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 200));
     }
     const j = await r.json();
-    const ids = (j.messages || []).map((m) => m.id);
+    let jLabel = { messages: [] };
+    try { if (rLabel.ok) jLabel = await rLabel.json(); } catch (e) {}
+    const ids = [...new Set([...(j.messages || []).map((m) => m.id), ...(jLabel.messages || []).map((m) => m.id)])];
     if (!ids.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
     const mails = (await Promise.all(ids.map(async (id) => {
