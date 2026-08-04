@@ -461,7 +461,7 @@ const AIRPORTS = {
 };
 
 const MODULES = [
-  { key: 'work', icon: Briefcase, color: C.sky, filter: (i) => i.domain === 'work' || (i.meta && i.meta.moura), types: ['event', 'appointment', 'task', 'note'] },
+  { key: 'work', icon: Briefcase, color: C.sky, filter: (i) => i.domain === 'work' || (i.meta && i.meta.moura), types: ['event', 'appointment', 'task', 'note'], custom: 'work' },
   { key: 'tasks', icon: ListTodo, color: C.accent, filter: (i) => i.type === 'task', types: ['task'] },
   { key: 'health', icon: Heart, color: C.rose, filter: (i) => i.domain === 'health', types: ['appointment', 'meal', 'med', 'expense', 'document', 'note'], custom: 'health' },
   { key: 'house', icon: Home, color: C.blue, filter: (i) => i.domain === 'home', types: ['task', 'shopping', 'expense', 'note'], custom: 'house' },
@@ -495,7 +495,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v52 · 04ago';
+const APP_VERSION = 'v53 · 04ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -709,6 +709,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
           {item.meta && item.meta.moura && <MouraBadge />}
           {item.meta && item.meta.external === 'google' && !((item.meta && item.meta.moura)) && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
+          {item.meta && item.meta.external === 'ticktick' && item.meta.project && <span style={{ fontSize: 10, color: C.violet, border: `1px solid ${C.violet}44`, borderRadius: 999, padding: '1px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>{item.meta.project}</span>}
           {item.meta && item.meta.external === 'ticktick' && <span style={{ fontSize: 10, color: C.green, border: `1px solid ${C.green}44`, borderRadius: 999, padding: '1px 7px' }}>TickTick</span>}
         </div>
       </div>
@@ -837,7 +838,7 @@ function Avatar({ photo, name, size = 42, color = C.sky }) {
 }
 
 /* ---------------- unified item form ---------------- */
-function AddressAutocomplete({ value, onChange }) {
+function AddressAutocomplete({ value, onChange, lang }) {
   const [q, setQ] = useState(value || ''); const [opts, setOpts] = useState([]); const [open, setOpen] = useState(false);
   const timer = useRef();
   useEffect(() => { setQ(value || ''); }, [value]);
@@ -1007,7 +1008,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
               </select></Field></div>;
             }
             if (k === 'address') {
-              return <div key={k} style={{ gridColumn: '1 / -1' }}><Field label={lang === 'pt' ? ptL : enL}><AddressAutocomplete value={f.meta[k] ?? ''} onChange={(v) => upMeta({ [k]: v })} /></Field></div>;
+              return <div key={k} style={{ gridColumn: '1 / -1' }}><Field label={lang === 'pt' ? ptL : enL}><AddressAutocomplete value={f.meta[k] ?? ''} onChange={(v) => upMeta({ [k]: v })} lang={lang} /></Field></div>;
             }
             if (k === 'phone') {
               const fmtPhone = (v) => {
@@ -1839,7 +1840,7 @@ function MiniPlanner({ items, lang, t, onOpen, today }) {
           <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', gap: 10, marginBottom: 8, cursor: 'pointer' }}>
             <div style={{ width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 2 }}>
               <div style={{ fontSize: 12.5, fontWeight: 700, color: C.accent }}>{i.time || '—'}</div>
-              {isTom && <div style={{ fontSize: 9, color: C.text3, textTransform: 'uppercase' }}>{lang === 'pt' ? 'amanhã' : 'tmrw'}</div>}
+              <div style={{ fontSize: 9, color: C.text3, textTransform: 'uppercase' }}>{isTom ? (lang === 'pt' ? 'amanhã' : 'tmrw') : (lang === 'pt' ? 'hoje' : 'today')}</div>
             </div>
             <div style={{ width: 3, borderRadius: 999, background: col.border, height: barH, flexShrink: 0, marginTop: 2 }} />
             <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
@@ -1909,7 +1910,7 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
         </div>
       </div>
       <div style={{ fontSize: 13.5, fontWeight: 600, margin: '4px 2px 10px', textTransform: 'capitalize', color: sel === today ? C.accent : C.text }}>{sel === today ? t('home') : fmtLong(sel, lang)}</div>
-      {mode === 'week' ? <DayPlanner dayItems={dayItems} lang={lang} t={t} onOpen={onOpen} /> : (dayItems.length === 0 ? <Empty icon={CalIcon} text={t('noItemsDay')} /> : dayItems.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />))}
+      <DayPlanner dayItems={dayItems} lang={lang} t={t} onOpen={onOpen} />
     </div>
   );
 }
@@ -1978,6 +1979,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0); const [toTick, setToTick] = useState(true);
   const [workFilter, setWorkFilter] = useState('all'); // para aba trabalho: all | events | tasks
   const [docCat, setDocCat] = useState('all'); // para aba documentos: all | work | health | personal | kids
+  const [ttProjectFilter, setTtProjectFilter] = useState(null); // filtro por lista do TickTick
   const [grace, setGrace] = useState({}); // id -> true: recem concluida, ainda visivel por 5s
   const graceToggle = (id) => {
     const it = items.find((x) => x.id === id) || {};
@@ -1991,7 +1993,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     }
   };
   const base = items.filter(module.filter);
-  const list = (module.key === 'tasks' ? base.filter((i) => TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list = (module.key === 'tasks' ? base.filter((i) => (TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) && (!ttProjectFilter || (i.meta && i.meta.project) === ttProjectFilter)) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
   if (module.key === 'docs') { const soon = items.filter((i) => i.type === 'document' && i.date && i.date <= addDays(todayISO(), 60)).length; hi = { label: `${t('expiring')} (60d)`, value: String(soon), color: soon ? C.rose : C.text2 }; }
   else if (module.key === 'tasks') hi = { label: t('open'), value: String(items.filter((i) => i.type === 'task' && i.status !== 'done').length), color: C.accent };
@@ -2005,6 +2007,16 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       )}
       {module.key === 'tasks' && !ttConnected && <HintCard icon={RefreshCw} text={t('tickHint')} />}
       {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
+      {module.key === 'tasks' && (() => {
+        const projects = [...new Set(base.filter((i) => i.meta && i.meta.project).map((i) => i.meta.project))];
+        if (!projects.length) return null;
+        return (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 6 }}>
+            <Chip active={!ttProjectFilter} onClick={() => setTtProjectFilter(null)} color={C.violet}>{lang === 'pt' ? 'Todas as listas' : 'All lists'}</Chip>
+            {projects.map((p) => <Chip key={p} active={ttProjectFilter === p} onClick={() => setTtProjectFilter(p)} color={C.violet}>{p}</Chip>)}
+          </div>
+        );
+      })()}
       {module.key === 'work' && <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}><Chip active={workFilter === 'all'} onClick={() => setWorkFilter('all')}>{lang === 'pt' ? 'Tudo' : 'All'}</Chip><Chip active={workFilter === 'events'} onClick={() => setWorkFilter('events')} color={C.accent}>{lang === 'pt' ? 'Reuniões' : 'Meetings'}</Chip><Chip active={workFilter === 'tasks'} onClick={() => setWorkFilter('tasks')} color={C.blue}>{lang === 'pt' ? 'Tarefas' : 'Tasks'}</Chip></div>}
       {module.key === 'docs' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 6 }}>{[['all', 'Tudo', 'All'], ['work', 'Trabalho', 'Work'], ['health', 'Saúde', 'Health'], ['personal', 'Pessoais', 'Personal'], ['kids', 'Filhos', 'Kids']].map(([k, ptL, enL]) => <Chip key={k} active={docCat === k} onClick={() => setDocCat(k)}>{lang === 'pt' ? ptL : enL}</Chip>)}</div>}
       {hi && <div style={{ ...card, padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{hi.label}</span><span style={{ fontSize: 22, fontWeight: 600, color: hi.color }}>{hi.value}</span></div>}
@@ -2022,12 +2034,12 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
 
 /* ---------------- Documents dashboard ---------------- */
 function DocsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash }) {
-  const [adding, setAdding] = useState(false); const [cat, setCat] = useState(null);
+  const [adding, setAdding] = useState(false); const [cat, setCat] = useState('all');
   const docs = items.filter((i) => i.type === 'document');
-  const withCat = docs.map((d) => ({ d, cat: docCategory(d) }));
-  const cats = [...new Set(withCat.map((x) => x.cat))];
+  const catOf = (d) => ['work', 'health', 'personal', 'kids'].includes(d.domain) ? d.domain : 'personal';
+  const CATS = [['all', lang === 'pt' ? 'Tudo' : 'All'], ['work', lang === 'pt' ? 'Trabalho' : 'Work'], ['health', lang === 'pt' ? 'Saúde' : 'Health'], ['personal', lang === 'pt' ? 'Pessoais' : 'Personal'], ['kids', lang === 'pt' ? 'Filhos' : 'Kids']];
   const soon = docs.filter((i) => i.date && i.date <= addDays(todayISO(), 60)).sort((a, b) => a.date.localeCompare(b.date));
-  const shown = cat ? withCat.filter((x) => x.cat === cat) : withCat;
+  const shown = cat === 'all' ? docs : docs.filter((d) => catOf(d) === cat);
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -2038,14 +2050,13 @@ function DocsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
         </div>
       )}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>
-        <Chip active={!cat} onClick={() => setCat(null)}>{t('fAll')}</Chip>
-        {cats.map((ck) => <Chip key={ck} active={cat === ck} onClick={() => setCat(ck)}>{ck}</Chip>)}
+        {CATS.map(([k, lbl]) => <Chip key={k} active={cat === k} onClick={() => setCat(k)}>{lbl}</Chip>)}
       </div>
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('addDoc')}</Btn>
-      {shown.length === 0 ? <Empty icon={FileText} text={t('nothingHere')} /> : (cat
-        ? shown.map((x) => <ItemRow key={x.d.id} item={x.d} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)
-        : cats.map((ck) => { const g = shown.filter((x) => x.cat === ck); if (!g.length) return null; return <div key={ck}><SectionTitle icon={FileText} label={ck} color={C.blue} />{g.map((x) => <ItemRow key={x.d.id} item={x.d} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</div>; }))}
-      {adding && <AddModal title={t('addDoc')} icon={FileText} draft={{ type: 'document', domain: 'docs', meta: {} }} allowedTypes={['document']} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'docs', ...x }); flash(t('savedOne')); setAdding(false); }} />}
+      {shown.length === 0 ? <Empty icon={FileText} text={t('nothingHere')} /> : (cat !== 'all'
+        ? shown.map((d) => <ItemRow key={d.id} item={d} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)
+        : CATS.slice(1).map(([k, lbl]) => { const g = shown.filter((d) => catOf(d) === k); if (!g.length) return null; return <div key={k}><SectionTitle icon={FileText} label={lbl} color={C.blue} />{g.map((d) => <ItemRow key={d.id} item={d} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</div>; }))}
+      {adding && <AddModal title={t('addDoc')} icon={FileText} draft={{ type: 'document', domain: 'personal', meta: {} }} allowedTypes={['document']} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ ...x, domain: ['work', 'health', 'personal', 'kids'].includes(x.domain) ? x.domain : 'personal' }); flash(t('savedOne')); setAdding(false); }} />}
     </div>
   );
 }
@@ -2264,6 +2275,58 @@ function Extrato({ tx, accounts, lang, t, onOpen }) {
           <div style={{ ...card, padding: '2px 12px' }}>{groups[d].map((i, idx) => <div key={i.id} style={{ borderTop: idx ? `1px solid ${C.borderSoft}` : 'none' }}><TxRow i={i} lang={lang} t={t} onOpen={onOpen} accounts={accounts} /></div>)}</div>
         </div>
       ))}
+    </div>
+  );
+}
+function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, gmail }) {
+  const [tab, setTab] = useState('all'); // all | events | tasks | emails
+  const [adding, setAdding] = useState(false);
+  const isMouraMsg = (m) => m.work || /^\s*\(m\)/i.test(m.subject || '');
+  const workEvents = items.filter((i) => (i.type === 'event' || i.type === 'appointment') && (i.domain === 'work' || (i.meta && i.meta.moura))).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+  const workTasks = items.filter((i) => i.type === 'task' && i.domain === 'work' && i.status !== 'done').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const workEmails = (gmail && gmail.messages || []).filter(isMouraMsg);
+  const counters = [
+    { k: 'events', label: lang === 'pt' ? 'Reuniões' : 'Meetings', n: workEvents.length, icon: CalIcon, color: C.accent },
+    { k: 'tasks', label: lang === 'pt' ? 'Tarefas' : 'Tasks', n: workTasks.length, icon: ListTodo, color: C.blue },
+    { k: 'emails', label: lang === 'pt' ? 'E-mails' : 'Emails', n: workEmails.length, icon: Mail, color: C.violet },
+  ];
+  return (
+    <div>
+      <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        {counters.map((c) => (
+          <button key={c.k} onClick={() => setTab(tab === c.k ? 'all' : c.k)} style={{ ...card, flex: 1, padding: '12px 6px', cursor: 'pointer', textAlign: 'center', border: tab === c.k ? `1px solid ${c.color}` : `1px solid ${C.borderSoft}`, color: C.text }}>
+            <div style={{ fontSize: 19, fontWeight: 800, color: c.color }}>{c.n}</div>
+            <div style={{ fontSize: 10.5, color: C.text3, marginTop: 1, display: 'flex', gap: 3, alignItems: 'center', justifyContent: 'center' }}><c.icon size={10} />{c.label}</div>
+          </button>
+        ))}
+      </div>
+      <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
+
+      {(tab === 'all' || tab === 'events') && workEvents.length > 0 && (
+        <><SectionTitle icon={CalIcon} label={lang === 'pt' ? 'Reuniões' : 'Meetings'} color={C.accent} />{workEvents.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
+      )}
+      {(tab === 'all' || tab === 'tasks') && workTasks.length > 0 && (
+        <><SectionTitle icon={ListTodo} label={lang === 'pt' ? 'Tarefas' : 'Tasks'} color={C.blue} />{workTasks.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
+      )}
+      {(tab === 'all' || tab === 'emails') && workEmails.length > 0 && (
+        <>
+          <SectionTitle icon={Mail} label={lang === 'pt' ? 'E-mails' : 'Emails'} color={C.violet} />
+          {workEmails.slice(0, tab === 'emails' ? 50 : 5).map((m) => (
+            <div key={m.id} style={{ ...card, padding: '11px 13px', marginBottom: 7, display: 'flex', gap: 10, alignItems: 'center' }}>
+              <MouraBadge size={14} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sender}</div>
+                <div style={{ fontSize: 11.5, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(m.subject || '').replace(/^\s*\(m\)\s*/i, '')}</div>
+              </div>
+              <span style={{ fontSize: 10, color: C.text3, flexShrink: 0 }}>{(m.date || '').slice(11, 16)}</span>
+            </div>
+          ))}
+          {tab !== 'emails' && workEmails.length > 5 && <button onClick={() => setTab('emails')} style={{ background: 'none', border: 'none', color: C.violet, cursor: 'pointer', fontSize: 12, padding: '2px 2px 12px', display: 'flex', gap: 4, alignItems: 'center' }}>{lang === 'pt' ? 'Ver todos' : 'See all'}<ChevronRight size={13} /></button>}
+        </>
+      )}
+      {workEvents.length === 0 && workTasks.length === 0 && workEmails.length === 0 && <Empty icon={Briefcase} text={t('nothingHere')} />}
+      {adding && <AddModal title={`${t('quickAdd')} · ${t('work')}`} icon={Plus} draft={{ type: 'task', domain: 'work' }} allowedTypes={['event', 'appointment', 'task', 'note']} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'work', ...x }); flash(t('savedOne')); setAdding(false); }} />}
     </div>
   );
 }
@@ -3773,7 +3836,7 @@ function ModuleErrorCard({ t, back, module, msg }) {
         <AlertTriangle size={26} style={{ color: C.accent, marginBottom: 10 }} />
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{t('screenError')}</div>
         <div style={{ fontSize: 12.5, color: C.text3, lineHeight: 1.5 }}>{t('screenErrorHint')}</div>
-        {msg && <div style={{ ...card, marginTop: 12, padding: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word', textAlign: 'left' }}>{msg}</div>}
+        {msg && <div style={{ ...card, marginTop: 12, padding: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word', textAlign: 'left' }}>{String((msg && msg.message) || msg)}</div>}
       </div>
     </div>
   );
@@ -3782,7 +3845,14 @@ function ModuleErrorCard({ t, back, module, msg }) {
 class ErrorBoundary extends React.Component {
   constructor(p) { super(p); this.state = { err: null }; }
   static getDerivedStateFromError(err) { return { err }; }
-  render() { if (this.state.err) return this.props.fallback || null; return this.props.children; }
+  render() {
+    if (this.state.err) {
+      const fb = this.props.fallback;
+      if (typeof fb === 'function') { try { return fb(this.state.err); } catch (e) { return null; } }
+      return fb || null;
+    }
+    return this.props.children;
+  }
 }
 
 function FlightRow({ f, lang, t, onOpen }) {
@@ -4570,7 +4640,8 @@ function App() {
     if (mo.custom === 'travel') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><TravelScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'cars') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><CarsScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'people') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PeopleScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'finance') return <FinanceScreen module={mo} {...shared} back={back} />;
+    if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
+    if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
