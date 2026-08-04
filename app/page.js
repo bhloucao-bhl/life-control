@@ -316,7 +316,8 @@ const S = {
   // dock
   editDock: L('Barra principal (dock)', 'Main dock'), dockHint: L('Escolha até 5 atalhos para a barra de baixo.', 'Pick up to 5 shortcuts for the bottom bar.'),
   // filters
-  fAll: L('Todos', 'All'), fWork: L('Trabalho', 'Work'), fPersonal: L('Pessoal', 'Personal'), fKids: L('Filhos', 'Kids'), fHouse: L('Casa', 'Home'), fHealth: L('Saúde', 'Health'),
+  fAll: L('Todos', 'All'), fWork: L('Trabalho', 'Work'), fPersonal: L('Pessoal', 'Personal'), fKids: L('Filhos', 'Kids'), fHouse: L('Casa', 'Home'), fHealth: L('Saúde', 'Health'), fDone: L('Concluídas', 'Done'),
+  priorityL: L('Prioridade', 'Priority'), prNormal: L('Normal', 'Normal'), prLow: L('Baixa', 'Low'),
   // finance
   accounts: L('Contas e cartões', 'Accounts & cards'), checking: L('Conta corrente', 'Checking'), credit: L('Cartão de crédito', 'Credit card'), investment: L('Investimentos', 'Investments'), benefit: L('Benefício', 'Benefit'),
   upcomingBills: L('Contas a vencer', 'Upcoming bills'), invested: L('Investido', 'Invested'), kind: L('Tipo de conta', 'Account type'),
@@ -494,7 +495,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v51 · 04ago';
+const APP_VERSION = 'v52 · 04ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -684,13 +685,8 @@ function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: L
 }
 function MouraBadge({ size = 15 }) {
   return (
-    <span title="Moura (trabalho)" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-      <svg width={size} height={size} viewBox="0 0 48 48" style={{ display: 'block' }}>
-        <path d="M2 34 L14 10 L22 10 L10 34 Z" fill="#FFC20E" />
-        <path d="M16 34 L28 10 L30 10 L30 34 Z" fill="#F5A800" />
-        <path d="M30 34 L30 10 L38 10 L46 34 Z" fill="#0090D4" />
-        <path d="M32 34 L44 10 L46 10 L46 34 Z" fill="#1B2C7A" opacity="0.92" />
-      </svg>
+    <span title="Moura (trabalho)" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: size, height: size }}>
+      <img src="/moura-logo.png" alt="Moura" width={size} height={size} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />
     </span>
   );
 }
@@ -736,13 +732,15 @@ function AttachThumb({ att, onRemove }) {
     </div>
   );
 }
-function Attachments({ list, lang, t, onAdd, onRemove }) {
+function Attachments({ list, lang, t, onAddMany, onRemove }) {
   const ref = useRef(); const [busy, setBusy] = useState(false);
   const pick = async (e) => {
     const files = Array.from(e.target.files || []); if (!files.length) return; setBusy(true);
+    const newAtts = [];
     for (const f of files) {
-      try { const url = await fileToDataUrl(f); const att = await saveAttachment(url, f.name, f.type.startsWith('image/') ? 'image' : 'pdf'); if (att) onAdd(att); } catch (err) {}
+      try { const url = await fileToDataUrl(f); const att = await saveAttachment(url, f.name, f.type.startsWith('image/') ? 'image' : 'pdf'); if (att) newAtts.push(att); } catch (err) {}
     }
+    if (newAtts.length) onAddMany(newAtts);
     setBusy(false); e.target.value = '';
   };
   return (
@@ -839,6 +837,34 @@ function Avatar({ photo, name, size = 42, color = C.sky }) {
 }
 
 /* ---------------- unified item form ---------------- */
+function AddressAutocomplete({ value, onChange }) {
+  const [q, setQ] = useState(value || ''); const [opts, setOpts] = useState([]); const [open, setOpen] = useState(false);
+  const timer = useRef();
+  useEffect(() => { setQ(value || ''); }, [value]);
+  const search = (text) => {
+    clearTimeout(timer.current);
+    if (!text || text.length < 4) { setOpts([]); return; }
+    timer.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=br&limit=5&q=${encodeURIComponent(text)}`, { headers: { 'Accept-Language': 'pt-BR' } });
+        const j = await r.json();
+        setOpts(j || []); setOpen(true);
+      } catch (e) { setOpts([]); }
+    }, 450);
+  };
+  return (
+    <div style={{ position: 'relative' }}>
+      <input value={q} onChange={(e) => { setQ(e.target.value); onChange(e.target.value); search(e.target.value); }} onFocus={() => opts.length && setOpen(true)} onBlur={() => setTimeout(() => setOpen(false), 200)} style={inputStyle} placeholder={lang === 'pt' ? 'Comece a digitar o endereço...' : 'Start typing address...'} />
+      {open && opts.length > 0 && (
+        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, marginTop: 4, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+          {opts.map((o, i) => (
+            <div key={i} onMouseDown={() => { setQ(o.display_name); onChange(o.display_name); setOpen(false); }} style={{ padding: '9px 12px', fontSize: 12.5, cursor: 'pointer', borderBottom: i < opts.length - 1 ? `1px solid ${C.borderSoft}` : 'none', color: C.text }}>{o.display_name}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], onSave, onCancel, onDelete }) {
   const [f, setF] = useState({ priority: 2, status: 'planned', ...draft, meta: { ...(draft.meta || {}) } });
   const [fcode, setFcode] = useState('');
@@ -974,6 +1000,15 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
             if (OPTS[k]) {
               return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark', appearance: 'none', WebkitAppearance: 'none' }}>{OPTS[k].map((o) => <option key={o} value={o}>{o || (lang === 'pt' ? '— selecione —' : '— select —')}</option>)}</select></Field></div>;
             }
+            if (k === 'holder' && type === 'document') {
+              return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark', appearance: 'none', WebkitAppearance: 'none' }}>
+                <option value="">{lang === 'pt' ? '— selecione —' : '— select —'}</option>
+                {people.map((p) => <option key={p.id} value={p.title}>{p.title}</option>)}
+              </select></Field></div>;
+            }
+            if (k === 'address') {
+              return <div key={k} style={{ gridColumn: '1 / -1' }}><Field label={lang === 'pt' ? ptL : enL}><AddressAutocomplete value={f.meta[k] ?? ''} onChange={(v) => upMeta({ [k]: v })} /></Field></div>;
+            }
             if (k === 'phone') {
               const fmtPhone = (v) => {
                 const d = String(v).replace(/\D/g, '').slice(0, 13);
@@ -998,6 +1033,15 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           <Field label={t('giftLink')}><input value={f.meta.link || ''} onChange={(e) => upMeta({ link: e.target.value })} placeholder="https://..." style={inputStyle} /></Field>
           <Field label={t('giftPrice')}><input type="number" step="0.01" value={f.amount || ''} onChange={(e) => setF((p) => ({ ...p, amount: Number(e.target.value) }))} style={inputStyle} /></Field>
         </>
+      )}
+      {type === 'document' && (
+        <Field label={lang === 'pt' ? 'Categoria' : 'Category'}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {[['work', 'Trabalho', 'Work'], ['health', 'Saúde', 'Health'], ['personal', 'Pessoais', 'Personal'], ['kids', 'Filhos', 'Kids']].map(([k, ptL, enL]) => (
+              <Chip key={k} active={f.domain === k} onClick={() => up({ domain: k })}>{lang === 'pt' ? ptL : enL}</Chip>
+            ))}
+          </div>
+        </Field>
       )}
       {type === 'document' && f.domain === 'health' && (
         <div onClick={() => upMeta({ isExam: !f.meta.isExam })} style={{ ...card, padding: '11px 13px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
@@ -1032,7 +1076,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
         </Field>
       )}
       <Field label={type === 'message' ? t('body') : t('notes')}><textarea value={f.notes || ''} onChange={(e) => up({ notes: e.target.value })} rows={type === 'message' ? 3 : 2} style={{ ...inputStyle, resize: 'none' }} /></Field>
-      <Attachments list={attList} lang={lang} t={t} onAdd={(a) => upMeta({ attachments: [...attList, a] })} onRemove={(id) => upMeta({ attachments: attList.filter((x) => x.id !== id) })} />
+      <Attachments list={attList} lang={lang} t={t} onAddMany={(arr) => upMeta({ attachments: [...attList, ...arr] })} onRemove={(id) => upMeta({ attachments: attList.filter((x) => x.id !== id) })} />
       {onDelete && f.type === 'task' && <Btn kind="soft" onClick={() => up({ status: f.status === 'done' ? 'planned' : 'done' })} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>{f.status === 'done' ? <><Circle size={15} />{t('markUndone')}</> : <><CircleCheck size={15} />{t('markDone')}</>}</Btn>}
       <div style={{ display: 'flex', gap: 8 }}>
         {onDelete && <Btn kind="danger" onClick={onDelete}><Trash2 size={15} /></Btn>}
@@ -1387,7 +1431,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
     (i.date === today && (!i.time || i.time >= hm)) ||
     (i.date === tomorrow && (!i.time || i.time <= hm))
   )).sort((a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99')));
-  const next5 = in24hItems.slice(0, 6);
+  const next5 = in24hItems.slice(0, 5);
   const balances = items.filter((i) => i.type === 'account' && i.meta && i.meta.showOnToday);
   const longTerm = items.filter((i) => i.date && i.date > today && ((i.meta && i.meta.milestone) || i.type === 'trip')).sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
   return (
@@ -1431,20 +1475,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       <SectionTitle icon={Clock} label={lang === 'pt' ? 'O que vai rolar nas próximas 24h' : 'Next 24 hours'} color={C.accent} />
-      {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : next5.map((i) => {
-        const isTom = i.date === addDays(today, 1);
-        const isWork = i.domain === 'work' || (i.meta && i.meta.moura);
-        return (
-        <div key={i.id} onClick={() => onOpen(i)} style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
-          <div style={{ width: 50, flexShrink: 0, textAlign: 'center' }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: C.accent }}>{i.time || '—'}</div>
-            {isTom && <div style={{ fontSize: 9, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{lang === 'pt' ? 'amanhã' : 'tmrw'}</div>}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 14, display: 'flex', gap: 6, alignItems: 'center' }}>{isWork && <MouraBadge size={13} />}{i.meta && i.meta.milestone && <Star size={12} style={{ color: C.accent }} />}<span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span></div><div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{t('t_' + i.type)}</div></div>
-          <ChevronRight size={16} style={{ color: C.text3 }} />
-        </div>
-        );
-      })}
+      {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : <div style={{ ...card, padding: 14 }}><MiniPlanner items={next5} lang={lang} t={t} onOpen={onOpen} today={today} /></div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Newspaper size={14} style={{ color: C.blue }} />{t('news')}</span>
         <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
@@ -1750,12 +1781,12 @@ function DayPlanner({ dayItems, lang, t, onOpen }) {
   const allDay = dayItems.filter((i) => !i.time || !/^\d{2}:\d{2}/.test(i.time));
   const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
   const dur = (i) => (i.meta && i.meta.durationMin) || (i.type === 'event' || i.type === 'appointment' ? 60 : 30);
-  // detecta conflitos (sobreposição)
   const withConf = timed.map((i) => ({ ...i, _s: toMin(i.time), _e: toMin(i.time) + dur(i) }));
   withConf.forEach((a) => { a._conf = withConf.some((b) => b.id !== a.id && a._s < b._e && b._s < a._e); });
   if (timed.length === 0 && allDay.length === 0) return <Empty icon={CalIcon} text={t('noItemsDay')} />;
-  const startH = Math.max(0, Math.min(...withConf.map((i) => Math.floor(i._s / 60)), 8));
-  const endH = Math.min(24, Math.max(...withConf.map((i) => Math.ceil(i._e / 60)), 19));
+  // régua fixa 08:00–19:00; só expande se algum compromisso real cair fora dela (nunca corta um evento)
+  const startH = Math.min(8, ...withConf.map((i) => Math.floor(i._s / 60)));
+  const endH = Math.max(19, ...withConf.map((i) => Math.ceil(i._e / 60)));
   const hours = []; for (let h = startH; h <= endH; h++) hours.push(h);
   const PX = 52; // altura por hora
   return (
@@ -1789,6 +1820,39 @@ function DayPlanner({ dayItems, lang, t, onOpen }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+/* mini-planner compacto (usado na Hoje): barras proporcionais à duração, sem grade de horas fixa (span cruza meia-noite) */
+function MiniPlanner({ items, lang, t, onOpen, today }) {
+  const dur = (i) => (i.meta && i.meta.durationMin) || (i.type === 'event' || i.type === 'appointment' ? 60 : 30);
+  const maxDur = Math.max(60, ...items.map(dur));
+  return (
+    <div>
+      {items.map((i) => {
+        const isTom = i.date !== today;
+        const isWork = i.domain === 'work' || (i.meta && i.meta.moura);
+        const col = eventColors(i);
+        const d = dur(i);
+        const barH = Math.max(30, Math.min(64, (d / maxDur) * 64));
+        return (
+          <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', gap: 10, marginBottom: 8, cursor: 'pointer' }}>
+            <div style={{ width: 44, flexShrink: 0, textAlign: 'right', paddingTop: 2 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: C.accent }}>{i.time || '—'}</div>
+              {isTom && <div style={{ fontSize: 9, color: C.text3, textTransform: 'uppercase' }}>{lang === 'pt' ? 'amanhã' : 'tmrw'}</div>}
+            </div>
+            <div style={{ width: 3, borderRadius: 999, background: col.border, height: barH, flexShrink: 0, marginTop: 2 }} />
+            <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
+              <div style={{ fontSize: 13.5, display: 'flex', gap: 6, alignItems: 'center' }}>
+                {isWork && <MouraBadge size={13} />}
+                {i.meta && i.meta.milestone && <Star size={12} style={{ color: C.accent }} />}
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span>
+              </div>
+              <div style={{ fontSize: 11, color: C.text3, marginTop: 1 }}>{t('t_' + i.type)}{i.meta && i.meta.durationMin ? ` · ${i.meta.durationMin} min` : ''}</div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1845,7 +1909,7 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
         </div>
       </div>
       <div style={{ fontSize: 13.5, fontWeight: 600, margin: '4px 2px 10px', textTransform: 'capitalize', color: sel === today ? C.accent : C.text }}>{sel === today ? t('home') : fmtLong(sel, lang)}</div>
-      {dayItems.length === 0 ? <Empty icon={CalIcon} text={t('noItemsDay')} /> : dayItems.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {mode === 'week' ? <DayPlanner dayItems={dayItems} lang={lang} t={t} onOpen={onOpen} /> : (dayItems.length === 0 ? <Empty icon={CalIcon} text={t('noItemsDay')} /> : dayItems.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />))}
     </div>
   );
 }
@@ -1947,9 +2011,9 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
       {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={module.key === 'tasks' ? graceToggle : toggleTask} onOpen={onOpen} />)}
       {module.key === 'tasks' && ttConnected && <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', marginTop: 16, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><RefreshCw size={10} style={{ color: C.green }} />{lang === 'pt' ? 'Sincronizado com o TickTick' : 'Synced with TickTick'}</div>}
-      {adding && <AddModal title={`${t('quickAdd')} · ${t(module.key)}`} icon={Plus} draft={{ type: module.types[0], domain: moduleDomain(module.key) }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => {
+      {adding && <AddModal title={`${t('quickAdd')} · ${t(module.key)}`} icon={Plus} draft={{ type: module.types[0], domain: module.key === 'docs' ? (docCat !== 'all' ? docCat : 'personal') : moduleDomain(module.key) }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => {
         if (module.key === 'tasks' && ttConnected && toTick && x.type === 'task') { onCreateTick && onCreateTick({ title: x.title, notes: x.notes, date: x.date, priority: x.priority === 1 ? 5 : x.priority === 2 ? 3 : 0, tags: x.priority === 1 ? ['Importante'] : [] }); flash(lang === 'pt' ? 'Criado no TickTick ✓' : 'Created in TickTick ✓'); }
-        else { addItem({ domain: moduleDomain(module.key), ...x }); flash(t('savedOne')); }
+        else { addItem({ domain: module.key === 'docs' ? (x.domain || 'personal') : moduleDomain(module.key), ...x }); flash(t('savedOne')); }
         setAdding(false);
       }} extraToggle={module.key === 'tasks' && ttConnected ? { label: lang === 'pt' ? 'Criar no TickTick' : 'Create in TickTick', value: toTick, onChange: setToTick } : null} />}
     </div>
@@ -2517,7 +2581,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-        {SHORT.map((s) => <button key={s.k} onClick={s.on} style={{ ...card, flex: 1, padding: '12px 4px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}><s.icon size={19} style={{ color: C.accent }} /><span style={{ fontSize: 11 }}>{t(s.k)}</span></button>)}
+        {SHORT.map((s) => <button key={s.k} onClick={s.on} style={{ ...card, flex: 1, padding: '12px 4px', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, color: C.text }}><s.icon size={19} style={{ color: C.accent }} /><span style={{ fontSize: 11 }}>{t(s.k)}</span></button>)}
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8, justifyContent: 'flex-end' }}>
         <Chip active={finPeriod === 'month'} onClick={() => setFinPeriod('month')}>{t('thisMonth')}</Chip>
@@ -2751,7 +2815,7 @@ function LgCard({ device, host, t, lang, flash, label }) {
         <div style={{ ...card, padding: 13, opacity: device.online ? 1 : 0.55 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div style={{ width: 34, height: 34, borderRadius: 9, background: (quick && quick.on) ? '#A50034' + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: (quick && quick.on) ? '#FF3B6B' : '#A50034' }} /></div>
-            <button onClick={() => device.online && cmd('power', quick && quick.on ? 'POWER_OFF' : 'POWER_ON')} disabled={!device.online || busy} style={{ width: 42, height: 25, borderRadius: 999, border: 'none', background: (quick && quick.on) ? C.green : C.surface2, position: 'relative', cursor: device.online ? 'pointer' : 'not-allowed' }}>
+            <button onClick={() => device.online && cmd('power', !(quick && quick.on))} disabled={!device.online || busy} style={{ width: 42, height: 25, borderRadius: 999, border: 'none', background: (quick && quick.on) ? C.green : C.surface2, position: 'relative', cursor: device.online ? 'pointer' : 'not-allowed' }}>
               <span style={{ position: 'absolute', top: 3, left: (quick && quick.on) ? 20 : 3, width: 19, height: 19, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
             </button>
           </div>
@@ -2763,7 +2827,9 @@ function LgCard({ device, host, t, lang, flash, label }) {
               <button onClick={() => cmd('temp', Math.min(30, (quick.temp || 23) + 1))} disabled={busy} style={{ width: 30, height: 30, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>＋</button>
             </div>
           ) : (
-            <div onClick={() => device.online && setRemote(true)} style={{ fontSize: 10.5, color: device.online ? C.text3 : C.rose, marginTop: 2, cursor: 'pointer' }}>{!device.online ? t('offline') : t('openRemote')}</div>
+            <div onClick={() => device.online && setRemote(true)} style={{ fontSize: 11, color: device.online ? C.text3 : C.rose, marginTop: 4, cursor: 'pointer' }}>
+              {!device.online ? t('offline') : (quick && quick.cur != null ? (lang === 'pt' ? `Ambiente: ${quick.cur}°` : `Room: ${quick.cur}°`) : t('openRemote'))}
+            </div>
           )}
         </div>
         {remote && <LgAcRemote device={device} host={host} t={t} lang={lang} flash={flash} onClose={() => { setRemote(false); loadQuick(); }} />}
