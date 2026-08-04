@@ -163,7 +163,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -209,7 +209,7 @@ const S = {
   noAttention: L('Nada urgente agora.', 'Nothing urgent right now.'), noLongTerm: L('Nada marcado à frente.', 'Nothing ahead yet.'),
   home: L('Hoje', 'Today'), messages: L('Mensagens', 'Messages'), calendar: L('Calendário', 'Calendar'),
   dashboard: L('Painel de Controle', 'Dashboard'), dashShort: L('Painel', 'Dashboard'), claude: L('Claude', 'Claude'),
-  work: L('Trabalho', 'Work'), tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
+  work: L('Trabalho', 'Work'), purchases: L('Compras', 'Purchases'), tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
   people: L('Contatos', 'Contacts'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'),
   readiness: L('Prontidão', 'Readiness'), sleepScore: L('Sono', 'Sleep'),
   connectOura: L('Conecte o Oura em Ajustes, ou toque para registrar.', 'Connect Oura in Settings, or tap to log.'),
@@ -288,7 +288,7 @@ const S = {
   quickAdd: L('Adicionar', 'Add'), open: L('Abertas', 'Open'),
   t_task: L('Tarefa', 'Task'), t_event: L('Evento', 'Event'), t_expense: L('Gasto', 'Expense'), t_meal: L('Refeição', 'Meal'),
   t_med: L('Medicação', 'Medication'), t_appointment: L('Consulta', 'Appointment'), t_document: L('Documento', 'Document'),
-  t_vehicle: L('Veículo', 'Vehicle'), t_trip: L('Viagem', 'Trip'), t_flight: L('Voo', 'Flight'), t_shopping: L('Compra', 'Shopping'),
+  t_vehicle: L('Veículo', 'Vehicle'), t_trip: L('Viagem', 'Trip'), t_flight: L('Voo', 'Flight'), t_shopping: L('Compra', 'Shopping'), t_purchase: L('Pedido', 'Order'),
   t_bill: L('Conta', 'Bill'), t_note: L('Nota', 'Note'), t_person: L('Pessoa', 'Person'), t_account: L('Conta/Cartão', 'Account/Card'),
   t_maintenance: L('Manutenção', 'Maintenance'), t_message: L('Mensagem', 'Message'), t_gift: L('Presente', 'Gift'),
   noPersist: L('Neste ambiente os dados podem não persistir entre sessões.', 'Data may not persist between sessions here.'),
@@ -354,6 +354,7 @@ const META = {
   account: [['institution', 'Instituição', 'Institution'], ['balance', 'Saldo atual', 'Current balance', 'number']],
   message: [['sender', 'Remetente', 'Sender']],
   income: [['source', 'Origem', 'Source']],
+  purchase: [['store', 'Loja', 'Store'], ['tracking', 'Rastreio', 'Tracking']],
 };
 
 const AIRLINES = { LA: 'LATAM', JJ: 'LATAM', G3: 'GOL', AD: 'Azul', AV: 'Avianca', CM: 'Copa', AA: 'American', UA: 'United', DL: 'Delta', B6: 'JetBlue', AC: 'Air Canada', QR: 'Qatar Airways', EK: 'Emirates', EY: 'Etihad', TK: 'Turkish', TP: 'TAP', IB: 'Iberia', UX: 'Air Europa', AF: 'Air France', KL: 'KLM', LH: 'Lufthansa', BA: 'British Airways', AZ: 'ITA Airways', QF: 'Qantas', JL: 'Japan Airlines', NH: 'ANA', SQ: 'Singapore', CX: 'Cathay Pacific', EI: 'Aer Lingus', LX: 'SWISS', AY: 'Finnair' };
@@ -398,9 +399,9 @@ function fmtLongPretty(iso, lang) {
   return `${wd}, ${mon} ${d.getDate()}, ${d.getFullYear()}`;
 }
 function fmtMoney(n, lang) { if (n == null || isNaN(n)) return ''; return new Intl.NumberFormat(loc(lang), { style: 'currency', currency: 'BRL' }).format(n); }
-const TYPES = ['task', 'event', 'expense', 'income', 'meal', 'med', 'appointment', 'document', 'vehicle', 'maintenance', 'trip', 'flight', 'shopping', 'bill', 'note', 'person', 'account', 'message', 'gift'];
+const TYPES = ['task', 'event', 'expense', 'income', 'meal', 'med', 'appointment', 'document', 'vehicle', 'maintenance', 'trip', 'flight', 'shopping', 'purchase', 'bill', 'note', 'person', 'account', 'message', 'gift'];
 const DOMAINS = ['personal', 'today', 'health', 'home', 'finance', 'kids', 'docs', 'cars', 'travel', 'work'];
-const isMoney = (ty) => ty === 'expense' || ty === 'income' || ty === 'bill' || ty === 'maintenance';
+const isMoney = (ty) => ty === 'expense' || ty === 'income' || ty === 'bill' || ty === 'maintenance' || ty === 'purchase';
 const CATEGORIES = {
   alimentacao: { pt: 'Alimentação', en: 'Food', icon: Utensils, color: '#5FBF8F' },
   transporte: { pt: 'Transporte', en: 'Transport', icon: Car, color: '#6BA6E6' },
@@ -462,6 +463,7 @@ const AIRPORTS = {
 
 const MODULES = [
   { key: 'work', icon: Briefcase, color: C.sky, filter: (i) => i.domain === 'work' || (i.meta && i.meta.moura), types: ['event', 'appointment', 'task', 'note'], custom: 'work' },
+  { key: 'purchases', icon: Package, color: C.accent, filter: (i) => i.type === 'purchase', types: ['purchase'], custom: 'purchases' },
   { key: 'tasks', icon: ListTodo, color: C.accent, filter: (i) => i.type === 'task', types: ['task'] },
   { key: 'health', icon: Heart, color: C.rose, filter: (i) => i.domain === 'health', types: ['appointment', 'meal', 'med', 'expense', 'document', 'note'], custom: 'health' },
   { key: 'house', icon: Home, color: C.blue, filter: (i) => i.domain === 'home', types: ['task', 'shopping', 'expense', 'note'], custom: 'house' },
@@ -495,7 +497,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v53 · 04ago';
+const APP_VERSION = 'v54 · 04ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -651,7 +653,7 @@ function HintCard({ icon: Icon, text }) {
   return <div style={{ ...card, padding: 12, marginBottom: 10, display: 'flex', gap: 9, alignItems: 'flex-start', background: C.bg2 }}><Icon size={14} style={{ color: C.text3, marginTop: 1, flexShrink: 0 }} /><div style={{ fontSize: 11.5, color: C.text3, lineHeight: 1.5 }}>{text}</div></div>;
 }
 function typeIcon(type) {
-  const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift };
+  const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, purchase: Package, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift };
   return m[type] || FileText;
 }
 function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: LI, rightLabel, rightColor, rightIcon: RI }) {
@@ -1034,6 +1036,13 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           <Field label={t('giftLink')}><input value={f.meta.link || ''} onChange={(e) => upMeta({ link: e.target.value })} placeholder="https://..." style={inputStyle} /></Field>
           <Field label={t('giftPrice')}><input type="number" step="0.01" value={f.amount || ''} onChange={(e) => setF((p) => ({ ...p, amount: Number(e.target.value) }))} style={inputStyle} /></Field>
         </>
+      )}
+      {type === 'purchase' && (
+        <Field label={lang === 'pt' ? 'Status' : 'Status'}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {['paid', 'shipped', 'delivered'].map((s) => <Chip key={s} active={f.meta.stage === s} onClick={() => upMeta({ stage: s, deliveredDate: s === 'delivered' ? (f.meta.deliveredDate || todayISO()) : f.meta.deliveredDate })}>{PURCHASE_STAGES[s][lang]}</Chip>)}
+          </div>
+        </Field>
       )}
       {type === 'document' && (
         <Field label={lang === 'pt' ? 'Categoria' : 'Category'}>
@@ -2327,6 +2336,106 @@ function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
       )}
       {workEvents.length === 0 && workTasks.length === 0 && workEmails.length === 0 && <Empty icon={Briefcase} text={t('nothingHere')} />}
       {adding && <AddModal title={`${t('quickAdd')} · ${t('work')}`} icon={Plus} draft={{ type: 'task', domain: 'work' }} allowedTypes={['event', 'appointment', 'task', 'note']} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'work', ...x }); flash(t('savedOne')); setAdding(false); }} />}
+    </div>
+  );
+}
+const PURCHASE_STAGES = {
+  paid: { pt: 'Pago', en: 'Paid', color: '#E6B450' },
+  shipped: { pt: 'Enviado', en: 'Shipped', color: '#6BA6E6' },
+  delivered: { pt: 'Entregue', en: 'Delivered', color: '#5FBF8F' },
+  other: { pt: 'Em análise', en: 'Other', color: '#8A8F98' },
+};
+function PurchaseCard({ p, lang, onOpen }) {
+  const stage = (p.meta && p.meta.stage) || 'paid';
+  const sm = PURCHASE_STAGES[stage] || PURCHASE_STAGES.other;
+  const isML = p.meta && p.meta.external === 'mercadolivre';
+  return (
+    <div onClick={() => onOpen(p)} style={{ ...card, padding: 13, marginBottom: 8, cursor: 'pointer' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{p.date ? fmtDate(p.date, lang) : ''}{p.meta && p.meta.tracking ? ` · ${p.meta.tracking}` : ''}</div>
+        </div>
+        {p.amount != null && <span style={{ fontSize: 13.5, fontWeight: 700, flexShrink: 0 }}>{fmtMoney(p.amount, lang)}</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 999, padding: '2px 9px' }}>{sm[lang]}</span>
+        {isML && <span style={{ fontSize: 10, color: C.text3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px' }}>Mercado Livre</span>}
+      </div>
+    </div>
+  );
+}
+function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, onOpen, flash }) {
+  const [adding, setAdding] = useState(false);
+  const [ml, setMl] = useState({ loading: true, connected: false, purchases: [], error: null });
+  const [scan, setScan] = useState({ loading: false, list: null, error: null });
+  useEffect(() => { authFetch('/api/mercadolivre').then((r) => r.json()).then((j) => setMl({ loading: false, connected: !!j.connected, purchases: j.purchases || [], error: j.error || null })).catch(() => setMl((p) => ({ ...p, loading: false }))); }, []);
+  const runScan = () => {
+    setScan({ loading: true, list: null, error: null });
+    authFetch('/api/purchases-scan').then((r) => r.json())
+      .then((j) => {
+        const knownIds = new Set(items.filter((i) => i.type === 'purchase' && i.meta && i.meta.messageId).map((i) => i.meta.messageId));
+        setScan({ loading: false, list: (j.suggestions || []).filter((s) => !knownIds.has(s.messageId)), error: j.error || null });
+      })
+      .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
+  };
+  const acceptSug = (sg) => {
+    addItem({ type: 'purchase', domain: 'shopping', title: sg.title, amount: sg.amount, date: sg.date, meta: { external: 'email', messageId: sg.messageId, stage: sg.stage, tracking: sg.tracking, trackingLink: sg.trackingLink, store: sg.store, paymentMethod: sg.paymentMethod, sourceLink: sg.source && sg.source.link } });
+    setScan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
+    flash(t('savedOne'));
+  };
+
+  const manualPurchases = items.filter((i) => i.type === 'purchase' && (!i.meta || i.meta.external !== 'mercadolivre'));
+  const all = [...ml.purchases, ...manualPurchases];
+  const today = todayISO();
+  const isArchived = (p) => { const st = p.meta && p.meta.stage; if (st !== 'delivered') return false; const dd = (p.meta && p.meta.deliveredDate) || p.date; if (!dd) return false; return addDays(dd, 5) < today; };
+  const [showArchived, setShowArchived] = useState(false);
+  const active = all.filter((p) => !isArchived(p));
+  const archived = all.filter(isArchived);
+  const shown = (showArchived ? archived : active).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  return (
+    <div>
+      <ModuleHeader module={module} t={t} back={back} />
+      {!ml.connected && !ml.loading && (
+        <div style={{ ...card, padding: 13, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+          <ShoppingCart size={16} style={{ color: C.accent, flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Conecte o Mercado Livre em Ajustes → Conexões para ver seus pedidos aqui.' : 'Connect Mercado Livre in Settings to see orders here.'}</span>
+        </div>
+      )}
+      <div style={{ ...card, padding: 12, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <Sparkles size={16} style={{ color: C.accent, flexShrink: 0 }} />
+        <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{lang === 'pt' ? 'Buscar compras nos e-mails (label Compras)' : 'Scan email for purchases'}</span>
+        <Btn kind="soft" onClick={runScan} disabled={scan.loading} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+          {scan.loading ? <Loader2 size={13} className="spin" /> : <Mail size={13} />}{scan.loading ? t('scanning') : (lang === 'pt' ? 'Buscar' : 'Scan')}
+        </Btn>
+      </div>
+      {scan.error && <HintCard icon={AlertTriangle} text={scan.error} />}
+      {scan.list && scan.list.length === 0 && !scan.loading && <HintCard icon={Check} text={lang === 'pt' ? 'Nada novo encontrado.' : 'Nothing new found.'} />}
+      {scan.list && scan.list.map((sg) => (
+        <div key={sg.key} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+            <Package size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600 }}>{sg.title}</div>
+              <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>{PURCHASE_STAGES[sg.stage][lang]}{sg.amount != null ? ' · ' + fmtMoney(sg.amount, lang) : ''}{sg.date ? ' · ' + fmtDate(sg.date, lang) : ''}</div>
+              {sg.source && sg.source.subject && <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {sg.source.subject}</div>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <Btn kind="soft" onClick={() => acceptSug(sg)} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={13} />{t('accept')}</Btn>
+            <Btn kind="ghost" onClick={() => setScan((p) => ({ ...p, list: p.list.filter((x) => x.key !== sg.key) }))} style={{ padding: '7px 12px', fontSize: 12.5 }}>{t('discard')}</Btn>
+          </div>
+        </div>
+      ))}
+
+      <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{lang === 'pt' ? 'Adicionar compra manual' : 'Add purchase'}</Btn>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        <Chip active={!showArchived} onClick={() => setShowArchived(false)}>{lang === 'pt' ? 'Ativas' : 'Active'} ({active.length})</Chip>
+        <Chip active={showArchived} onClick={() => setShowArchived(true)}>{lang === 'pt' ? 'Arquivadas' : 'Archived'} ({archived.length})</Chip>
+      </div>
+      {shown.length === 0 ? <Empty icon={Package} text={t('nothingHere')} /> : shown.map((p) => <PurchaseCard key={p.id} p={p} lang={lang} onOpen={() => onOpen(p)} />)}
+      {adding && <AddModal title={lang === 'pt' ? 'Compra' : 'Purchase'} icon={Package} draft={{ type: 'purchase', domain: 'shopping', meta: { stage: 'paid' } }} allowedTypes={['purchase']} lang={lang} t={t} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'shopping', ...x }); flash(t('savedOne')); setAdding(false); }} />}
     </div>
   );
 }
@@ -3867,6 +3976,7 @@ function FlightRow({ f, lang, t, onOpen }) {
           {[m.airline, m.flightNumber, f.date ? fmtDate(f.date, lang) : null].filter(Boolean).join(' · ') || t('t_flight')}
         </div>
       </div>
+      {m.needsCorrelation && <span title={lang === 'pt' ? 'Sem viagem vinculada' : 'No linked trip'} style={{ fontSize: 9.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '2px 7px', flexShrink: 0 }}>{lang === 'pt' ? 'vincular' : 'link'}</span>}
       {m.locator && <span style={{ fontSize: 10.5, color: C.text3, fontFamily: 'monospace' }}>{m.locator}</span>}
     </button>
   );
@@ -3988,6 +4098,7 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
 }
 function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
   const [view, setView] = useState('flights'); const [period, setPeriod] = useState('year'); const [adding, setAdding] = useState(null); const [selTrip, setSelTrip] = useState(null);
+  const [scan, setScan] = useState({ loading: false, list: null, error: null });
   const flights = items.filter((i) => i.type === 'flight');
   const trips = items.filter((i) => i.type === 'trip').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const today = todayISO();
@@ -4002,9 +4113,71 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const flog = [...yf].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const current = selTrip && items.find((i) => i.id === selTrip);
   if (current) return <TripDetail trip={current} items={items} people={people} lang={lang} t={t} back={() => setSelTrip(null)} onOpen={onOpen} toggleTask={toggleTask} addItem={addItem} updateItem={updateItem} delItem={delItem} flash={flash} />;
+  const runScan = () => {
+    setScan({ loading: true, list: null, error: null });
+    authFetch('/api/inbox-scan').then((r) => r.json())
+      .then((j) => setScan({ loading: false, list: j.suggestions || [], error: j.error || null }))
+      .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
+  };
+  // tenta achar uma viagem já cadastrada com data/destino próximos, pra correlacionar em vez de duplicar
+  const findMatchTrip = (sg) => {
+    if (!sg.date) return null;
+    return trips.find((tr) => {
+      const start = tr.date, end = (tr.meta && tr.meta.endDate) || tr.date;
+      if (!start) return false;
+      const near = sg.date >= addDays(start, -2) && sg.date <= addDays(end, 2);
+      if (!near) return false;
+      if (sg.meta && sg.meta.to && tr.meta && tr.meta.destination) {
+        return tr.meta.destination.toLowerCase().includes(String(sg.meta.to).toLowerCase()) || String(sg.meta.to).toLowerCase().includes(tr.meta.destination.toLowerCase()) || true; // data já bateu, aceita
+      }
+      return true;
+    });
+  };
+  const acceptSug = (sg) => {
+    const domain = (sg.type === 'flight' || sg.type === 'trip') ? 'travel' : sg.type === 'bill' ? 'finance' : 'personal';
+    const match = sg.type === 'flight' ? findMatchTrip(sg) : null;
+    addItem({ type: sg.type, domain, title: sg.title, date: sg.date, time: sg.time, amount: sg.amount, meta: { ...(sg.meta || {}), fromEmail: true, tripId: match ? match.id : null, needsCorrelation: sg.type === 'flight' && !match } });
+    setScan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
+    flash(match ? (lang === 'pt' ? `Vinculado à viagem "${match.title}" ✓` : 'Linked to trip ✓') : t('savedOne'));
+  };
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ ...card, padding: 12, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <Sparkles size={16} style={{ color: C.accent, flexShrink: 0 }} />
+        <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{t('suggestions')}</span>
+        <Btn kind="soft" onClick={runScan} disabled={scan.loading} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+          {scan.loading ? <Loader2 size={13} className="spin" /> : <Mail size={13} />}{scan.loading ? t('scanning') : t('scanInbox')}
+        </Btn>
+      </div>
+      {scan.error && <HintCard icon={AlertTriangle} text={scan.error} />}
+      {scan.list && scan.list.length === 0 && !scan.loading && <HintCard icon={Check} text={t('noSuggestions')} />}
+      {scan.list && scan.list.map((sg) => {
+        const Ic = typeIcon(sg.type);
+        const match = sg.type === 'flight' ? findMatchTrip(sg) : null;
+        return (
+          <div key={sg.key} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <Ic size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{sg.title}</div>
+                <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>
+                  {t('t_' + sg.type)}{sg.date ? ' · ' + fmtDate(sg.date, lang) : ''}{sg.time ? ' ' + sg.time : ''}
+                  {sg.meta && sg.meta.from ? ` · ${sg.meta.from}→${sg.meta.to || ''}` : ''}
+                </div>
+                {match && <div style={{ fontSize: 11, color: C.green, marginTop: 4, display: 'flex', gap: 5, alignItems: 'center' }}><Check size={11} />{lang === 'pt' ? `Vamos vincular à viagem "${match.title}"` : `Will link to "${match.title}"`}</div>}
+                {sg.why && <div style={{ fontSize: 11, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{sg.why}</div>}
+                {sg.source && sg.source.subject && <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {sg.source.subject}</div>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Btn kind="soft" onClick={() => acceptSug(sg)} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={13} />{t('accept')}</Btn>
+              <Btn kind="ghost" onClick={() => setScan((p) => ({ ...p, list: p.list.filter((x) => x.key !== sg.key) }))} style={{ padding: '7px 12px', fontSize: 12.5 }}>{t('discard')}</Btn>
+              {sg.source && sg.source.link && <a href={sg.source.link} target="_blank" rel="noreferrer" style={{ ...card, padding: '7px 11px', color: C.text2, fontSize: 12, textDecoration: 'none', display: 'flex', alignItems: 'center' }}><Mail size={13} /></a>}
+            </div>
+          </div>
+        );
+      })}
       {nextTrip && nextDays != null && nextDays <= 30 && (
         <div onClick={() => setSelTrip(nextTrip.id)} style={{ ...card, padding: 15, marginBottom: 14, background: C.accentSoft, borderColor: C.accent + '33', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -4325,6 +4498,7 @@ function Connections({ lang, t }) {
       <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
       <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
       <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
+      <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
     </div>
   );
 }
@@ -4641,6 +4815,7 @@ function App() {
     if (mo.custom === 'cars') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><CarsScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'people') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PeopleScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
+    if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
