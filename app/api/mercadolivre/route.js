@@ -12,6 +12,17 @@ function stageOf(order, shipStatus) {
   if (paid) return 'paid';
   return 'pending';
 }
+// tenta achar a data estimada de entrega em alguns caminhos comuns do payload de shipment do ML
+function findEta(sj) {
+  const paths = [
+    sj && sj.estimated_delivery_time && sj.estimated_delivery_time.date,
+    sj && sj.estimated_delivery_final && sj.estimated_delivery_final.date,
+    sj && sj.shipping_option && sj.shipping_option.estimated_delivery_time && sj.shipping_option.estimated_delivery_time.date,
+    sj && sj.status_history && sj.status_history.date_delivered,
+  ];
+  const found = paths.find(Boolean);
+  return found ? String(found).slice(0, 10) : null;
+}
 
 export async function GET(req) {
   const user = await userFromRequest(req);
@@ -21,13 +32,17 @@ export async function GET(req) {
   if (!token) return Response.json({ connected: false, purchases: [] });
 
   const h = { Authorization: `Bearer ${token}` };
+  const days = Number(new URL(req.url).searchParams.get('days')) || 30;
 
   try {
     const rMe = await fetch(`${ML}/users/me`, { headers: h, cache: 'no-store' });
     if (!rMe.ok) throw new Error('users/me HTTP ' + rMe.status);
     const me = await rMe.json();
 
-    const rOrders = await fetch(`${ML}/orders/search?buyer=${me.id}&sort=date_desc&limit=50`, { headers: h, cache: 'no-store' });
+    const from = new Date(Date.now() - days * 86400000).toISOString();
+    const to = new Date().toISOString();
+    const qs = `buyer=${me.id}&sort=date_desc&limit=50&order.date_created.from=${encodeURIComponent(from)}&order.date_created.to=${encodeURIComponent(to)}`;
+    const rOrders = await fetch(`${ML}/orders/search?${qs}`, { headers: h, cache: 'no-store' });
     if (!rOrders.ok) {
       const txt = await rOrders.text();
       throw new Error('orders/search HTTP ' + rOrders.status + ' — ' + txt.slice(0, 200));
@@ -36,18 +51,19 @@ export async function GET(req) {
     const orders = oj.results || [];
 
     const purchases = await Promise.all(orders.map(async (o) => {
-      let shipStatus = null, tracking = null;
+      let shipStatus = null, tracking = null, eta = null;
       const shId = o.shipping && (o.shipping.id || o.shipping);
       if (shId) {
         try {
           const rs = await fetch(`${ML}/shipments/${shId}`, { headers: h, cache: 'no-store' });
-          if (rs.ok) { const sj = await rs.json(); shipStatus = sj.status || null; tracking = sj.tracking_number || null; }
+          if (rs.ok) { const sj = await rs.json(); shipStatus = sj.status || null; tracking = sj.tracking_number || null; eta = findEta(sj); }
         } catch (e) {}
       }
       if (!shipStatus && o.shipping && o.shipping.status) shipStatus = o.shipping.status;
 
       const itemsList = (o.order_items || []).map((it) => ({ title: it.item && it.item.title, qty: it.quantity, price: it.unit_price }));
       const title = itemsList.length === 1 ? itemsList[0].title : (itemsList[0] ? `${itemsList[0].title} +${itemsList.length - 1}` : 'Compra Mercado Livre');
+      const store = (o.seller && (o.seller.nickname || o.seller.id)) ? String(o.seller.nickname || o.seller.id) : 'Mercado Livre';
 
       const stage = stageOf(o, shipStatus);
       return {
@@ -62,7 +78,9 @@ export async function GET(req) {
           external: 'mercadolivre',
           orderId: o.id,
           stage,
+          store,
           deliveredDate: stage === 'delivered' ? (o.date_closed ? o.date_closed.slice(0, 10) : o.date_created.slice(0, 10)) : null,
+          etaDate: stage !== 'delivered' ? eta : null,
           shipStatus,
           tracking,
           items: itemsList,
