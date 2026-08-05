@@ -44,7 +44,7 @@ export async function GET(req) {
   if (!token) return Response.json({ connected: false, suggestions: [] });
 
   const h = { Authorization: `Bearer ${token}` };
-  const days = new URL(req.url).searchParams.get('days') || '20';
+  const days = new URL(req.url).searchParams.get('days') || '30';
 
   try {
     const query = `label:"(C) Compras" newer_than:${days}d`;
