@@ -500,7 +500,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v60 · 05ago';
+const APP_VERSION = 'v61 · 05ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1035,6 +1035,17 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
             }
             if (k === 'purpose' && type === 'trip') {
               return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6 }}>{['trabalho', 'lazer'].map((s) => <Chip key={s} active={f.meta.purpose === s} onClick={() => upMeta({ purpose: s })} color={s === 'trabalho' ? C.sky : C.green}>{lang === 'pt' ? (s === 'trabalho' ? 'Trabalho' : 'Lazer') : (s === 'trabalho' ? 'Work' : 'Leisure')}</Chip>)}</div></Field></div>;
+            }
+            if (k === 'tracking' && type === 'purchase') {
+              return (
+                <React.Fragment key="purchase-tracking-acc">
+                  <div><Field label={lang === 'pt' ? ptL : enL}><input value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={inputStyle} /></Field></div>
+                  {accounts.length > 0 && <div><Field label={lang === 'pt' ? 'Pago com' : 'Paid with'}><select value={f.meta.accountId || ''} onChange={(e) => upMeta({ accountId: e.target.value || null })} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+                    <option value="">{lang === 'pt' ? '— não vinculado —' : '— not linked —'}</option>
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+                  </select></Field></div>}
+                </React.Fragment>
+              );
             }
             if (k === 'status' && type === 'condition') {
               return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6 }}>{['ativa', 'resolvida'].map((s) => <Chip key={s} active={f.meta.status === s} onClick={() => upMeta({ status: s })} color={s === 'ativa' ? C.rose : C.green}>{lang === 'pt' ? (s === 'ativa' ? 'Ativa' : 'Resolvida') : (s === 'ativa' ? 'Active' : 'Resolved')}</Chip>)}</div></Field></div>;
@@ -3145,6 +3156,21 @@ function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, upd
       )}
       <Btn kind="soft" onClick={() => setImporting(true)} style={{ width: '100%', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center', marginBottom: 8, color: C.accent }}><Upload size={14} />{lang === 'pt' ? 'Importar extrato desta conta' : 'Import statement'}</Btn>
       {goReport && <Btn kind="soft" onClick={goReport} style={{ width: '100%', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center', marginBottom: 8 }}><Activity size={14} />{t('reports')}</Btn>}
+      {(() => {
+        const linked = acc ? items.filter((i) => i.type === 'purchase' && i.meta && i.meta.accountId === acc.id) : [];
+        if (!linked.length) return null;
+        return (
+          <>
+            <SectionTitle icon={Package} label={lang === 'pt' ? 'Compras vinculadas a esta conta' : 'Linked purchases'} color={C.accent} />
+            {linked.sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6).map((p) => (
+              <div key={p.id} onClick={() => onOpen(p)} style={{ ...card, padding: '10px 13px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}>
+                <span style={{ fontSize: 12.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{p.title}</span>
+                {p.amount != null && <span style={{ fontSize: 12.5, fontWeight: 600, color: C.text2, marginLeft: 8 }}>{fmtMoney(p.amount, lang)}</span>}
+              </div>
+            ))}
+          </>
+        );
+      })()}
       <SectionTitle icon={Wallet} label={t('statement')} color={km ? km.color : C.accent} />
       <Extrato tx={tx} accounts={accounts} lang={lang} t={t} onOpen={onOpen} />
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'finance', date: todayISO(), meta: { accountId: acc ? acc.id : null } }} allowedTypes={[adding]} lang={lang} t={t} people={people} accounts={accounts} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'finance', ...x }); flash(t('savedOne')); setAdding(null); }} />}
@@ -3306,6 +3332,9 @@ function StatementImport({ lang, t, existing, accounts, fixedAccountId, onClose,
 
   const dupCount = (txs.length === 0 && stage === 'review') ? 0 : null;
   const toImport = txs.filter((t) => t._keep);
+  // tenta achar uma compra ja registrada (ainda sem conta vinculada) que bate com a transacao, pra sugerir vinculo em vez de duplicar
+  const unlinkedPurchases = (existing || []).filter((i) => i.type === 'purchase' && (!i.meta || !i.meta.accountId));
+  const matchPurchase = (tx) => unlinkedPurchases.find((p) => p.amount != null && Math.abs(Number(p.amount) - Number(tx.amount)) < 0.02 && p.date && Math.abs((new Date(p.date) - new Date(tx.date)) / 86400000) <= 5);
 
   return (
     <Modal onClose={onClose}>
@@ -3361,13 +3390,19 @@ function StatementImport({ lang, t, existing, accounts, fixedAccountId, onClose,
             <Empty icon={Check} text={pt ? 'Nada novo — tudo deste extrato já estava no app.' : 'Nothing new.'} />
           ) : (
             <div style={{ maxHeight: '40vh', overflowY: 'auto', marginBottom: 12 }}>
-              {txs.map((tx, i) => (
-                <div key={i} onClick={() => setTxs((p) => p.map((x, j) => j === i ? { ...x, _keep: !x._keep } : x))} style={{ ...card, padding: '10px 12px', marginBottom: 6, display: 'flex', gap: 10, alignItems: 'center', cursor: 'pointer', opacity: tx._keep ? 1 : 0.4 }}>
-                  <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${tx._keep ? C.accent : C.border}`, background: tx._keep ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{tx._keep && <Check size={13} style={{ color: '#000' }} />}</div>
-                  <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</div><div style={{ fontSize: 11, color: C.text3 }}>{fmtDate(tx.date, lang)}</div></div>
-                  <span style={{ fontSize: 13.5, fontWeight: 700, color: tx.type === 'income' ? C.green : C.rose }}>{tx.type === 'income' ? '+' : '−'}{fmtMoney(tx.amount, lang)}</span>
+              {txs.map((tx, i) => {
+                const match = matchPurchase(tx);
+                return (
+                <div key={i} onClick={() => setTxs((p) => p.map((x, j) => j === i ? { ...x, _keep: !x._keep } : x))} style={{ ...card, padding: '10px 12px', marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 4, cursor: 'pointer', opacity: tx._keep ? 1 : 0.4 }}>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${tx._keep ? C.accent : C.border}`, background: tx._keep ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{tx._keep && <Check size={13} style={{ color: '#000' }} />}</div>
+                    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</div><div style={{ fontSize: 11, color: C.text3 }}>{fmtDate(tx.date, lang)}</div></div>
+                    <span style={{ fontSize: 13.5, fontWeight: 700, color: tx.type === 'income' ? C.green : C.rose }}>{tx.type === 'income' ? '+' : '−'}{fmtMoney(tx.amount, lang)}</span>
+                  </div>
+                  {match && <div style={{ fontSize: 10.5, color: C.accent, display: 'flex', gap: 4, alignItems: 'center', paddingLeft: 30 }}><Package size={11} />{lang === 'pt' ? `Pode ser a compra "${match.title}" — vincule depois de importar em Compras.` : `May be purchase "${match.title}".`}</div>}
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
           {toImport.length > 0 && <Btn onClick={() => onImport(toImport, linkAccount || null)} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Download size={16} />{pt ? `Importar ${toImport.length} transações` : `Import ${toImport.length}`}</Btn>}
@@ -4827,7 +4862,7 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const nextTrip = upcoming[0];
   const nextDays = (nextTrip && nextTrip.date) ? Math.ceil((new Date(nextTrip.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000) : null;
   const year = today.slice(0, 4);
-  const yf = period === 'year' ? flights.filter((f) => (f.date || '').startsWith(year)) : flights;
+  const yf = period === 'year' ? flights.filter((f) => (f.date || '').startsWith(year)) : period === '12m' ? flights.filter((f) => f.date && f.date >= addDays(today, -365)) : flights;
   const hours = yf.reduce((a, b) => a + (Number(b.meta && b.meta.durationMin) || 0), 0) / 60;
   const airports = new Set(); yf.forEach((f) => { if (f.meta && f.meta.from) airports.add(f.meta.from.toUpperCase()); if (f.meta && f.meta.to) airports.add(f.meta.to.toUpperCase()); });
   const airlines = new Set(yf.map((f) => f.meta && f.meta.airline).filter(Boolean));
@@ -4916,7 +4951,7 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}><Chip active={view === 'flights'} onClick={() => setView('flights')} color={module.color}>{t('flights')}</Chip><Chip active={view === 'trips'} onClick={() => setView('trips')} color={module.color}>{t('trips')}</Chip></div>
       {view === 'flights' ? (
         <>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 10 }}><Chip active={period === 'year'} onClick={() => setPeriod('year')}>{t('thisYear')}</Chip><Chip active={period === 'all'} onClick={() => setPeriod('all')}>{t('allTime')}</Chip></div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 6, marginBottom: 10 }}><Chip active={period === 'year'} onClick={() => setPeriod('year')}>{t('thisYear')}</Chip><Chip active={period === '12m'} onClick={() => setPeriod('12m')}>{lang === 'pt' ? '12 meses' : '12 months'}</Chip><Chip active={period === 'all'} onClick={() => setPeriod('all')}>{t('allTime')}</Chip></div>
           <ErrorBoundary fallback={<div style={{ ...card, padding: 18, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{t('mapUnavailable')}</div>}><FlightMap flights={yf} lang={lang} t={t} /></ErrorBoundary>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <MiniStat label={t('flightsCount')} value={yf.length} color={module.color} />
@@ -4930,6 +4965,17 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       ) : (
         <>
           <HintCard icon={Plane} text={t('tripHubHint')} />
+          {trips.length > 0 && (() => {
+            const work = trips.filter((tr) => tr.meta && tr.meta.purpose === 'trabalho').length;
+            const leisure = trips.filter((tr) => tr.meta && tr.meta.purpose === 'lazer').length;
+            if (!work && !leisure) return null;
+            return (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+                <MiniStat label={lang === 'pt' ? 'Viagens a trabalho' : 'Work trips'} value={work} color={C.sky} />
+                <MiniStat label={lang === 'pt' ? 'Viagens a lazer' : 'Leisure trips'} value={leisure} color={C.green} />
+              </div>
+            );
+          })()}
           <Btn kind="soft" onClick={() => setAdding('trip')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('t_trip')}</Btn>
           {trips.length === 0 ? <Empty icon={Plane} text={t('nothingHere')} /> : trips.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={(x) => setSelTrip(x.id)} />)}
         </>
