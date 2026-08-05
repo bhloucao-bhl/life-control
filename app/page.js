@@ -500,7 +500,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v56 · 05ago';
+const APP_VERSION = 'v57 · 05ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1757,6 +1757,36 @@ function timeAgo(pub, lang) {
   const d = Math.floor(h / 24); return (lang === 'pt' ? 'há ' : '') + d + 'd';
 }
 
+async function analyzeMealPhoto(b64, mime, lang) {
+  const system = `You are a nutrition analyst. Look at the attached food photo and estimate its nutritional content. Respond ONLY with JSON, no prose, no fences: {"title":"short dish name in ${lang === 'pt' ? 'Brazilian Portuguese' : 'English'}","calories":number,"protein":number (grams),"carbs":number (grams),"fat":number (grams),"notes":"1 short sentence with any nutrition observation, in ${lang === 'pt' ? 'Brazilian Portuguese' : 'English'}"}. These are estimates from a photo, not lab-precise — be reasonable, not overly precise (round numbers).`;
+  const text = await callClaude(system, [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: mime || 'image/jpeg', data: b64 } }, { type: 'text', text: lang === 'pt' ? 'Analise esta refeição.' : 'Analyze this meal.' }] }]);
+  let j = text; const a = text.indexOf('{'), b = text.lastIndexOf('}'); if (a !== -1 && b !== -1) j = text.slice(a, b + 1);
+  const x = JSON.parse(j);
+  return { title: String(x.title || 'Refeição').slice(0, 120), calories: Number(x.calories) || null, protein: Number(x.protein) || null, carbs: Number(x.carbs) || null, fat: Number(x.fat) || null, notes: x.notes || '' };
+}
+function DietAssistant({ meals, lang, t, back }) {
+  const [msgs, setMsgs] = useState([]); const [input, setInput] = useState(''); const [loading, setLoading] = useState(false); const endRef = useRef();
+  const recent = meals.slice(0, 30).map((m) => ({ title: m.title, date: m.date, calories: m.meta && m.meta.calories, protein: m.meta && m.meta.protein, carbs: m.meta && m.meta.carbs, fat: m.meta && m.meta.fat }));
+  const system = `You are the user's personal diet/nutrition assistant inside their health app. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}. Use the JSON of their recent logged meals (estimated from photos, not lab-precise) to summarize eating patterns, flag gaps (protein too low, too much sugar, irregular meals) and suggest practical adjustments. You are NOT a doctor — never give medical directives, add a short caution and suggest a nutritionist/doctor for anything serious. Today: ${todayISO()}. Recent meals: ${JSON.stringify(recent)}`;
+  const push = async (next) => { setMsgs(next); setLoading(true); try { const r = await callClaude(system, next.map((m) => ({ role: m.role, content: m.content }))); setMsgs((p) => [...p, { role: 'assistant', content: r || '…' }]); } catch (e) { setMsgs((p) => [...p, { role: 'assistant', content: lang === 'pt' ? 'Não consegui responder agora.' : "Couldn't respond." }]); } setLoading(false); };
+  useEffect(() => { endRef.current && endRef.current.scrollIntoView({ behavior: 'smooth' }); }, [msgs, loading]);
+  const send = () => { if (!input.trim() || loading) return; push([...msgs, { role: 'user', content: input.trim() }]); setInput(''); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 140px)' }}>
+      <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{lang === 'pt' ? 'Dieta' : 'Diet'}</button>
+      <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
+        {msgs.length === 0 && <div style={{ ...card, padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start' }}><Sparkles size={17} style={{ color: C.accent, marginTop: 2 }} /><div style={{ fontSize: 13.5, color: C.text2, lineHeight: 1.55 }}>{lang === 'pt' ? 'Pergunte sobre seus hábitos alimentares, peça sugestões de ajuste na dieta, ou um resumo da semana.' : 'Ask about your eating habits or get diet suggestions.'}</div></div>}
+        {msgs.map((m, i) => <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', margin: '8px 0' }}><div style={{ maxWidth: '82%', padding: '10px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', background: m.role === 'user' ? C.accent : C.surface, color: m.role === 'user' ? '#171200' : C.text, border: m.role === 'user' ? 'none' : `1px solid ${C.borderSoft}` }}>{m.content}</div></div>)}
+        {loading && <div style={{ color: C.text3, fontSize: 13, padding: '8px 4px', display: 'flex', gap: 7, alignItems: 'center' }}><Loader2 size={14} className="spin" />{t('thinking')}</div>}
+        <div ref={endRef} />
+      </div>
+      <div style={{ ...card, padding: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
+        <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={t('askClaude')} onKeyDown={(e) => { if (e.key === 'Enter') send(); }} style={{ ...inputStyle, background: 'transparent', border: 'none' }} />
+        <Btn onClick={send} disabled={loading || !input.trim()} style={{ padding: '9px 12px' }}><Send size={16} /></Btn>
+      </div>
+    </div>
+  );
+}
 function DrClaudeBadge({ size = 20 }) {
   return (
     <div style={{ width: size, height: size, borderRadius: size * 0.3, background: 'linear-gradient(135deg, #6BA6E6, #5B8DEF)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -1805,12 +1835,59 @@ function IndicatorChart({ indicator, points, lang }) {
     </div>
   );
 }
-function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash }) {
+function SleepReadinessHistory({ health, lang }) {
+  const entries = Object.entries(health || {}).filter(([, v]) => v && (v.sleep != null || v.readiness != null)).sort(([a], [b]) => a.localeCompare(b)).slice(-90);
+  if (entries.length < 2) return null;
+  const W = 280, H = 60;
+  const mk = (key, color) => {
+    const pts = entries.map(([d, v], i) => v[key] != null ? [i / (entries.length - 1) * W, H - (v[key] / 100) * (H - 8) - 4] : null).filter(Boolean);
+    if (pts.length < 2) return null;
+    return <path key={key} d={pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />;
+  };
+  const avg = (key) => { const vs = entries.map(([, v]) => v[key]).filter((x) => x != null); return vs.length ? Math.round(vs.reduce((a, b) => a + b, 0) / vs.length) : null; };
+  return (
+    <div style={{ ...card, padding: 14, marginBottom: 14 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 12.5, color: C.text2, fontWeight: 600 }}>{lang === 'pt' ? `Sono & Prontidão · últimos ${entries.length} dias` : `Sleep & Readiness · last ${entries.length} days`}</span>
+        <span style={{ fontSize: 10, color: C.text3, display: 'flex', gap: 10 }}>
+          <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.violet, display: 'inline-block' }} />{lang === 'pt' ? 'sono' : 'sleep'} {avg('sleep') ?? '—'}</span>
+          <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.green, display: 'inline-block' }} />{lang === 'pt' ? 'prontidão' : 'readiness'} {avg('readiness') ?? '—'}</span>
+        </span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 64, display: 'block' }} preserveAspectRatio="none">
+        {mk('sleep', C.violet)}
+        {mk('readiness', C.green)}
+      </svg>
+      <div style={{ fontSize: 10, color: C.text3, marginTop: 4 }}>{fmtDate(entries[0][0], lang)} — {fmtDate(entries[entries.length - 1][0], lang)}</div>
+    </div>
+  );
+}
+function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash, health }) {
   const [adding, setAdding] = useState(null); // 'condition' | 'allergy' | 'medication'
   const [analyzing, setAnalyzing] = useState(false); const [analyzeProgress, setAnalyzeProgress] = useState('');
-  const health = items.filter((i) => i.domain === 'health');
+  const [dietOpen, setDietOpen] = useState(false); const [mealLoading, setMealLoading] = useState(false);
+  const mealFileRef = useRef();
+  const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const pickMealPhoto = (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    setMealLoading(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const b64 = String(reader.result).split(',')[1];
+      try {
+        const info = await analyzeMealPhoto(b64, file.type, lang);
+        const att = await saveAttachment(String(reader.result), file.name, 'image');
+        addItem({ type: 'meal', domain: 'health', title: info.title, date: todayISO(), time: new Date().toTimeString().slice(0, 5), notes: info.notes, meta: { calories: info.calories, protein: info.protein, carbs: info.carbs, fat: info.fat, attachments: [att] } });
+        flash(lang === 'pt' ? 'Refeição registrada ✓' : 'Meal logged ✓');
+      } catch (err) { flash(lang === 'pt' ? 'Não consegui analisar a foto.' : "Couldn't analyze photo."); }
+      setMealLoading(false);
+    };
+    reader.readAsDataURL(file);
+  };
+  if (dietOpen) return <DietAssistant meals={meals} lang={lang} t={t} back={() => setDietOpen(false)} />;
+  const healthItems = items.filter((i) => i.domain === 'health');
   const isExamDoc = (i) => i.type === 'document' && (i.meta && i.meta.isExam || /exame|hemograma|resultado|laudo|sangue/i.test(i.title || ''));
-  const examDocs = health.filter(isExamDoc);
+  const examDocs = healthItems.filter(isExamDoc);
   const metrics = items.filter((i) => i.type === 'healthMetric');
   const analyzedDocIds = new Set(metrics.map((m) => m.meta && m.meta.sourceDocId).filter(Boolean));
   const unanalyzed = examDocs.filter((d) => !analyzedDocIds.has(d.id) && d.meta && d.meta.attachments && d.meta.attachments.length > 0);
@@ -1833,20 +1910,23 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
         const full = await loadAttachment(a.id);
         if (full && full.dataUrl) atts.push({ dataUrl: full.dataUrl });
       }
-      if (!atts.length) { setAnalyzing(false); return; }
+      if (!atts.length) { flash(lang === 'pt' ? 'Este documento não tem anexo pra analisar.' : 'No attachment to analyze.'); setAnalyzing(false); return; }
       const r = await authFetch('/api/health-analyze', { method: 'POST', body: JSON.stringify({ docId: doc.id, attachments: atts, notes: doc.notes, fallbackDate: doc.date }) });
       const j = await r.json();
-      if (j.indicators && j.indicators.length) {
+      if (j.error) {
+        // erro de verdade (não confundir com "nada encontrado") — NÃO marca como já analisado, pra poder tentar de novo
+        flash((lang === 'pt' ? 'Dr. Claude — erro: ' : 'Dr. Claude — error: ') + j.error);
+      } else if (j.indicators && j.indicators.length) {
         j.indicators.forEach((ind) => {
           addItem({ type: 'healthMetric', domain: 'health', title: ind.indicator, amount: ind.value, date: ind.date || doc.date, meta: { unit: ind.unit, refRange: ind.refRange, status: ind.status, sourceDocId: doc.id } });
         });
         flash(`Dr. Claude: ${j.indicators.length} ${lang === 'pt' ? 'indicadores encontrados' : 'indicators found'} ✓`);
       } else {
         flash(lang === 'pt' ? 'Nenhum indicador numérico encontrado neste documento.' : 'No numeric indicators found.');
-        // marca como já analisado mesmo sem indicadores, pra não tentar de novo
+        // só marca como já analisado quando a resposta foi genuinamente vazia (sem erro)
         addItem({ type: 'healthMetric', domain: 'health', title: '__checked__', amount: 0, date: doc.date, status: 'done', meta: { sourceDocId: doc.id, hidden: true } });
       }
-    } catch (e) { flash(lang === 'pt' ? 'Erro ao analisar.' : 'Analysis error.'); }
+    } catch (e) { flash((lang === 'pt' ? 'Erro ao analisar: ' : 'Analysis error: ') + String(e.message || e)); }
     setAnalyzing(false); setAnalyzeProgress('');
   };
   const analyzeAll = async () => { for (const d of unanalyzed) { await analyzeDoc(d); } };
@@ -1878,6 +1958,10 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
 
       <SectionTitle icon={Activity} label={lang === 'pt' ? 'Indicadores' : 'Indicators'} color={C.blue} />
       {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : visibleIndicators.sort((a, b) => a[0].localeCompare(b[0])).map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
+
+      <SectionTitle icon={Moon} label={lang === 'pt' ? 'Sono & Rotina (Oura)' : 'Sleep & Routine'} color={C.violet} />
+      <SleepReadinessHistory health={health} lang={lang} />
+      {(!health || Object.keys(health).length < 2) && <HintCard icon={Moon} text={lang === 'pt' ? 'Conecte o Oura Ring pra trazer o histórico de sono aqui.' : 'Connect Oura Ring to see sleep history.'} />}
 
       <SectionTitle icon={HeartPulse} label={lang === 'pt' ? 'Condições' : 'Conditions'} color={C.rose} />
       {conditions.length === 0 ? <Empty icon={HeartPulse} text={t('nothingHere')} /> : conditions.map((c) => (
@@ -1912,6 +1996,29 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
           {pastMeds.map((m) => <div key={m.id} style={{ ...card, padding: 12, marginBottom: 7, opacity: 0.65 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{m.title}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{fmtDate(m.meta.startDate, lang)} – {fmtDate(m.meta.endDate, lang)}</div></div>)}
         </>
       )}
+
+      <SectionTitle icon={Utensils} label={lang === 'pt' ? 'Dieta' : 'Diet'} color={C.green} />
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <input ref={mealFileRef} type="file" accept="image/*" capture="environment" onChange={pickMealPhoto} style={{ display: 'none' }} />
+        <Btn onClick={() => mealFileRef.current && mealFileRef.current.click()} disabled={mealLoading} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>{mealLoading ? <Loader2 size={15} className="spin" /> : <Camera size={15} />}{mealLoading ? (lang === 'pt' ? 'Analisando...' : 'Analyzing...') : (lang === 'pt' ? 'Fotografar refeição' : 'Photo meal')}</Btn>
+        <Btn kind="soft" onClick={() => setDietOpen(true)} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '10px 14px' }}><Sparkles size={15} />{lang === 'pt' ? 'Assistente' : 'Assistant'}</Btn>
+      </div>
+      {meals.length === 0 ? <Empty icon={Utensils} text={lang === 'pt' ? 'Nenhuma refeição registrada ainda.' : 'No meals logged yet.'} /> : meals.slice(0, 8).map((m) => (
+        <div key={m.id} style={{ ...card, padding: 12, marginBottom: 7 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontSize: 13.5, fontWeight: 600 }}>{m.title}</div>
+            <span style={{ fontSize: 11, color: C.text3 }}>{fmtDate(m.date, lang)} {m.time || ''}</span>
+          </div>
+          {m.meta && m.meta.calories != null && (
+            <div style={{ display: 'flex', gap: 10, marginTop: 6, fontSize: 11, color: C.text2 }}>
+              <span>{m.meta.calories} kcal</span>
+              {m.meta.protein != null && <span>P: {m.meta.protein}g</span>}
+              {m.meta.carbs != null && <span>C: {m.meta.carbs}g</span>}
+              {m.meta.fat != null && <span>G: {m.meta.fat}g</span>}
+            </div>
+          )}
+        </div>
+      ))}
 
       {doctors.length > 0 && (
         <>
@@ -2204,7 +2311,7 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
           <button onClick={() => (mode === 'month' ? shiftMonth(-1) : shiftWeek(-1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronLeft size={20} /></button>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{mode === 'month' ? monthLabel : `${t('week')} · ${fmtDate(cells[0], lang)}`}</span>
-            {vm !== today.slice(0, 7) && <button onClick={() => { setVm(today.slice(0, 7)); setSel(today); }} style={{ background: C.accentSoft, border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11, fontWeight: 600, borderRadius: 999, padding: '3px 10px' }}>{lang === 'pt' ? 'Hoje' : 'Today'}</button>}
+            {sel !== today && <button onClick={() => { setVm(today.slice(0, 7)); setSel(today); }} style={{ background: C.accentSoft, border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11, fontWeight: 600, borderRadius: 999, padding: '3px 10px' }}>{lang === 'pt' ? 'Hoje' : 'Today'}</button>}
           </div>
           <button onClick={() => (mode === 'month' ? shiftMonth(1) : shiftWeek(1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronRight size={20} /></button>
         </div>
@@ -2736,7 +2843,7 @@ function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ml.purchases.length]);
 
-  const stores = [...new Set(allRaw.map((p) => p.meta && p.meta.store).filter(Boolean))];
+  const stores = [...new Set(allRaw.map((p) => p.meta && p.meta.store).filter((s) => s && s !== 'Mercado Livre'))];
   const byStore = storeFilter === 'all' ? allRaw : allRaw.filter((p) => (p.meta && p.meta.store) === storeFilter);
   const active = byStore.filter((p) => !isArchived(p));
   const archived = byStore.filter(isArchived);
@@ -4511,6 +4618,7 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
 function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
   const [view, setView] = useState('flights'); const [period, setPeriod] = useState('year'); const [adding, setAdding] = useState(null); const [selTrip, setSelTrip] = useState(null);
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
+  const [scanDays, setScanDays] = useState(90);
   const flights = items.filter((i) => i.type === 'flight');
   const trips = items.filter((i) => i.type === 'trip').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const today = todayISO();
@@ -4527,7 +4635,7 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   if (current) return <TripDetail trip={current} items={items} people={people} lang={lang} t={t} back={() => setSelTrip(null)} onOpen={onOpen} toggleTask={toggleTask} addItem={addItem} updateItem={updateItem} delItem={delItem} flash={flash} />;
   const runScan = () => {
     setScan({ loading: true, list: null, error: null });
-    authFetch('/api/inbox-scan').then((r) => r.json())
+    authFetch('/api/inbox-scan?days=' + scanDays).then((r) => r.json())
       .then((j) => setScan({ loading: false, list: j.suggestions || [], error: j.error || null }))
       .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
   };
@@ -4556,6 +4664,9 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     <div>
       <ModuleHeader module={module} t={t} back={back} />
       <div style={{ ...card, padding: 12, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        {[30, 90, 180, 365].map((d) => <Chip key={d} active={scanDays === d} onClick={() => setScanDays(d)}>{d}d</Chip>)}
+      </div>
         <Sparkles size={16} style={{ color: C.accent, flexShrink: 0 }} />
         <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{t('suggestions')}</span>
         <Btn kind="soft" onClick={runScan} disabled={scan.loading} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
@@ -5301,7 +5412,7 @@ function App() {
           onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
           onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
-        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} />}
+        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
