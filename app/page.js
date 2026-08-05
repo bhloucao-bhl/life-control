@@ -500,7 +500,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v57 · 05ago';
+const APP_VERSION = 'v58 · 05ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1208,6 +1208,46 @@ function DraftReview({ drafts, lang, t, onDone, onCancel }) {
     </div>
   );
 }
+function normDevText(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+/** Tenta interpretar um comando de dispositivo tipo "desligar abajur carol" / "ligar ar da sala".
+ *  Devolve {handled:false} se não parecer um comando de dispositivo, ou {handled:true, message} após executar. */
+async function tryDeviceCommand(raw, lang) {
+  const norm = normDevText(raw);
+  const onMatch = /\b(ligar?|liga|acend[ae]r?|acende)\b/.exec(norm);
+  const offMatch = /\b(desligar?|desliga|apag[ae]r?|apaga)\b/.exec(norm);
+  const m = onMatch || offMatch;
+  if (!m) return { handled: false };
+  const wantOn = !!onMatch;
+  // remove o verbo e palavras de preenchimento comuns pra sobrar o nome do dispositivo
+  let rest = norm.replace(m[0], '').replace(/\b(o|a|os|as|do|da|de|dos|das|luz|luzes|por favor|pfv)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  if (rest.length < 2) return { handled: false };
+  const restWords = rest.split(' ').filter(Boolean);
+
+  // procura o melhor match entre os apelidos conhecidos (TUYA_SEED)
+  let best = null, bestScore = 0;
+  Object.entries(TUYA_SEED).forEach(([id, meta]) => {
+    const aliasWords = normDevText(meta.alias).split(' ').filter(Boolean);
+    const score = restWords.filter((w) => aliasWords.includes(w)).length;
+    if (score > bestScore) { bestScore = score; best = { id, meta }; }
+  });
+  if (!best || bestScore === 0) return { handled: false };
+
+  try {
+    const r = await authFetch('/api/tuya');
+    const j = await r.json();
+    const dev = (j.devices || []).find((d) => d.id === best.id);
+    if (!dev) return { handled: true, message: lang === 'pt' ? `Não encontrei "${best.meta.alias}" conectado agora.` : `Couldn't find "${best.meta.alias}" online.` };
+    const code = tuyaSwitchCode(dev.status) || (best.meta.kind === 'light' ? 'switch_led' : 'switch_1');
+    const rc = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId: best.id, code, value: wantOn }) });
+    const rj = await rc.json();
+    if (!rj.ok) return { handled: true, message: (lang === 'pt' ? 'Erro ao comandar: ' : 'Command error: ') + (rj.error || '?') };
+    return { handled: true, message: `${best.meta.alias} ${wantOn ? (lang === 'pt' ? 'ligado' : 'on') : (lang === 'pt' ? 'desligado' : 'off')} ✓` };
+  } catch (e) {
+    return { handled: true, message: (lang === 'pt' ? 'Erro ao comandar dispositivo.' : 'Device command error.') };
+  }
+}
 function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
   const [text, setText] = useState(''); const [loading, setLoading] = useState(false); const [drafts, setDrafts] = useState(null);
   const [searching, setSearching] = useState(false); const [sq, setSq] = useState('');
@@ -1230,7 +1270,11 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
     try { rec.start(); } catch (e) { setListening(false); }
   };
   const run = async () => { if (!text.trim()) return; setLoading(true);
-    try { setDrafts(await classifyCapture(text.trim(), lang)); } catch (e) { addItems([{ type: 'note', domain: 'personal', title: text.trim(), priority: 3, status: 'inbox' }]); flash(t('couldntParse')); setText(''); }
+    try {
+      const dev = await tryDeviceCommand(text.trim(), lang);
+      if (dev.handled) { flash(dev.message); setText(''); setLoading(false); return; }
+      setDrafts(await classifyCapture(text.trim(), lang));
+    } catch (e) { addItems([{ type: 'note', domain: 'personal', title: text.trim(), priority: 3, status: 'inbox' }]); flash(t('couldntParse')); setText(''); }
     setLoading(false); };
   const pickImage = (e) => {
     const file = e.target.files && e.target.files[0]; if (!file) return;
@@ -4868,28 +4912,32 @@ function ItemView({ item, lang, t, onAct }) {
       })()}
       {item.notes && <div style={{ ...card, padding: 14, marginBottom: 12, fontSize: 13.5, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{item.notes}</div>}
       {atts.length > 0 && <><div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>{t('attachments')}</div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{atts.map((a) => <AttachThumb key={a.id} att={a} />)}</div></>}
-      {mt.isExam && <ExamAnalysis item={item} lang={lang} t={t} onAct={onAct} />}
+      {mt.isExam && <ExamAnalysis item={item} lang={lang} t={t} onAct={onAct} allItems={allItems} addItem={addItem} />}
     </div>
   );
 }
-function ExamAnalysis({ item, lang, t, onAct }) {
+function ExamAnalysis({ item, lang, t, onAct, allItems, addItem }) {
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
+  const [busy2, setBusy2] = useState(false); const [err2, setErr2] = useState(null); const [foundCount, setFoundCount] = useState(null);
   const saved = item.meta && item.meta.examAnalysis;
   const atts = (item.meta && item.meta.attachments) || [];
+  const alreadyExtracted = (allItems || []).some((i) => i.type === 'healthMetric' && i.meta && i.meta.sourceDocId === item.id);
 
   const analyze = async () => {
     setBusy(true); setErr(null);
     try {
-      // montar conteudo: anexos (imagem/pdf) + instrucao
+      // monta conteudo: anexos (imagem/pdf) + instrucao — busca o dado real via loadAttachment (o meta.attachments só guarda {id,name,kind})
       const content = [];
       for (const a of atts) {
-        if (!a.dataUrl) continue;
-        const m = /^data:(.*?);base64,(.*)$/.exec(a.dataUrl);
+        const full = await loadAttachment(a.id);
+        if (!full || !full.dataUrl) continue;
+        const m = /^data:(.*?);base64,(.*)$/.exec(full.dataUrl);
         if (!m) continue;
         const media = m[1]; const data = m[2];
         if (media.startsWith('image/')) content.push({ type: 'image', source: { type: 'base64', media_type: media, data } });
         else if (media === 'application/pdf') content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data } });
       }
+      if (content.length === 0) throw new Error(lang === 'pt' ? 'Não consegui carregar o anexo. Tente reanexar o arquivo.' : 'Could not load attachment. Try re-attaching.');
       content.push({ type: 'text', text: lang === 'pt'
         ? 'Você é um assistente de saúde cuidadoso. Analise este resultado de exame de forma clara e acessível para um leigo. Explique: (1) o que foi medido, (2) quais valores estão dentro ou fora da referência, (3) o que isso pode significar em linguagem simples, e (4) pontos que merecem atenção ou conversa com o médico. Seja informativo mas deixe claro que não substitui avaliação médica. Responda em português do Brasil, organizado e conciso.'
         : 'Analyze this lab result for a layperson. Explain what was measured, what is in/out of range, what it may mean, and what to discuss with a doctor. Make clear it is not a substitute for medical advice.' });
@@ -4903,20 +4951,48 @@ function ExamAnalysis({ item, lang, t, onAct }) {
     setBusy(false);
   };
 
+  const extractIndicators = async () => {
+    setBusy2(true); setErr2(null); setFoundCount(null);
+    try {
+      const atts2 = [];
+      for (const a of atts) { const full = await loadAttachment(a.id); if (full && full.dataUrl) atts2.push({ dataUrl: full.dataUrl }); }
+      if (!atts2.length) throw new Error(lang === 'pt' ? 'Não consegui carregar o anexo.' : 'Could not load attachment.');
+      const r = await authFetch('/api/health-analyze', { method: 'POST', body: JSON.stringify({ docId: item.id, attachments: atts2, notes: item.notes, fallbackDate: item.date }) });
+      const j = await r.json();
+      if (j.error) throw new Error(j.error);
+      (j.indicators || []).forEach((ind) => {
+        addItem({ type: 'healthMetric', domain: 'health', title: ind.indicator, amount: ind.value, date: ind.date || item.date, meta: { unit: ind.unit, refRange: ind.refRange, status: ind.status, sourceDocId: item.id } });
+      });
+      setFoundCount((j.indicators || []).length);
+    } catch (e) { setErr2(String(e.message || e)); }
+    setBusy2(false);
+  };
+
   return (
-    <div style={{ ...card, padding: 14, marginTop: 12, border: `1px solid ${C.blue}33` }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: saved ? 10 : 0 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 700, color: C.blue, display: 'flex', gap: 6, alignItems: 'center' }}><Sparkles size={14} />{t('examAnalysis')}</span>
-        <Btn kind="soft" onClick={analyze} disabled={busy || atts.length === 0} style={{ fontSize: 11.5, padding: '6px 11px', display: 'flex', gap: 5, alignItems: 'center' }}>{busy ? <><Loader2 size={12} className="spin" />{t('analyzing')}</> : (saved ? (lang === 'pt' ? 'Refazer' : 'Redo') : t('analyzeExam'))}</Btn>
+    <>
+      <div style={{ ...card, padding: 14, marginTop: 12, border: `1px solid ${C.blue}33` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: saved ? 10 : 0 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: C.blue, display: 'flex', gap: 6, alignItems: 'center' }}><Sparkles size={14} />{lang === 'pt' ? 'Explicação em linguagem simples' : 'Plain-language explanation'}</span>
+          <Btn kind="soft" onClick={analyze} disabled={busy || atts.length === 0} style={{ fontSize: 11.5, padding: '6px 11px', display: 'flex', gap: 5, alignItems: 'center' }}>{busy ? <><Loader2 size={12} className="spin" />{lang === 'pt' ? 'Analisando...' : 'Analyzing...'}</> : (saved ? (lang === 'pt' ? 'Refazer' : 'Redo') : (lang === 'pt' ? 'Explicar exame' : 'Explain exam'))}</Btn>
+        </div>
+        {atts.length === 0 && <div style={{ fontSize: 11.5, color: C.text3 }}>{lang === 'pt' ? 'Anexe a foto ou PDF do exame para o Claude analisar.' : 'Attach the exam to analyze.'}</div>}
+        {err && <div style={{ fontSize: 11.5, color: C.rose, marginTop: 8 }}>{err}</div>}
+        {saved && <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: C.text }}>{saved}</div>}
       </div>
-      {atts.length === 0 && <div style={{ fontSize: 11.5, color: C.text3 }}>{lang === 'pt' ? 'Anexe a foto ou PDF do exame para o Claude analisar.' : 'Attach the exam to analyze.'}</div>}
-      {err && <div style={{ fontSize: 11.5, color: C.rose, marginTop: 8 }}>{err}</div>}
-      {saved && <div style={{ fontSize: 13, lineHeight: 1.6, whiteSpace: 'pre-wrap', color: C.text }}>{saved}</div>}
-    </div>
+      <div style={{ ...card, padding: 14, marginTop: 10, border: `1px solid #5B8DEF33` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#5B8DEF', display: 'flex', gap: 6, alignItems: 'center' }}><Stethoscope size={14} />{lang === 'pt' ? 'Dr. Claude — extrair indicadores' : 'Dr. Claude — extract indicators'}</span>
+          <Btn kind="soft" onClick={extractIndicators} disabled={busy2 || atts.length === 0} style={{ fontSize: 11.5, padding: '6px 11px', display: 'flex', gap: 5, alignItems: 'center' }}>{busy2 ? <><Loader2 size={12} className="spin" />{lang === 'pt' ? 'Analisando...' : 'Analyzing...'}</> : (alreadyExtracted ? (lang === 'pt' ? 'Refazer' : 'Redo') : (lang === 'pt' ? 'Extrair' : 'Extract'))}</Btn>
+        </div>
+        {err2 && <div style={{ fontSize: 11.5, color: C.rose, marginTop: 8 }}>{err2}</div>}
+        {foundCount != null && !err2 && <div style={{ fontSize: 11.5, color: foundCount > 0 ? C.green : C.text3, marginTop: 8 }}>{foundCount > 0 ? `✓ ${foundCount} ${lang === 'pt' ? 'indicadores encontrados — veja no Histórico Médico.' : 'indicators found — check Medical History.'}` : (lang === 'pt' ? 'Nenhum indicador numérico foi encontrado neste documento.' : 'No numeric indicators found.')}</div>}
+        {alreadyExtracted && foundCount == null && <div style={{ fontSize: 11, color: C.text3, marginTop: 8 }}>{lang === 'pt' ? 'Já extraído — veja no Histórico Médico.' : 'Already extracted.'}</div>}
+      </div>
+    </>
   );
 }
 
-function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct }) {
+function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct, allItems, addItem }) {
   const [editing, setEditing] = useState(false);
   return (
     <Modal onClose={onClose}>
@@ -5200,7 +5276,7 @@ function App() {
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
+    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); } if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
     loadGmail();
     loadNews();
     authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
@@ -5262,7 +5338,7 @@ function App() {
     try {
       const jobs = [refreshGoogle(), loadGmail(), reloadTicktick(), loadNews(true)];
       await Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {})));
-      try { const j = await (await authFetch('/api/oura')).json(); if (j) { if (j.byDate) setOuraByDate(j.byDate); if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); } } catch (e) {}
+      try { const j = await (await authFetch('/api/oura')).json(); if (j) { if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); } if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); } } catch (e) {}
     } finally { setTimeout(() => setRefreshing(false), 300); }
   };
   const scrollTop = () => (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0);
@@ -5445,7 +5521,7 @@ function App() {
       {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
       {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} />}
-      {detail && <ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} />}
+      {detail && <ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} allItems={allItems} addItem={addItem} />}
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
       {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap' }}>{toast}</div>}
