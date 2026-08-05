@@ -500,7 +500,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v61 · 05ago';
+const APP_VERSION = 'v62 · 05ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -1457,10 +1457,13 @@ function WeatherDetail({ wx: wxHome, lang, t, onClose }) {
   let chart = null;
   if (temps.length > 1) {
     const vals = temps.map((h) => h.temp); const min = Math.min(...vals), max = Math.max(...vals); const span = (max - min) || 1;
-    const W = 300, H = 60;
+    const W = 300, H = 64;
     const padL = 24; // espaço pro eixo de temperatura na esquerda
+    const padT = 12; // espaço no topo pra rótulo do ponto mais quente nunca cortar
+    const padB = 6;
     const plotW = W - padL;
-    const pts = temps.map((h, i) => [padL + (temps.length === 1 ? plotW / 2 : (i / (temps.length - 1)) * plotW), H - ((h.temp - min) / span) * (H - 16) - 8]);
+    const plotH = H - padT - padB;
+    const pts = temps.map((h, i) => [padL + (temps.length === 1 ? plotW / 2 : (i / (temps.length - 1)) * plotW), padT + plotH - ((h.temp - min) / span) * plotH]);
     const dPath = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
     const hasRain = temps.some((h) => h.rain != null && h.rain > 0);
     const barW = plotW / temps.length * 0.6;
@@ -1475,19 +1478,19 @@ function WeatherDetail({ wx: wxHome, lang, t, onClose }) {
             <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 7, height: 7, background: C.sky + '99', display: 'inline-block', borderRadius: 1 }} />% chuva</span>
           </span>
         </div>
-        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 72, display: 'block' }} preserveAspectRatio="none">
+        <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 76, display: 'block', overflow: 'visible' }} preserveAspectRatio="none">
           {/* eixo Y de temperatura: min/max sempre visiveis, fixos por dia */}
-          <text x={0} y={H - 4} fontSize="7" fill={C.text3}>{Math.round(min)}°</text>
-          <text x={0} y={12} fontSize="7" fill={C.text3}>{Math.round(max)}°</text>
-          <line x1={padL - 3} y1={4} x2={padL - 3} y2={H - 4} stroke={C.borderSoft} strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          <text x={0} y={H - padB} fontSize="7" fill={C.text3}>{Math.round(min)}°</text>
+          <text x={0} y={padT + 3} fontSize="7" fill={C.text3}>{Math.round(max)}°</text>
+          <line x1={padL - 3} y1={padT - 4} x2={padL - 3} y2={H - padB} stroke={C.borderSoft} strokeWidth="1" vectorEffect="non-scaling-stroke" />
           {hasRain && temps.map((h, i) => {
             if (h.rain == null || h.rain <= 0) return null;
             const x = padL + (temps.length === 1 ? plotW / 2 : (i / (temps.length - 1)) * plotW);
-            const bh = (h.rain / 100) * (H - 10);
+            const bh = (h.rain / 100) * (plotH - 4);
             return (
               <g key={i}>
-                <rect x={x - barW / 2} y={H - bh} width={barW} height={bh} fill={C.sky} opacity="0.28" rx="1" />
-                {i === maxRainIdx && <text x={x} y={H - bh - 3} fontSize="7" fill={C.sky} textAnchor="middle">{Math.round(h.rain)}%</text>}
+                <rect x={x - barW / 2} y={H - padB - bh} width={barW} height={bh} fill={C.sky} opacity="0.28" rx="1" />
+                {i === maxRainIdx && <text x={x} y={H - padB - bh - 3} fontSize="7" fill={C.sky} textAnchor="middle">{Math.round(h.rain)}%</text>}
               </g>
             );
           })}
@@ -1497,7 +1500,7 @@ function WeatherDetail({ wx: wxHome, lang, t, onClose }) {
           {(() => {
             const iMax = vals.indexOf(max), iMin = vals.indexOf(min);
             return [iMax, iMin].filter((v, idx, arr) => arr.indexOf(v) === idx).map((i) => (
-              <text key={i} x={pts[i][0]} y={pts[i][1] - 5} fontSize="7" fill={C.accent} textAnchor="middle">{Math.round(temps[i].temp)}°</text>
+              <text key={i} x={pts[i][0]} y={Math.max(7, pts[i][1] - 5)} fontSize="7" fill={C.accent} textAnchor="middle">{Math.round(temps[i].temp)}°</text>
             ));
           })()}
         </svg>
@@ -2101,22 +2104,6 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
         </div>
       )}
 
-      <SectionTitle icon={Activity} label={lang === 'pt' ? 'Indicadores' : 'Indicators'} color={C.blue} />
-      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : (() => {
-        const sorted = visibleIndicators.sort((a, b) => a[0].localeCompare(b[0]));
-        const flagged = sorted.filter(([, pts]) => pts[pts.length - 1] && pts[pts.length - 1].status && pts[pts.length - 1].status !== 'normal');
-        const rest = sorted.filter(([n]) => !flagged.some(([n2]) => n2 === n));
-        return (
-          <>
-            {flagged.length > 0 && flagged.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
-            {flagged.length > 0 && rest.length > 0 && !showAllIndicators && (
-              <button onClick={() => setShowAllIndicators(true)} style={{ background: 'none', border: `1px dashed ${C.border}`, borderRadius: 12, color: C.text2, cursor: 'pointer', width: '100%', padding: '10px', fontSize: 12.5, marginBottom: 8 }}>{lang === 'pt' ? `Ver todos os ${sorted.length} indicadores` : `See all ${sorted.length} indicators`}</button>
-            )}
-            {(flagged.length === 0 || showAllIndicators) && rest.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
-          </>
-        );
-      })()}
-
       <SectionTitle icon={Moon} label={lang === 'pt' ? 'Sono & Rotina (Oura)' : 'Sleep & Routine'} color={C.violet} />
       <SleepReadinessHistory health={health} lang={lang} />
       {(!health || Object.keys(health).length < 2) && <HintCard icon={Moon} text={lang === 'pt' ? 'Conecte o Oura Ring pra trazer o histórico de sono aqui.' : 'Connect Oura Ring to see sleep history.'} />}
@@ -2203,6 +2190,22 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
           })}
         </>
       )}
+
+      <SectionTitle icon={Activity} label={lang === 'pt' ? 'Indicadores' : 'Indicators'} color={C.blue} />
+      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : (() => {
+        const sorted = visibleIndicators.sort((a, b) => a[0].localeCompare(b[0]));
+        const flagged = sorted.filter(([, pts]) => pts[pts.length - 1] && pts[pts.length - 1].status && pts[pts.length - 1].status !== 'normal');
+        const rest = sorted.filter(([n]) => !flagged.some(([n2]) => n2 === n));
+        return (
+          <>
+            {flagged.length > 0 && flagged.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
+            {flagged.length > 0 && rest.length > 0 && !showAllIndicators && (
+              <button onClick={() => setShowAllIndicators(true)} style={{ background: 'none', border: `1px dashed ${C.border}`, borderRadius: 12, color: C.text2, cursor: 'pointer', width: '100%', padding: '10px', fontSize: 12.5, marginBottom: 8 }}>{lang === 'pt' ? `Ver todos os ${sorted.length} indicadores` : `See all ${sorted.length} indicators`}</button>
+            )}
+            {(flagged.length === 0 || showAllIndicators) && rest.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
+          </>
+        );
+      })()}
 
       {adding && (
         <AddModal
@@ -2962,7 +2965,7 @@ function PurchaseCard({ p, lang, onOpen }) {
     </div>
   );
 }
-function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, onOpen, flash }) {
+function PurchasesScreen({ module, items = [], lang, t, back, addItem, updateItem, onOpen, flash }) {
   const [adding, setAdding] = useState(false);
   const [days, setDays] = useState(30);
   const [ml, setMl] = useState({ loading: true, connected: false, error: null, syncedAt: null });
@@ -3017,7 +3020,7 @@ function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, on
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ml.purchases.length]);
+  }, [allRaw.length]);
 
   const stores = [...new Set(allRaw.map((p) => p.meta && p.meta.store).filter((s) => s && s !== 'Mercado Livre'))];
   const byStore = storeFilter === 'all' ? allRaw : allRaw.filter((p) => (p.meta && p.meta.store) === storeFilter);
@@ -3507,6 +3510,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, healthSummary, setHealthSummary }) {
   const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const [sumLoading, setSumLoading] = useState(false);
+  const [sumOpen, setSumOpen] = useState(false);
   const today = todayISO(); const w = health[today] || {};
   const hd = items.filter((i) => i.domain === 'health');
   const genSummary = async () => {
@@ -3547,13 +3551,16 @@ Data de hoje: ${today}`;
     <div>
       <ModuleHeader module={module} t={t} back={back} />
       <div style={{ ...card, padding: 15, marginBottom: 12, border: '1px solid #5B8DEF33', background: 'linear-gradient(135deg, #5B8DEF14, ' + C.surface + ')' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#5B8DEF' }}>{lang === 'pt' ? 'Resumo de hoje' : "Today's summary"}</span></div>
-          <button onClick={genSummary} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3 }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
+        <div onClick={() => setSumOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: sumOpen ? 8 : 0, cursor: 'pointer' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#5B8DEF' }}>{lang === 'pt' ? 'Resumo de hoje' : "Today's summary"}</span>{!sumOpen && healthSummary && <span style={{ fontSize: 10, color: C.text3, fontWeight: 400 }}>({lang === 'pt' ? 'toque pra ler' : 'tap to read'})</span>}</div>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <button onClick={(e) => { e.stopPropagation(); genSummary(); }} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3 }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
+            <ChevronRight size={15} style={{ color: C.text3, transform: sumOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
+          </div>
         </div>
-        {sumLoading && !healthSummary ? <div style={{ fontSize: 13, color: C.text3 }}>{lang === 'pt' ? 'Gerando...' : 'Generating...'}</div> : (
-          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.text }}>{healthSummary ? healthSummary.text : (lang === 'pt' ? 'Toque para gerar seu resumo do dia.' : 'Tap to generate today\'s summary.')}</div>
-        )}
+        {sumOpen && (sumLoading && !healthSummary ? <div style={{ fontSize: 13, color: C.text3 }}>{lang === 'pt' ? 'Gerando...' : 'Generating...'}</div> : (
+          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.text }}>{healthSummary ? healthSummary.text : (lang === 'pt' ? 'Toque em atualizar pra gerar seu resumo do dia.' : 'Tap refresh to generate today\'s summary.')}</div>
+        ))}
       </div>
       <button onClick={goMedical} style={{ ...card, width: '100%', padding: 14, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', border: 'none', textAlign: 'left', color: C.text, background: 'linear-gradient(135deg, #5B8DEF1c, ' + C.surface + ')', borderColor: '#5B8DEF33' }}>
         <DrClaudeBadge size={36} />
@@ -4701,18 +4708,28 @@ function ModuleErrorCard({ t, back, module, msg }) {
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4 }}>{t('screenError')}</div>
         <div style={{ fontSize: 12.5, color: C.text3, lineHeight: 1.5 }}>{t('screenErrorHint')}</div>
         {msg && <div style={{ ...card, marginTop: 12, padding: 10, fontSize: 11, color: C.rose, fontFamily: 'monospace', wordBreak: 'break-word', textAlign: 'left' }}>{String((msg && msg.message) || msg)}</div>}
+        {msg && msg._componentStack && <div style={{ ...card, marginTop: 8, padding: 10, fontSize: 9.5, color: C.text3, fontFamily: 'monospace', wordBreak: 'break-word', textAlign: 'left', lineHeight: 1.5 }}>{msg._componentStack}</div>}
       </div>
     </div>
   );
 }
 
 class ErrorBoundary extends React.Component {
-  constructor(p) { super(p); this.state = { err: null }; }
+  constructor(p) { super(p); this.state = { err: null, info: null }; }
   static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) {
+    // guarda o "componentStack" (qual componente exatamente quebrou) pra facilitar diagnóstico futuro
+    this.setState({ info: info && info.componentStack });
+    console.error('[ErrorBoundary]', err, info && info.componentStack);
+  }
   render() {
     if (this.state.err) {
       const fb = this.props.fallback;
-      if (typeof fb === 'function') { try { return fb(this.state.err); } catch (e) { return null; } }
+      const enriched = this.state.err;
+      if (enriched && this.state.info) {
+        try { enriched._componentStack = String(this.state.info).trim().split('\n').slice(0, 3).join(' ← '); } catch (e) {}
+      }
+      if (typeof fb === 'function') { try { return fb(enriched); } catch (e) { return null; } }
       return fb || null;
     }
     return this.props.children;
@@ -4851,7 +4868,7 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
     </div>
   );
 }
-function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
+function TravelScreen({ module, items = [], people = [], lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
   const [view, setView] = useState('flights'); const [period, setPeriod] = useState('year'); const [adding, setAdding] = useState(null); const [selTrip, setSelTrip] = useState(null);
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
   const [scanDays, setScanDays] = useState(90);
@@ -4899,10 +4916,10 @@ function TravelScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
-      <div style={{ ...card, padding: 12, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         {[30, 90, 180, 365].map((d) => <Chip key={d} active={scanDays === d} onClick={() => setScanDays(d)}>{d}d</Chip>)}
       </div>
+      <div style={{ ...card, padding: 12, marginBottom: 14, display: 'flex', gap: 10, alignItems: 'center' }}>
         <Sparkles size={16} style={{ color: C.accent, flexShrink: 0 }} />
         <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{t('suggestions')}</span>
         <Btn kind="soft" onClick={runScan} disabled={scan.loading} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
