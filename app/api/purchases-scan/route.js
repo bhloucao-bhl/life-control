@@ -46,10 +46,14 @@ export async function GET(req) {
   const h = { Authorization: `Bearer ${token}` };
   const days = new URL(req.url).searchParams.get('days') || '30';
 
+  // O Mercado Livre já é sincronizado com dados oficiais via API (/api/mercadolivre) —
+  // então os e-mails do ML são sempre excluídos aqui pra API ser a única fonte de verdade dessa loja.
+  const EXCLUDE_ML = '-from:(mercadolivre.com.br OR mercadolivre.com OR mercadolibre.com OR mlstatic.com)';
+
   try {
-    const queryLabel = `label:"(C) Compras" newer_than:${days}d`;
+    const queryLabel = `label:"(C) Compras" newer_than:${days}d ${EXCLUDE_ML}`;
     // busca extra por palavra-chave, pra pegar compras antigas que ainda não tinham a label quando chegaram
-    const queryKeyword = `newer_than:${days}d (mercadolivre OR "mercado livre" OR amazon OR magalu OR ifood OR kalunga OR "pão de açúcar" OR "seu pedido" OR "compra aprovada" OR "pedido confirmado" OR "order confirmed" OR shopee OR shein OR "nota fiscal")`;
+    const queryKeyword = `newer_than:${days}d (amazon OR magalu OR ifood OR kalunga OR "pão de açúcar" OR "seu pedido" OR "compra aprovada" OR "pedido confirmado" OR "order confirmed" OR shopee OR shein OR "nota fiscal") ${EXCLUDE_ML}`;
     const [rLabel, rKw] = await Promise.all([
       fetch(`${G}/messages?q=${encodeURIComponent(queryLabel)}&maxResults=25`, { headers: h, cache: 'no-store' }),
       fetch(`${G}/messages?q=${encodeURIComponent(queryKeyword)}&maxResults=25`, { headers: h, cache: 'no-store' }),
@@ -78,7 +82,8 @@ export async function GET(req) {
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
-    }))).filter(Boolean);
+    }))).filter(Boolean).filter((m) => !/mercadolivre|mercadolibre|mlstatic/i.test(m.from || ''));
+    if (!mails.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
     const today = new Date().toISOString().slice(0, 10);
     const system = `Você extrai informações de compras online a partir de e-mails, para um app pessoal de acompanhamento de pedidos.
@@ -103,7 +108,8 @@ Regras:
 - "other" = e-mail relacionado a compra mas não se encaixa nos acima (ex: cancelamento, nota fiscal).
 - NÃO invente dados ausentes — use null.
 - Se o e-mail não for realmente sobre uma compra, não o inclua.
-- Um e-mail = um item (não duplique).`;
+- Um e-mail = um item (não duplique).
+- Ignore qualquer e-mail do Mercado Livre — essa loja já é sincronizada por API à parte.`;
 
     const payload = mails.map((m) => ({ id: m.id, from: m.from, subject: m.subject, date: m.date, body: m.body }));
     const text = await claude(system, [{ role: 'user', content: JSON.stringify(payload) }]);
