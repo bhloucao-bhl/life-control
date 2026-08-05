@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/health/supabase", "schedule": "0 12 * * *" },
+    { "path": "/api/health/supabase", "schedule": "0 0 * * *" }
+  ]
+}
