@@ -500,7 +500,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v58 · 05ago';
+const APP_VERSION = 'v59 · 05ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -4857,7 +4857,7 @@ function VehicleDetail({ vehicle, items, people, lang, t, back, onOpen, toggleTa
 }
 
 /* ---------------- item detail (read-only view + edit) ---------------- */
-function ItemView({ item, lang, t, onAct }) {
+function ItemView({ item, lang, t, onAct, allItems, addItem }) {
   const Ic = typeIcon(item.type); const mt = item.meta || {}; const metaFields = META[item.type] || [];
   const rows = metaFields.filter(([k]) => k !== 'attachments' && (mt[k] || mt[k] === 0) && mt[k] !== '').map(([k, ptL, enL]) => [lang === 'pt' ? ptL : enL, String(mt[k])]);
   // horário + duração para eventos/compromissos
@@ -5005,7 +5005,7 @@ function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct, a
       </div>
       {editing
         ? <ItemForm draft={item} allowedTypes={[item.type]} lang={lang} t={t} people={people} onCancel={() => setEditing(false)} onDelete={() => { onDelete(item.id); onClose(); }} onSave={(x) => { onSave(item.id, x); setEditing(false); }} />
-        : <ItemView item={item} lang={lang} t={t} onAct={onAct} />}
+        : <ItemView item={item} lang={lang} t={t} onAct={onAct} allItems={allItems} addItem={addItem} />}
     </Modal>
   );
 }
@@ -5416,7 +5416,7 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} />;
+    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} /></ErrorBoundary>;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -5521,7 +5521,7 @@ function App() {
       {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
       {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} />}
-      {detail && <ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} allItems={allItems} addItem={addItem} />}
+      {detail && <ErrorBoundary fallback={() => <Modal onClose={() => setDetail(null)}><SheetHead title={lang === 'pt' ? 'Erro' : 'Error'} onClose={() => setDetail(null)} icon={AlertTriangle} /><div style={{ ...card, padding: 16, fontSize: 13, color: C.text2 }}>{lang === 'pt' ? 'Não consegui abrir este item. Tente novamente ou edite-o pela lista.' : "Couldn't open this item."}</div></Modal>}><ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} allItems={allItems} addItem={addItem} /></ErrorBoundary>}
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
       {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap' }}>{toast}</div>}
