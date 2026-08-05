@@ -47,14 +47,21 @@ export async function GET(req) {
   const days = new URL(req.url).searchParams.get('days') || '30';
 
   try {
-    const query = `label:"(C) Compras" newer_than:${days}d`;
-    const r = await fetch(`${G}/messages?q=${encodeURIComponent(query)}&maxResults=25`, { headers: h, cache: 'no-store' });
-    if (!r.ok) {
-      const txt = await r.text();
-      throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 200));
+    const queryLabel = `label:"(C) Compras" newer_than:${days}d`;
+    // busca extra por palavra-chave, pra pegar compras antigas que ainda não tinham a label quando chegaram
+    const queryKeyword = `newer_than:${days}d (mercadolivre OR "mercado livre" OR amazon OR magalu OR ifood OR kalunga OR "pão de açúcar" OR "seu pedido" OR "compra aprovada" OR "pedido confirmado" OR "order confirmed" OR shopee OR shein OR "nota fiscal")`;
+    const [rLabel, rKw] = await Promise.all([
+      fetch(`${G}/messages?q=${encodeURIComponent(queryLabel)}&maxResults=25`, { headers: h, cache: 'no-store' }),
+      fetch(`${G}/messages?q=${encodeURIComponent(queryKeyword)}&maxResults=25`, { headers: h, cache: 'no-store' }),
+    ]);
+    if (!rLabel.ok) {
+      const txt = await rLabel.text();
+      throw new Error('HTTP ' + rLabel.status + ' — ' + txt.slice(0, 200));
     }
-    const j = await r.json();
-    const ids = (j.messages || []).map((m) => m.id);
+    const j = await rLabel.json();
+    let jKw = { messages: [] };
+    try { if (rKw.ok) jKw = await rKw.json(); } catch (e) {}
+    const ids = [...new Set([...(j.messages || []).map((m) => m.id), ...(jKw.messages || []).map((m) => m.id)])].slice(0, 40);
     if (!ids.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
     const mails = (await Promise.all(ids.map(async (id) => {
