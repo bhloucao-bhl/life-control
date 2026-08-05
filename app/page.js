@@ -163,7 +163,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -288,7 +288,7 @@ const S = {
   quickAdd: L('Adicionar', 'Add'), open: L('Abertas', 'Open'),
   t_task: L('Tarefa', 'Task'), t_event: L('Evento', 'Event'), t_expense: L('Gasto', 'Expense'), t_meal: L('Refeição', 'Meal'),
   t_med: L('Medicação', 'Medication'), t_appointment: L('Consulta', 'Appointment'), t_document: L('Documento', 'Document'),
-  t_vehicle: L('Veículo', 'Vehicle'), t_trip: L('Viagem', 'Trip'), t_flight: L('Voo', 'Flight'), t_shopping: L('Compra', 'Shopping'), t_purchase: L('Pedido', 'Order'),
+  t_vehicle: L('Veículo', 'Vehicle'), t_trip: L('Viagem', 'Trip'), t_flight: L('Voo', 'Flight'), t_shopping: L('Compra', 'Shopping'), t_purchase: L('Pedido', 'Order'), t_condition: L('Condição', 'Condition'), t_allergy: L('Alergia', 'Allergy'), t_medication: L('Medicação', 'Medication'), t_healthMetric: L('Indicador', 'Indicator'),
   t_bill: L('Conta', 'Bill'), t_note: L('Nota', 'Note'), t_person: L('Pessoa', 'Person'), t_account: L('Conta/Cartão', 'Account/Card'),
   t_maintenance: L('Manutenção', 'Maintenance'), t_message: L('Mensagem', 'Message'), t_gift: L('Presente', 'Gift'),
   noPersist: L('Neste ambiente os dados podem não persistir entre sessões.', 'Data may not persist between sessions here.'),
@@ -355,6 +355,9 @@ const META = {
   message: [['sender', 'Remetente', 'Sender']],
   income: [['source', 'Origem', 'Source']],
   purchase: [['store', 'Loja', 'Store'], ['tracking', 'Rastreio', 'Tracking']],
+  condition: [['status', 'Status', 'Status'], ['since', 'Desde', 'Since', 'date']],
+  allergy: [['severity', 'Gravidade', 'Severity'], ['reaction', 'Reação', 'Reaction']],
+  medication: [['dose', 'Dose', 'Dose'], ['frequency', 'Frequência', 'Frequency'], ['prescribedBy', 'Prescrito por', 'Prescribed by'], ['startDate', 'Início', 'Start', 'date'], ['endDate', 'Fim (deixe vazio se em uso)', 'End (blank if ongoing)', 'date']],
 };
 
 const AIRLINES = { LA: 'LATAM', JJ: 'LATAM', G3: 'GOL', AD: 'Azul', AV: 'Avianca', CM: 'Copa', AA: 'American', UA: 'United', DL: 'Delta', B6: 'JetBlue', AC: 'Air Canada', QR: 'Qatar Airways', EK: 'Emirates', EY: 'Etihad', TK: 'Turkish', TP: 'TAP', IB: 'Iberia', UX: 'Air Europa', AF: 'Air France', KL: 'KLM', LH: 'Lufthansa', BA: 'British Airways', AZ: 'ITA Airways', QF: 'Qantas', JL: 'Japan Airlines', NH: 'ANA', SQ: 'Singapore', CX: 'Cathay Pacific', EI: 'Aer Lingus', LX: 'SWISS', AY: 'Finnair' };
@@ -399,7 +402,7 @@ function fmtLongPretty(iso, lang) {
   return `${wd}, ${mon} ${d.getDate()}, ${d.getFullYear()}`;
 }
 function fmtMoney(n, lang) { if (n == null || isNaN(n)) return ''; return new Intl.NumberFormat(loc(lang), { style: 'currency', currency: 'BRL' }).format(n); }
-const TYPES = ['task', 'event', 'expense', 'income', 'meal', 'med', 'appointment', 'document', 'vehicle', 'maintenance', 'trip', 'flight', 'shopping', 'purchase', 'bill', 'note', 'person', 'account', 'message', 'gift'];
+const TYPES = ['task', 'event', 'expense', 'income', 'meal', 'med', 'appointment', 'document', 'vehicle', 'maintenance', 'trip', 'flight', 'shopping', 'purchase', 'bill', 'note', 'person', 'account', 'message', 'gift', 'condition', 'allergy', 'medication', 'healthMetric'];
 const DOMAINS = ['personal', 'today', 'health', 'home', 'finance', 'kids', 'docs', 'cars', 'travel', 'work'];
 const isMoney = (ty) => ty === 'expense' || ty === 'income' || ty === 'bill' || ty === 'maintenance' || ty === 'purchase';
 const CATEGORIES = {
@@ -497,7 +500,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v55 · 04ago';
+const APP_VERSION = 'v56 · 05ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -653,7 +656,7 @@ function HintCard({ icon: Icon, text }) {
   return <div style={{ ...card, padding: 12, marginBottom: 10, display: 'flex', gap: 9, alignItems: 'flex-start', background: C.bg2 }}><Icon size={14} style={{ color: C.text3, marginTop: 1, flexShrink: 0 }} /><div style={{ fontSize: 11.5, color: C.text3, lineHeight: 1.5 }}>{text}</div></div>;
 }
 function typeIcon(type) {
-  const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, purchase: Package, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift };
+  const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, purchase: Package, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift, condition: HeartPulse, allergy: AlertTriangle, medication: Pill, healthMetric: Activity };
   return m[type] || FileText;
 }
 function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: LI, rightLabel, rightColor, rightIcon: RI }) {
@@ -1028,6 +1031,19 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
             };
             if (OPTS[k]) {
               return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark', appearance: 'none', WebkitAppearance: 'none' }}>{OPTS[k].map((o) => <option key={o} value={o}>{o || (lang === 'pt' ? '— selecione —' : '— select —')}</option>)}</select></Field></div>;
+            }
+            if (k === 'status' && type === 'condition') {
+              return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6 }}>{['ativa', 'resolvida'].map((s) => <Chip key={s} active={f.meta.status === s} onClick={() => upMeta({ status: s })} color={s === 'ativa' ? C.rose : C.green}>{lang === 'pt' ? (s === 'ativa' ? 'Ativa' : 'Resolvida') : (s === 'ativa' ? 'Active' : 'Resolved')}</Chip>)}</div></Field></div>;
+            }
+            if (k === 'severity' && type === 'allergy') {
+              return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{['leve', 'moderada', 'grave'].map((s) => <Chip key={s} active={f.meta.severity === s} onClick={() => upMeta({ severity: s })} color={s === 'grave' ? C.rose : s === 'moderada' ? C.accent : C.text2}>{lang === 'pt' ? s : s}</Chip>)}</div></Field></div>;
+            }
+            if (k === 'prescribedBy' && type === 'medication' && people.some((p) => p.meta && /m[ée]dic/i.test(p.meta.role || ''))) {
+              const docs = people.filter((p) => p.meta && /m[ée]dic/i.test(p.meta.role || ''));
+              return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+                <option value="">{lang === 'pt' ? '— selecione —' : '— select —'}</option>
+                {docs.map((p) => <option key={p.id} value={p.title}>{p.title}</option>)}
+              </select></Field></div>;
             }
             if (k === 'holder' && type === 'document') {
               return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark', appearance: 'none', WebkitAppearance: 'none' }}>
@@ -1741,6 +1757,198 @@ function timeAgo(pub, lang) {
   const d = Math.floor(h / 24); return (lang === 'pt' ? 'há ' : '') + d + 'd';
 }
 
+function DrClaudeBadge({ size = 20 }) {
+  return (
+    <div style={{ width: size, height: size, borderRadius: size * 0.3, background: 'linear-gradient(135deg, #6BA6E6, #5B8DEF)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+      <Stethoscope size={size * 0.6} style={{ color: '#fff' }} />
+    </div>
+  );
+}
+function IndicatorChart({ indicator, points, lang }) {
+  const [open, setOpen] = useState(false);
+  const sorted = [...points].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const latest = sorted[sorted.length - 1];
+  const vals = sorted.map((p) => p.value);
+  const min = Math.min(...vals), max = Math.max(...vals); const span = (max - min) || 1;
+  const W = 280, H = 44;
+  const pts = sorted.map((p, i) => [sorted.length === 1 ? W / 2 : (i / (sorted.length - 1)) * W, H - ((p.value - min) / span) * (H - 10) - 5]);
+  const dPath = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const statusColor = latest && latest.status === 'alto' ? C.rose : latest && latest.status === 'baixo' ? C.blue : C.green;
+  return (
+    <div style={{ ...card, padding: 13, marginBottom: 8 }}>
+      <div onClick={() => sorted.length > 1 && setOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: sorted.length > 1 ? 'pointer' : 'default' }}>
+        <div>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{indicator}</div>
+          <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{latest && latest.date ? fmtDate(latest.date, lang) : ''}{latest && latest.refRange ? ` · ref: ${latest.refRange}` : ''}</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 16, fontWeight: 800, color: statusColor }}>{latest ? latest.value : '—'} <span style={{ fontSize: 10, fontWeight: 400, color: C.text3 }}>{latest && latest.unit}</span></div>
+          {sorted.length > 1 && <ChevronRight size={13} style={{ color: C.text3, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />}
+        </div>
+      </div>
+      {sorted.length > 1 && open && (
+        <div style={{ marginTop: 10 }}>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 50, display: 'block' }} preserveAspectRatio="none">
+            <path d={dPath} fill="none" stroke={C.blue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+            {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill={sorted[i].status === 'alto' ? C.rose : sorted[i].status === 'baixo' ? C.blue : C.green} />)}
+          </svg>
+          <div style={{ marginTop: 6 }}>
+            {sorted.slice().reverse().map((p, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, padding: '4px 0', borderTop: i ? `1px solid ${C.borderSoft}` : 'none', color: C.text2 }}>
+                <span>{fmtDate(p.date, lang)}</span>
+                <span style={{ fontWeight: 600, color: p.status === 'alto' ? C.rose : p.status === 'baixo' ? C.blue : C.text }}>{p.value} {p.unit}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash }) {
+  const [adding, setAdding] = useState(null); // 'condition' | 'allergy' | 'medication'
+  const [analyzing, setAnalyzing] = useState(false); const [analyzeProgress, setAnalyzeProgress] = useState('');
+  const health = items.filter((i) => i.domain === 'health');
+  const isExamDoc = (i) => i.type === 'document' && (i.meta && i.meta.isExam || /exame|hemograma|resultado|laudo|sangue/i.test(i.title || ''));
+  const examDocs = health.filter(isExamDoc);
+  const metrics = items.filter((i) => i.type === 'healthMetric');
+  const analyzedDocIds = new Set(metrics.map((m) => m.meta && m.meta.sourceDocId).filter(Boolean));
+  const unanalyzed = examDocs.filter((d) => !analyzedDocIds.has(d.id) && d.meta && d.meta.attachments && d.meta.attachments.length > 0);
+  const conditions = items.filter((i) => i.type === 'condition');
+  const allergies = items.filter((i) => i.type === 'allergy');
+  const meds = items.filter((i) => i.type === 'medication');
+  const activeMeds = meds.filter((m) => !(m.meta && m.meta.endDate));
+  const pastMeds = meds.filter((m) => m.meta && m.meta.endDate);
+  const doctors = people.filter((p) => p.meta && /m[ée]dic/i.test(p.meta.role || ''));
+
+  // agrupa indicadores por nome
+  const byIndicator = {};
+  metrics.forEach((m) => { const k = m.title; (byIndicator[k] = byIndicator[k] || []).push({ value: m.amount, unit: m.meta && m.meta.unit, refRange: m.meta && m.meta.refRange, status: m.meta && m.meta.status, date: m.date }); });
+
+  const analyzeDoc = async (doc) => {
+    setAnalyzing(true); setAnalyzeProgress(doc.title);
+    try {
+      const atts = [];
+      for (const a of (doc.meta.attachments || []).slice(0, 4)) {
+        const full = await loadAttachment(a.id);
+        if (full && full.dataUrl) atts.push({ dataUrl: full.dataUrl });
+      }
+      if (!atts.length) { setAnalyzing(false); return; }
+      const r = await authFetch('/api/health-analyze', { method: 'POST', body: JSON.stringify({ docId: doc.id, attachments: atts, notes: doc.notes, fallbackDate: doc.date }) });
+      const j = await r.json();
+      if (j.indicators && j.indicators.length) {
+        j.indicators.forEach((ind) => {
+          addItem({ type: 'healthMetric', domain: 'health', title: ind.indicator, amount: ind.value, date: ind.date || doc.date, meta: { unit: ind.unit, refRange: ind.refRange, status: ind.status, sourceDocId: doc.id } });
+        });
+        flash(`Dr. Claude: ${j.indicators.length} ${lang === 'pt' ? 'indicadores encontrados' : 'indicators found'} ✓`);
+      } else {
+        flash(lang === 'pt' ? 'Nenhum indicador numérico encontrado neste documento.' : 'No numeric indicators found.');
+        // marca como já analisado mesmo sem indicadores, pra não tentar de novo
+        addItem({ type: 'healthMetric', domain: 'health', title: '__checked__', amount: 0, date: doc.date, status: 'done', meta: { sourceDocId: doc.id, hidden: true } });
+      }
+    } catch (e) { flash(lang === 'pt' ? 'Erro ao analisar.' : 'Analysis error.'); }
+    setAnalyzing(false); setAnalyzeProgress('');
+  };
+  const analyzeAll = async () => { for (const d of unanalyzed) { await analyzeDoc(d); } };
+
+  const visibleIndicators = Object.entries(byIndicator).filter(([k]) => k !== '__checked__');
+
+  return (
+    <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 16px 100px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}>
+        <button onClick={back} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex' }}><ChevronLeft size={22} /></button>
+        <DrClaudeBadge />
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>{lang === 'pt' ? 'Histórico Médico' : 'Medical History'}</div>
+          <div style={{ fontSize: 11, color: C.text3 }}>{lang === 'pt' ? 'Curadoria pelo Dr. Claude' : 'Curated by Dr. Claude'}</div>
+        </div>
+      </div>
+
+      {unanalyzed.length > 0 && (
+        <div style={{ ...card, padding: 14, marginBottom: 14, borderColor: C.blue + '44', background: C.blue + '0e' }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
+            <Sparkles size={16} style={{ color: C.blue, marginTop: 2, flexShrink: 0 }} />
+            <div style={{ fontSize: 12.5, color: C.text2, lineHeight: 1.5 }}>{unanalyzed.length} {lang === 'pt' ? `exame(s) ainda não analisado(s) pelo Dr. Claude.` : 'exam(s) not yet analyzed.'}</div>
+          </div>
+          <Btn onClick={analyzeAll} disabled={analyzing} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>
+            {analyzing ? <><Loader2 size={15} className="spin" />{analyzeProgress || '...'}</> : <><Stethoscope size={15} />{lang === 'pt' ? 'Analisar com Dr. Claude' : 'Analyze with Dr. Claude'}</>}
+          </Btn>
+        </div>
+      )}
+
+      <SectionTitle icon={Activity} label={lang === 'pt' ? 'Indicadores' : 'Indicators'} color={C.blue} />
+      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : visibleIndicators.sort((a, b) => a[0].localeCompare(b[0])).map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
+
+      <SectionTitle icon={HeartPulse} label={lang === 'pt' ? 'Condições' : 'Conditions'} color={C.rose} />
+      {conditions.length === 0 ? <Empty icon={HeartPulse} text={t('nothingHere')} /> : conditions.map((c) => (
+        <div key={c.id} style={{ ...card, padding: 12, marginBottom: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div><div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.title}</div>{c.meta && c.meta.since && <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{lang === 'pt' ? 'desde' : 'since'} {fmtDate(c.meta.since, lang)}</div>}</div>
+          {c.meta && c.meta.status && <span style={{ fontSize: 10, color: c.meta.status === 'ativa' ? C.rose : C.green, border: `1px solid currentColor`, borderRadius: 999, padding: '2px 8px' }}>{c.meta.status}</span>}
+        </div>
+      ))}
+      <Btn kind="soft" onClick={() => setAdding('condition')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={14} />{lang === 'pt' ? 'Adicionar condição' : 'Add condition'}</Btn>
+
+      <SectionTitle icon={AlertTriangle} label={lang === 'pt' ? 'Alergias' : 'Allergies'} color={C.accent} />
+      {allergies.length === 0 ? <Empty icon={AlertTriangle} text={t('nothingHere')} /> : allergies.map((a) => (
+        <div key={a.id} style={{ ...card, padding: 12, marginBottom: 7 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{a.title}</div>
+          {(a.meta && (a.meta.reaction || a.meta.severity)) && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{[a.meta.severity, a.meta.reaction].filter(Boolean).join(' · ')}</div>}
+        </div>
+      ))}
+      <Btn kind="soft" onClick={() => setAdding('allergy')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={14} />{lang === 'pt' ? 'Adicionar alergia' : 'Add allergy'}</Btn>
+
+      <SectionTitle icon={Pill} label={lang === 'pt' ? 'Medicações em uso' : 'Current medications'} color={C.violet} />
+      {activeMeds.length === 0 ? <Empty icon={Pill} text={t('nothingHere')} /> : activeMeds.map((m) => (
+        <div key={m.id} style={{ ...card, padding: 12, marginBottom: 7 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{m.title}</div>
+          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{[m.meta && m.meta.dose, m.meta && m.meta.frequency].filter(Boolean).join(' · ')}</div>
+          {m.meta && m.meta.prescribedBy && <div style={{ fontSize: 10.5, color: C.violet, marginTop: 3 }}>Dr(a). {m.meta.prescribedBy}</div>}
+        </div>
+      ))}
+      <Btn kind="soft" onClick={() => setAdding('medication')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={14} />{lang === 'pt' ? 'Adicionar medicação' : 'Add medication'}</Btn>
+      {pastMeds.length > 0 && (
+        <>
+          <SectionTitle icon={Pill} label={lang === 'pt' ? 'Histórico de medicações' : 'Past medications'} color={C.text2} />
+          {pastMeds.map((m) => <div key={m.id} style={{ ...card, padding: 12, marginBottom: 7, opacity: 0.65 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{m.title}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{fmtDate(m.meta.startDate, lang)} – {fmtDate(m.meta.endDate, lang)}</div></div>)}
+        </>
+      )}
+
+      {doctors.length > 0 && (
+        <>
+          <SectionTitle icon={Stethoscope} label={lang === 'pt' ? 'Médicos' : 'Doctors'} color={C.sky} />
+          {doctors.map((doc) => {
+            const apps = items.filter((i) => i.type === 'appointment' && i.meta && i.meta.doctor === doc.title).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+            const prescribed = meds.filter((m) => m.meta && m.meta.prescribedBy === doc.title);
+            return (
+              <div key={doc.id} style={{ ...card, padding: 13, marginBottom: 8 }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <Avatar photo={doc.meta && doc.meta.photo} name={doc.title} size={38} color={C.sky} />
+                  <div><div style={{ fontSize: 14, fontWeight: 700 }}>{doc.title}</div><div style={{ fontSize: 11, color: C.text3 }}>{doc.meta && doc.meta.company}</div></div>
+                </div>
+                <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 11.5, color: C.text2 }}>
+                  <span>{apps.length} {lang === 'pt' ? 'consulta(s)' : 'visit(s)'}</span>
+                  <span>{prescribed.length} {lang === 'pt' ? 'prescrição(ões)' : 'prescription(s)'}</span>
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+
+      {adding && (
+        <AddModal
+          title={t('t_' + adding)}
+          icon={typeIcon(adding)}
+          draft={{ type: adding, domain: 'health', meta: adding === 'condition' ? { status: 'ativa' } : {} }}
+          allowedTypes={[adding]}
+          lang={lang} t={t} people={people}
+          onClose={() => setAdding(null)}
+          onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(null); }}
+        />
+      )}
+    </div>
+  );
+}
 function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSendItem, savedNews = [], onUnsave }) {
   const [reader, setReader] = useState(null); // noticia aberta no leitor interno
   const [tab, setTab] = useState('feed'); // feed | saved
@@ -2989,7 +3197,7 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 }
 
 /* ---------------- Health dashboard ---------------- */
-function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight }) {
+function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical }) {
   const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const today = todayISO(); const w = health[today] || {};
   const hd = items.filter((i) => i.domain === 'health');
@@ -2998,12 +3206,20 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const pharm = hd.filter((i) => i.type === 'expense' && i.amount);
   const pharmTotal = pharm.reduce((a, b) => a + b.amount, 0);
   const hdocs = hd.filter((i) => i.type === 'document');
-  const isExam = (i) => /exame|hemograma|raio|ultrass|resson|resultado|laudo|sangue|colesterol|glicose/i.test(i.title);
+  const isExam = (i) => (i.meta && i.meta.isExam) || /exame|hemograma|raio|ultrass|resson|resultado|laudo|sangue|colesterol|glicose/i.test(i.title);
   const exams = hdocs.filter(isExam); const support = hdocs.filter((i) => !isExam(i));
   const bmi = profile.weight && profile.height ? (Number(profile.weight) / Math.pow(Number(profile.height) / 100, 2)).toFixed(1) : null;
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
+      <button onClick={goMedical} style={{ ...card, width: '100%', padding: 14, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', border: 'none', textAlign: 'left', color: C.text, background: 'linear-gradient(135deg, #5B8DEF1c, ' + C.surface + ')', borderColor: '#5B8DEF33' }}>
+        <DrClaudeBadge size={36} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 14, fontWeight: 700 }}>{lang === 'pt' ? 'Histórico Médico' : 'Medical History'}</div>
+          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Indicadores, condições, medicações — com o Dr. Claude' : 'Indicators, conditions, medications'}</div>
+        </div>
+        <ChevronRight size={18} style={{ color: C.text3 }} />
+      </button>
       <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
         <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} locked={ouraOn} onClick={() => setLogOpen(true)} />
         <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} locked={ouraOn} onClick={() => setLogOpen(true)} />
@@ -5013,7 +5229,7 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} />;
+    if (mo.custom === 'health') return <HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} />;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -5085,6 +5301,7 @@ function App() {
           onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
           onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
+        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
