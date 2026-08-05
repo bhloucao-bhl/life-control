@@ -37,6 +37,20 @@ export async function GET(req) {
 
   await pull('daily_readiness', 'readiness');
   await pull('daily_sleep', 'sleep');
+  await pull('daily_activity', 'activity');
+
+  // temperatura corporal (desvio) e frequencia respiratoria — vem dentro do daily_readiness, nao eh so o score
+  try {
+    const r = await fetch(`https://api.ouraring.com/v2/usercollection/daily_readiness?${q}`, { headers: h, cache: 'no-store' });
+    if (r.ok) {
+      const j = await r.json();
+      (j.data || []).forEach((row) => {
+        const d = row.day; if (!d) return;
+        byDate[d] = byDate[d] || {};
+        if (row.temperature_deviation != null) byDate[d].tempDeviation = Math.round(row.temperature_deviation * 10) / 10;
+      });
+    }
+  } catch (e) { errors.push(String(e.message || e)); }
 
   // Detalhe do sono mais recente: fases + movimento
   let lastSleep = null;
