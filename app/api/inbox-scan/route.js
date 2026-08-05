@@ -26,7 +26,7 @@ async function claude(system, messages) {
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1500, system, messages }),
+    body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3000, system, messages }),
   });
   const j = await r.json();
   return (j.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
@@ -48,12 +48,18 @@ export async function GET(req) {
   const days = new URL(req.url).searchParams.get('days') || '30';
 
   try {
-    // Busca 1: dirigida por palavras-chave (fallback). Busca 2: label "(V) Viagens" criada pelo usuário (mais precisa).
-    const query = `newer_than:${days}d (voo OR passagem OR reserva OR embarque OR itinerário OR itinerario OR hotel OR check-in OR flight OR booking OR reservation OR boarding OR itinerary)`;
+    // Busca 1: palavras-chave gerais de viagem (fallback amplo).
+    // Busca 2: label "(V) Viagens" criada pelo usuário (mais precisa, se existir).
+    // Busca 3: remetentes conhecidos de companhias aéreas / OTAs — é a mais confiável pra
+    // confirmações transacionais (compra de passagem, check-in, cartão de embarque, reserva de hotel),
+    // que às vezes não usam nenhuma das palavras-chave do fallback.
+    const query = `newer_than:${days}d (voo OR "sua viagem" OR passagem OR passagens OR reserva OR "confirmação de reserva" OR "confirmação da reserva" OR embarque OR "cartão de embarque" OR "cartao de embarque" OR itinerário OR itinerario OR hotel OR hospedagem OR "check-in" OR checkin OR voucher OR flight OR booking OR reservation OR boarding OR "boarding pass" OR itinerary OR confirmation)`;
     const queryLabel = `label:"(V) Viagens" newer_than:${days}d`;
-    const [r, rLabel] = await Promise.all([
-      fetch(`${G}/messages?q=${encodeURIComponent(query)}&maxResults=15`, { headers: h, cache: 'no-store' }),
-      fetch(`${G}/messages?q=${encodeURIComponent(queryLabel)}&maxResults=15`, { headers: h, cache: 'no-store' }),
+    const querySenders = `newer_than:${days}d from:(latam.com OR voegol.com.br OR voeazul.com.br OR avianca.com OR aa.com OR united.com OR delta.com OR copaair.com OR tap.pt OR tap.fr OR iberia.com OR airfrance.fr OR klm.com OR emirates.com OR booking.com OR airbnb.com OR decolar.com OR despegar.com OR expedia.com OR hoteis.com OR hotels.com OR trivago.com OR agoda.com OR cvc.com.br OR submarinoviagens.com.br OR maxmilhas.com.br OR 123milhas.com OR smiles.com.br OR livelo.com.br)`;
+    const [r, rLabel, rSenders] = await Promise.all([
+      fetch(`${G}/messages?q=${encodeURIComponent(query)}&maxResults=30`, { headers: h, cache: 'no-store' }),
+      fetch(`${G}/messages?q=${encodeURIComponent(queryLabel)}&maxResults=30`, { headers: h, cache: 'no-store' }),
+      fetch(`${G}/messages?q=${encodeURIComponent(querySenders)}&maxResults=30`, { headers: h, cache: 'no-store' }),
     ]);
     if (!r.ok) {
       const txt = await r.text();
@@ -62,7 +68,13 @@ export async function GET(req) {
     const j = await r.json();
     let jLabel = { messages: [] };
     try { if (rLabel.ok) jLabel = await rLabel.json(); } catch (e) {}
-    const ids = [...new Set([...(j.messages || []).map((m) => m.id), ...(jLabel.messages || []).map((m) => m.id)])];
+    let jSenders = { messages: [] };
+    try { if (rSenders.ok) jSenders = await rSenders.json(); } catch (e) {}
+    const ids = [...new Set([
+      ...(j.messages || []).map((m) => m.id),
+      ...(jLabel.messages || []).map((m) => m.id),
+      ...(jSenders.messages || []).map((m) => m.id),
+    ])].slice(0, 60);
     if (!ids.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
     const mails = (await Promise.all(ids.map(async (id) => {
@@ -75,7 +87,7 @@ export async function GET(req) {
           from: header(m.payload, 'From'),
           subject: header(m.payload, 'Subject'),
           date: m.internalDate ? new Date(Number(m.internalDate)).toISOString().slice(0, 10) : null,
-          body: (plainBody(m.payload) || m.snippet || '').slice(0, 2500),
+          body: (plainBody(m.payload) || m.snippet || '').slice(0, 4000),
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
@@ -99,6 +111,8 @@ Para cada e-mail que REALMENTE contenha uma reserva ou compromisso confirmado, g
 Regras rígidas:
 - NÃO invente dados. Se um campo não estiver escrito no e-mail, use null ou omita.
 - Ignore propaganda, newsletter, promoção e sugestão de destino: só reservas/compromissos confirmados.
+- E-mails de companhia aérea ou agência de viagem (ex: LATAM, GOL, Azul, Avianca, Booking, Airbnb, Decolar, Expedia, CVC) sobre compra de passagem, check-in, cartão de embarque ou confirmação de hospedagem SÃO reservas confirmadas — inclua mesmo que o corpo do e-mail seja curto ou majoritariamente em HTML/imagens; extraia o que der do assunto e do texto disponível.
+- Um e-mail de compra de passagem com ida e volta pode gerar dois itens "flight" (um por trecho) se as datas/números de voo de ambos estiverem no e-mail.
 - Não repita o mesmo voo/reserva duas vezes.
 - Se nada qualificar, devolva [].`;
 
