@@ -316,7 +316,7 @@ const S = {
   // dock
   editDock: L('Barra principal (dock)', 'Main dock'), dockHint: L('Escolha até 5 atalhos para a barra de baixo.', 'Pick up to 5 shortcuts for the bottom bar.'),
   // filters
-  fAll: L('Todos', 'All'), fWork: L('Trabalho', 'Work'), fPersonal: L('Pessoal', 'Personal'), fKids: L('Filhos', 'Kids'), fHouse: L('Casa', 'Home'), fHealth: L('Saúde', 'Health'), fDone: L('Concluídas', 'Done'),
+  fAll: L('Todos', 'All'), fWork: L('Trabalho', 'Work'), fPersonal: L('Pessoal', 'Personal'), fKids: L('Filhos', 'Kids'), fHouse: L('Casa', 'Home'), fHealth: L('Saúde', 'Health'), fShopping: L('Compras', 'Shopping'), fDone: L('Concluídas', 'Done'),
   priorityL: L('Prioridade', 'Priority'), prNormal: L('Normal', 'Normal'), prLow: L('Baixa', 'Low'),
   // finance
   accounts: L('Contas e cartões', 'Accounts & cards'), checking: L('Conta corrente', 'Checking'), credit: L('Cartão de crédito', 'Credit card'), investment: L('Investimentos', 'Investments'), benefit: L('Benefício', 'Benefit'),
@@ -2304,7 +2304,7 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
 }
 
 /* ---------------- Calendar ---------------- */
-const CAL_FILTERS = [['all', 'fAll', null], ['work', 'fWork', 'work'], ['personal', 'fPersonal', 'personal'], ['kids', 'fKids', 'kids'], ['house', 'fHouse', 'home'], ['health', 'fHealth', 'health']];
+const CAL_FILTERS = [['all', 'fAll', null], ['work', 'fWork', 'work'], ['personal', 'fPersonal', 'personal'], ['kids', 'fKids', 'kids'], ['house', 'fHouse', 'home'], ['health', 'fHealth', 'health'], ['shopping', 'fShopping', 'shopping']];
 function MiniCalendar({ items, lang, t, toggleTask, onOpen }) {
   const [mode, setMode] = useState('week'); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7));
   const dated = (items || []).filter((i) => i.date && i.status !== 'done');
@@ -2443,7 +2443,9 @@ function MiniPlanner({ items, lang, t, onOpen, today }) {
 function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount }) {
   useEffect(() => { if (onMount) onMount(); }, []);
   const [mode, setMode] = useState('week'); const [spin, setSpin] = useState(false); const today = todayISO(); const [sel, setSel] = useState(today); const [vm, setVm] = useState(today.slice(0, 7)); const [filter, setFilter] = useState(null); const [scope, setScope] = useState('all');
-  const CAL_EXCLUDE = ['account', 'person', 'message', 'vehicle', 'note'];
+  // 'purchase' fica de fora do calendário: quando um pedido é enviado, um evento (type 'event', domain 'shopping')
+  // com a data de chegada é criado automaticamente — é ele que deve aparecer, não a compra em si (que tem a data do pedido).
+  const CAL_EXCLUDE = ['account', 'person', 'message', 'vehicle', 'note', 'purchase'];
   const dated = items.filter((i) => i.date && i.status !== 'done' && !CAL_EXCLUDE.includes(i.type) && (scope === 'all' || ['event', 'appointment', 'flight', 'trip', 'document', 'bill'].includes(i.type)) && (!filter || i.domain === filter));
   const onDay = (iso) => dated.filter((i) => i.date === iso);
   const [y, m] = vm.split('-').map(Number);
@@ -3511,6 +3513,19 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const [sumLoading, setSumLoading] = useState(false);
   const [sumOpen, setSumOpen] = useState(false);
+  const [hscan, setHscan] = useState({ loading: false, list: null, error: null });
+  const [hscanDays, setHscanDays] = useState(30);
+  const runHealthScan = () => {
+    setHscan({ loading: true, list: null, error: null });
+    authFetch('/api/health-scan?days=' + hscanDays).then((r) => r.json())
+      .then((j) => setHscan({ loading: false, list: j.suggestions || [], error: j.error || null }))
+      .catch((e) => setHscan({ loading: false, list: [], error: String(e) }));
+  };
+  const acceptHsug = (sg) => {
+    addItem({ type: sg.type, domain: 'health', title: sg.title, date: sg.date, time: sg.time, meta: { ...(sg.meta || {}), fromEmail: sg.sourceType === 'email', fromCalendar: sg.sourceType === 'calendar', sourceLink: sg.source && sg.source.link } });
+    setHscan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
+    flash(t('savedOne'));
+  };
   const today = todayISO(); const w = health[today] || {};
   const hd = items.filter((i) => i.domain === 'health');
   const genSummary = async () => {
@@ -3550,6 +3565,41 @@ Data de hoje: ${today}`;
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        {[15, 30, 60, 90].map((d) => <Chip key={d} active={hscanDays === d} onClick={() => setHscanDays(d)}>{d}d</Chip>)}
+      </div>
+      <div style={{ ...card, padding: 12, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <Sparkles size={16} style={{ color: C.accent, flexShrink: 0 }} />
+        <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{lang === 'pt' ? 'Buscar saúde nos e-mails e na agenda' : 'Scan email and calendar for health'}</span>
+        <Btn kind="soft" onClick={runHealthScan} disabled={hscan.loading} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+          {hscan.loading ? <Loader2 size={13} className="spin" /> : <Mail size={13} />}{hscan.loading ? t('scanning') : (lang === 'pt' ? 'Buscar' : 'Scan')}
+        </Btn>
+      </div>
+      {hscan.error && <HintCard icon={AlertTriangle} text={hscan.error} />}
+      {hscan.list && hscan.list.length === 0 && !hscan.loading && <HintCard icon={Check} text={lang === 'pt' ? 'Nada novo encontrado.' : 'Nothing new found.'} />}
+      {hscan.list && hscan.list.map((sg) => {
+        const Ic = typeIcon(sg.type);
+        return (
+          <div key={sg.key} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <Ic size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{sg.title}</div>
+                <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>
+                  {t('t_' + sg.type)}{sg.date ? ' · ' + fmtDate(sg.date, lang) : ''}{sg.time ? ' ' + sg.time : ''}
+                  {sg.meta && sg.meta.doctor ? ` · ${sg.meta.doctor}` : ''}{sg.meta && sg.meta.clinic ? ` · ${sg.meta.clinic}` : ''}
+                </div>
+                <div style={{ fontSize: 10, color: C.text3, marginTop: 3 }}>{sg.sourceType === 'calendar' ? (lang === 'pt' ? '📅 da agenda' : '📅 from calendar') : '✉ ' + (sg.source && sg.source.subject || '')}</div>
+                {sg.why && <div style={{ fontSize: 11, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{sg.why}</div>}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Btn kind="soft" onClick={() => acceptHsug(sg)} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={13} />{t('accept')}</Btn>
+              <Btn kind="ghost" onClick={() => setHscan((p) => ({ ...p, list: p.list.filter((x) => x.key !== sg.key) }))} style={{ padding: '7px 12px', fontSize: 12.5 }}>{t('discard')}</Btn>
+            </div>
+          </div>
+        );
+      })}
       <div style={{ ...card, padding: 15, marginBottom: 12, border: '1px solid #5B8DEF33', background: 'linear-gradient(135deg, #5B8DEF14, ' + C.surface + ')' }}>
         <div onClick={() => setSumOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: sumOpen ? 8 : 0, cursor: 'pointer' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#5B8DEF' }}>{lang === 'pt' ? 'Resumo de hoje' : "Today's summary"}</span>{!sumOpen && healthSummary && <span style={{ fontSize: 10, color: C.text3, fontWeight: 400 }}>({lang === 'pt' ? 'toque pra ler' : 'tap to read'})</span>}</div>
@@ -5464,9 +5514,15 @@ const SEED_SETTINGS = { health: { [todayISO()]: { readiness: 82, sleep: 76 } }, 
 function App() {
   const [ready, setReady] = useState(false);
   const [wide, setWide] = useState(false);
+  // breakpoint extra pra telas grandes (ex: iPad Pro 13" em paisagem, ~1366pt) — usa mais a largura disponível
+  // em vez de ficar com a mesma largura de conteúdo de um iPad Mini/Air em paisagem.
+  const [xwide, setXwide] = useState(false);
   const [sideDash, setSideDash] = useState(false);
   useEffect(() => {
-    const check = () => setWide(typeof window !== 'undefined' && window.innerWidth >= 900);
+    const check = () => {
+      const w = typeof window !== 'undefined' ? window.innerWidth : 0;
+      setWide(w >= 900); setXwide(w >= 1180);
+    };
     check(); window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
@@ -5646,9 +5702,9 @@ function App() {
   };
 
   return (
-    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: wide ? 1080 : 480, margin: '0 auto', position: 'relative', paddingBottom: wide ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)', display: wide ? 'flex' : 'block', gap: wide ? 0 : undefined, alignItems: 'flex-start' }}>
+    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: wide ? (xwide ? 1440 : 1080) : 480, margin: '0 auto', position: 'relative', paddingBottom: wide ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)', display: wide ? 'flex' : 'block', gap: wide ? 0 : undefined, alignItems: 'flex-start' }}>
       {wide && (
-        <div style={{ width: 210, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: `1px solid ${C.borderSoft}`, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ width: xwide ? 232 : 210, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: `1px solid ${C.borderSoft}`, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
           <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px 16px' }}><span style={{ width: 9, height: 9, borderRadius: 2, background: C.accent }} />Life in Control</button>
           {dock.map((k) => {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
@@ -5685,7 +5741,7 @@ function App() {
           </div>
         </div>
       )}
-      <div style={{ flex: 1, minWidth: 0, maxWidth: wide ? 720 : undefined, margin: wide ? '0 auto' : undefined, width: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0, maxWidth: wide ? (xwide ? 1020 : 720) : undefined, margin: wide ? '0 auto' : undefined, width: '100%' }}>
       {!wide && (
       <div style={{ height: refreshing ? 44 : pull, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: pullRef.current.active ? 'none' : 'height .2s', color: C.text3 }}>
         {(refreshing || pull > 10) && <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12 }}><RefreshCw size={15} className={refreshing ? 'spin' : ''} style={{ transform: refreshing ? 'none' : `rotate(${pull * 4}deg)` }} />{refreshing ? t('refreshing') : (pull > 55 ? t('releaseRefresh') : t('pullRefresh'))}</div>}
