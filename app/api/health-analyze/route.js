@@ -41,13 +41,17 @@ export async function POST(req) {
       if (mime === 'application/pdf') content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } });
       else if (mime.startsWith('image/')) content.push({ type: 'image', source: { type: 'base64', media_type: mime, data: b64 } });
     }
+    // se nenhum anexo virou um bloco de imagem/documento válido, não adianta chamar o Claude — ele sempre vai dizer "nada encontrado"
+    if (content.length === 0) {
+      return Response.json({ error: 'Não consegui ler o(s) anexo(s) (formato não reconhecido ou corrompido). Tente reanexar o arquivo.', indicators: [] });
+    }
     if (notes) content.push({ type: 'text', text: 'Notas adicionais: ' + notes });
     content.push({ type: 'text', text: 'Extraia os indicadores deste documento.' });
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 3000, system: SYSTEM, messages: [{ role: 'user', content }] }),
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4000, system: SYSTEM, messages: [{ role: 'user', content }] }),
     });
     const j = await r.json();
     if (j.error) throw new Error(j.error.message || 'erro IA');
