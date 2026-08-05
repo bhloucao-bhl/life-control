@@ -343,7 +343,7 @@ function makeT(lang) { return (k) => (S[k] ? S[k][lang] : k); }
 
 const META = {
   flight: [['airline', 'Companhia', 'Airline'], ['flightNumber', 'Nº do voo', 'Flight #'], ['from', 'Origem', 'From'], ['to', 'Destino', 'To'], ['seat', 'Assento', 'Seat'], ['locator', 'Localizador', 'Locator'], ['aircraft', 'Aeronave', 'Aircraft'], ['durationMin', 'Duração (min)', 'Duration (min)', 'number']],
-  trip: [['destination', 'Destino', 'Destination'], ['endDate', 'Volta', 'Return', 'date'], ['locator', 'Reserva', 'Booking'], ['hotel', 'Hotel', 'Hotel']],
+  trip: [['purpose', 'Motivo', 'Purpose'], ['destination', 'Destino', 'Destination'], ['endDate', 'Volta', 'Return', 'date'], ['locator', 'Reserva', 'Booking'], ['hotel', 'Hotel', 'Hotel']],
   vehicle: [['make', 'Montadora', 'Make'], ['model', 'Modelo', 'Model'], ['year', 'Ano', 'Year', 'number'], ['km', 'KM', 'Odometer', 'number']],
   document: [['tag', 'Etiqueta', 'Tag'], ['number', 'Número', 'Number'], ['issuer', 'Emissor', 'Issuer'], ['holder', 'De quem é', 'Belongs to']],
   med: [['dose', 'Dose', 'Dose'], ['frequency', 'Frequência', 'Frequency']],
@@ -500,7 +500,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v59 · 05ago';
+const APP_VERSION = 'v60 · 05ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -715,6 +715,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
           {item.meta && item.meta.moura && <MouraBadge />}
           {item.meta && item.meta.external === 'google' && !((item.meta && item.meta.moura)) && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
           {item.type === 'document' && item.meta && item.meta.tag && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 8px' }}>{item.meta.tag}</span>}
+          {item.type === 'trip' && item.meta && item.meta.purpose && <span style={{ fontSize: 10, color: item.meta.purpose === 'trabalho' ? C.sky : C.green, border: `1px solid currentColor`, borderRadius: 999, padding: '1px 8px' }}>{item.meta.purpose === 'trabalho' ? (lang === 'pt' ? 'Trabalho' : 'Work') : (lang === 'pt' ? 'Lazer' : 'Leisure')}</span>}
           {item.meta && item.meta.external === 'ticktick' && item.meta.project && <span style={{ fontSize: 10, color: C.violet, border: `1px solid ${C.violet}44`, borderRadius: 999, padding: '1px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>{item.meta.project}</span>}
           {item.meta && item.meta.external === 'ticktick' && <span style={{ fontSize: 10, color: C.green, border: `1px solid ${C.green}44`, borderRadius: 999, padding: '1px 7px' }}>TickTick</span>}
         </div>
@@ -1032,6 +1033,9 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
             if (OPTS[k]) {
               return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><select value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark', appearance: 'none', WebkitAppearance: 'none' }}>{OPTS[k].map((o) => <option key={o} value={o}>{o || (lang === 'pt' ? '— selecione —' : '— select —')}</option>)}</select></Field></div>;
             }
+            if (k === 'purpose' && type === 'trip') {
+              return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6 }}>{['trabalho', 'lazer'].map((s) => <Chip key={s} active={f.meta.purpose === s} onClick={() => upMeta({ purpose: s })} color={s === 'trabalho' ? C.sky : C.green}>{lang === 'pt' ? (s === 'trabalho' ? 'Trabalho' : 'Lazer') : (s === 'trabalho' ? 'Work' : 'Leisure')}</Chip>)}</div></Field></div>;
+            }
             if (k === 'status' && type === 'condition') {
               return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6 }}>{['ativa', 'resolvida'].map((s) => <Chip key={s} active={f.meta.status === s} onClick={() => upMeta({ status: s })} color={s === 'ativa' ? C.rose : C.green}>{lang === 'pt' ? (s === 'ativa' ? 'Ativa' : 'Resolvida') : (s === 'ativa' ? 'Active' : 'Resolved')}</Chip>)}</div></Field></div>;
             }
@@ -1220,12 +1224,10 @@ async function tryDeviceCommand(raw, lang) {
   const m = onMatch || offMatch;
   if (!m) return { handled: false };
   const wantOn = !!onMatch;
-  // remove o verbo e palavras de preenchimento comuns pra sobrar o nome do dispositivo
-  let rest = norm.replace(m[0], '').replace(/\b(o|a|os|as|do|da|de|dos|das|luz|luzes|por favor|pfv)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  let rest = norm.replace(m[0], '').replace(/\b(o|a|os|as|do|da|de|dos|das|luz|luzes|ar|condicionado|por favor|pfv)\b/g, ' ').replace(/\s+/g, ' ').trim();
   if (rest.length < 2) return { handled: false };
   const restWords = rest.split(' ').filter(Boolean);
 
-  // procura o melhor match entre os apelidos conhecidos (TUYA_SEED)
   let best = null, bestScore = 0;
   Object.entries(TUYA_SEED).forEach(([id, meta]) => {
     const aliasWords = normDevText(meta.alias).split(' ').filter(Boolean);
@@ -1234,7 +1236,19 @@ async function tryDeviceCommand(raw, lang) {
   });
   if (!best || bestScore === 0) return { handled: false };
 
+  const acao = wantOn ? (lang === 'pt' ? 'ligado' : 'on') : (lang === 'pt' ? 'desligado' : 'off');
   try {
+    if (best.meta.kind === 'ac') {
+      // ar-condicionado via infravermelho: não existe telemetria real de volta do aparelho físico,
+      // então avisamos honestamente que o comando foi ENVIADO (não "confirmado") — mesma limitação de qualquer controle IR.
+      if (!best.meta.ir) return { handled: true, message: lang === 'pt' ? `${best.meta.alias} não tem controle remoto configurado.` : `${best.meta.alias} has no IR remote configured.` };
+      await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'ac', infrared_id: best.meta.ir, remote_id: best.id, acCode: 'all', acValue: { power: wantOn ? 1 : 0, mode: 'cold', temp: 23, wind: 'auto' } }) });
+      // pequena espera pra dar tempo do IR transmitir antes de qualquer novo comando ser digitado
+      await new Promise((res) => setTimeout(res, 1200));
+      return { handled: true, message: `${best.meta.alias}: comando de ${wantOn ? (lang === 'pt' ? 'ligar' : 'turn on') : (lang === 'pt' ? 'desligar' : 'turn off')} enviado por infravermelho (sem confirmação de retorno do aparelho) ✓` };
+    }
+
+    // interruptor simples (luz/tomada): manda o comando e CONFIRMA de verdade lendo o status de volta
     const r = await authFetch('/api/tuya');
     const j = await r.json();
     const dev = (j.devices || []).find((d) => d.id === best.id);
@@ -1243,7 +1257,16 @@ async function tryDeviceCommand(raw, lang) {
     const rc = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId: best.id, code, value: wantOn }) });
     const rj = await rc.json();
     if (!rj.ok) return { handled: true, message: (lang === 'pt' ? 'Erro ao comandar: ' : 'Command error: ') + (rj.error || '?') };
-    return { handled: true, message: `${best.meta.alias} ${wantOn ? (lang === 'pt' ? 'ligado' : 'on') : (lang === 'pt' ? 'desligado' : 'off')} ✓` };
+    // confirma de verdade: espera um instante e relê o status real do dispositivo na nuvem Tuya
+    await new Promise((res) => setTimeout(res, 900));
+    try {
+      const rv = await authFetch('/api/tuya'); const jv = await rv.json();
+      const dv = (jv.devices || []).find((d) => d.id === best.id);
+      const confirmed = dv && dv.status && dv.status[code] === wantOn;
+      return { handled: true, message: confirmed ? `${best.meta.alias} ${acao} ✓` : `${best.meta.alias}: ${lang === 'pt' ? 'comando enviado, aguardando confirmação do dispositivo...' : 'command sent, awaiting device confirmation...'}` };
+    } catch (e) {
+      return { handled: true, message: `${best.meta.alias} ${acao} ✓` };
+    }
   } catch (e) {
     return { handled: true, message: (lang === 'pt' ? 'Erro ao comandar dispositivo.' : 'Device command error.') };
   }
@@ -1383,7 +1406,27 @@ const WMO = {
 function wmo(code, lang) { const e = WMO[code] || WMO[3]; return { kind: e[0], label: lang === 'pt' ? e[1] : e[2] }; }
 function wxIcon(k) { return k === 'sun' ? Sun : k === 'rain' ? CloudRain : k === 'cloud' ? Cloud : CloudSun; }
 
-function WeatherDetail({ wx, lang, t, onClose }) {
+function WeatherDetail({ wx: wxHome, lang, t, onClose }) {
+  const [searchedWx, setSearchedWx] = useState(null); const [searchedName, setSearchedName] = useState(null);
+  const [q, setQ] = useState(''); const [opts, setOpts] = useState([]); const [searching, setSearching] = useState(false);
+  const wx = searchedWx || wxHome;
+  const searchCity = async (text) => {
+    if (!text || text.length < 3) { setOpts([]); return; }
+    try {
+      const r = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(text)}&count=5&language=${lang === 'pt' ? 'pt' : 'en'}`);
+      const j = await r.json();
+      setOpts(j.results || []);
+    } catch (e) { setOpts([]); }
+  };
+  const pickCity = async (c) => {
+    setSearching(true); setOpts([]); setQ('');
+    try {
+      const r = await fetch(`/api/live?lat=${c.latitude}&lon=${c.longitude}`);
+      const j = await r.json();
+      if (j.weather) { setSearchedWx(j.weather); setSearchedName([c.name, c.admin1, c.country].filter(Boolean).join(', ')); }
+    } catch (e) {}
+    setSearching(false);
+  };
   const days = wx.days || [];
   const [di, setDi] = useState(0);
   const d0 = days[di] || {};
@@ -1404,10 +1447,14 @@ function WeatherDetail({ wx, lang, t, onClose }) {
   if (temps.length > 1) {
     const vals = temps.map((h) => h.temp); const min = Math.min(...vals), max = Math.max(...vals); const span = (max - min) || 1;
     const W = 300, H = 60;
-    const pts = temps.map((h, i) => [temps.length === 1 ? W / 2 : (i / (temps.length - 1)) * W, H - ((h.temp - min) / span) * (H - 16) - 8]);
+    const padL = 24; // espaço pro eixo de temperatura na esquerda
+    const plotW = W - padL;
+    const pts = temps.map((h, i) => [padL + (temps.length === 1 ? plotW / 2 : (i / (temps.length - 1)) * plotW), H - ((h.temp - min) / span) * (H - 16) - 8]);
     const dPath = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
     const hasRain = temps.some((h) => h.rain != null && h.rain > 0);
-    const barW = W / temps.length * 0.6;
+    const barW = plotW / temps.length * 0.6;
+    // ponto de maior chuva (pra rotular só o pico, sem poluir)
+    const maxRainIdx = hasRain ? temps.reduce((best, h, i) => (h.rain || 0) > (temps[best].rain || 0) ? i : best, 0) : -1;
     chart = (
       <div style={{ ...card, padding: 14, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -1418,16 +1465,32 @@ function WeatherDetail({ wx, lang, t, onClose }) {
           </span>
         </div>
         <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 72, display: 'block' }} preserveAspectRatio="none">
+          {/* eixo Y de temperatura: min/max sempre visiveis, fixos por dia */}
+          <text x={0} y={H - 4} fontSize="7" fill={C.text3}>{Math.round(min)}°</text>
+          <text x={0} y={12} fontSize="7" fill={C.text3}>{Math.round(max)}°</text>
+          <line x1={padL - 3} y1={4} x2={padL - 3} y2={H - 4} stroke={C.borderSoft} strokeWidth="1" vectorEffect="non-scaling-stroke" />
           {hasRain && temps.map((h, i) => {
             if (h.rain == null || h.rain <= 0) return null;
-            const x = temps.length === 1 ? W / 2 : (i / (temps.length - 1)) * W;
+            const x = padL + (temps.length === 1 ? plotW / 2 : (i / (temps.length - 1)) * plotW);
             const bh = (h.rain / 100) * (H - 10);
-            return <rect key={i} x={x - barW / 2} y={H - bh} width={barW} height={bh} fill={C.sky} opacity="0.28" rx="1" />;
+            return (
+              <g key={i}>
+                <rect x={x - barW / 2} y={H - bh} width={barW} height={bh} fill={C.sky} opacity="0.28" rx="1" />
+                {i === maxRainIdx && <text x={x} y={H - bh - 3} fontSize="7" fill={C.sky} textAnchor="middle">{Math.round(h.rain)}%</text>}
+              </g>
+            );
           })}
           <path d={dPath} fill="none" stroke={C.accent} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2" fill={C.accent} />)}
+          {/* rotula o ponto mais quente e o mais frio, pra dar contexto sem poluir todos os pontos */}
+          {(() => {
+            const iMax = vals.indexOf(max), iMin = vals.indexOf(min);
+            return [iMax, iMin].filter((v, idx, arr) => arr.indexOf(v) === idx).map((i) => (
+              <text key={i} x={pts[i][0]} y={pts[i][1] - 5} fontSize="7" fill={C.accent} textAnchor="middle">{Math.round(temps[i].temp)}°</text>
+            ));
+          })()}
         </svg>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: C.text3, marginTop: 4 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: C.text3, marginTop: 4, paddingLeft: `${(padL / W) * 100}%` }}>
           {temps.filter((_, i) => i % Math.ceil(temps.length / 6) === 0).map((h, i) => <span key={i}>{h.h}</span>)}
         </div>
       </div>
@@ -1436,7 +1499,19 @@ function WeatherDetail({ wx, lang, t, onClose }) {
 
   return (
     <Modal onClose={onClose}>
-      <SheetHead title={t('weatherDetail')} onClose={onClose} icon={CloudSun} />
+      <SheetHead title={searchedName || t('weatherDetail')} onClose={onClose} icon={CloudSun} />
+      <div style={{ position: 'relative', marginBottom: 12 }}>
+        <input value={q} onChange={(e) => { setQ(e.target.value); searchCity(e.target.value); }} placeholder={lang === 'pt' ? 'Buscar outra cidade...' : 'Search another city...'} style={inputStyle} />
+        {searching && <Loader2 size={15} className="spin" style={{ position: 'absolute', right: 10, top: 10, color: C.text3 }} />}
+        {opts.length > 0 && (
+          <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 30, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, marginTop: 4, maxHeight: 200, overflowY: 'auto', boxShadow: '0 8px 24px rgba(0,0,0,0.3)' }}>
+            {opts.map((c, i) => (
+              <div key={i} onMouseDown={() => pickCity(c)} style={{ padding: '9px 12px', fontSize: 12.5, cursor: 'pointer', borderBottom: i < opts.length - 1 ? `1px solid ${C.borderSoft}` : 'none', color: C.text }}>{[c.name, c.admin1, c.country].filter(Boolean).join(', ')}</div>
+            ))}
+          </div>
+        )}
+      </div>
+      {searchedWx && <button onClick={() => { setSearchedWx(null); setSearchedName(null); setDi(0); }} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', marginBottom: 10 }}><ChevronLeft size={13} />{lang === 'pt' ? 'Voltar pra minha localização' : 'Back to my location'}</button>}
       {/* seletor de dia */}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', marginBottom: 12, paddingBottom: 4 }}>
         {days.map((d, i) => {
@@ -1559,6 +1634,7 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
 }
 function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
+  const [quickAttn, setQuickAttn] = useState(false);
 
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
   useEffect(() => {
@@ -1636,8 +1712,12 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           );
         })()}
       </div>
-      <SectionTitle icon={AlertTriangle} label={t('attention')} color={C.rose} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
+        <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><AlertTriangle size={14} style={{ color: C.rose }} />{t('attention')}</span>
+        <button onClick={() => setQuickAttn(true)} title={lang === 'pt' ? 'Adicionar algo pra não esquecer' : 'Add a reminder'} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 3 }}><Plus size={16} /></button>
+      </div>
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {quickAttn && <AddModal title={lang === 'pt' ? 'Pra não esquecer' : "Don't forget"} icon={AlertTriangle} draft={{ type: 'task', domain: 'personal', priority: 1, date: today }} allowedTypes={['task']} lang={lang} t={t} onClose={() => setQuickAttn(false)} onSave={(x) => { addItems([{ ...x, status: 'planned' }]); flash(t('savedOne')); setQuickAttn(false); }} />}
       <SectionTitle icon={Clock} label={lang === 'pt' ? 'O que vai rolar nas próximas 24h' : 'Next 24 hours'} color={C.accent} />
       {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : <div style={{ ...card, padding: 14 }}><MiniPlanner items={next5} lang={lang} t={t} onOpen={onOpen} today={today} /></div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
@@ -1889,27 +1969,37 @@ function SleepReadinessHistory({ health, lang }) {
     return <path key={key} d={pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ')} fill="none" stroke={color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />;
   };
   const avg = (key) => { const vs = entries.map(([, v]) => v[key]).filter((x) => x != null); return vs.length ? Math.round(vs.reduce((a, b) => a + b, 0) / vs.length) : null; };
+  const lastTemp = entries.slice().reverse().find(([, v]) => v.tempDeviation != null);
+  const tempAlert = lastTemp && Math.abs(lastTemp[1].tempDeviation) >= 0.5;
   return (
     <div style={{ ...card, padding: 14, marginBottom: 14 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-        <span style={{ fontSize: 12.5, color: C.text2, fontWeight: 600 }}>{lang === 'pt' ? `Sono & Prontidão · últimos ${entries.length} dias` : `Sleep & Readiness · last ${entries.length} days`}</span>
-        <span style={{ fontSize: 10, color: C.text3, display: 'flex', gap: 10 }}>
-          <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.violet, display: 'inline-block' }} />{lang === 'pt' ? 'sono' : 'sleep'} {avg('sleep') ?? '—'}</span>
-          <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.green, display: 'inline-block' }} />{lang === 'pt' ? 'prontidão' : 'readiness'} {avg('readiness') ?? '—'}</span>
-        </span>
+        <span style={{ fontSize: 12.5, color: C.text2, fontWeight: 600 }}>{lang === 'pt' ? `Sono, Prontidão & Atividade · últimos ${entries.length} dias` : `Sleep, Readiness & Activity · last ${entries.length} days`}</span>
+      </div>
+      <div style={{ fontSize: 10, color: C.text3, display: 'flex', gap: 10, marginBottom: 6, flexWrap: 'wrap' }}>
+        <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.violet, display: 'inline-block' }} />{lang === 'pt' ? 'sono' : 'sleep'} {avg('sleep') ?? '—'}</span>
+        <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.green, display: 'inline-block' }} />{lang === 'pt' ? 'prontidão' : 'readiness'} {avg('readiness') ?? '—'}</span>
+        {avg('activity') != null && <span style={{ display: 'flex', gap: 3, alignItems: 'center' }}><span style={{ width: 8, height: 2, background: C.accent, display: 'inline-block' }} />{lang === 'pt' ? 'atividade' : 'activity'} {avg('activity')}</span>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 64, display: 'block' }} preserveAspectRatio="none">
         {mk('sleep', C.violet)}
         {mk('readiness', C.green)}
+        {mk('activity', C.accent)}
       </svg>
       <div style={{ fontSize: 10, color: C.text3, marginTop: 4 }}>{fmtDate(entries[0][0], lang)} — {fmtDate(entries[entries.length - 1][0], lang)}</div>
+      {tempAlert && (
+        <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 8, background: C.rose + '14', border: `1px solid ${C.rose}33`, fontSize: 11, color: C.rose, display: 'flex', gap: 6, alignItems: 'center' }}>
+          <AlertTriangle size={12} />{lang === 'pt' ? `Temperatura corporal ${lastTemp[1].tempDeviation > 0 ? 'acima' : 'abaixo'} do seu normal (${lastTemp[1].tempDeviation > 0 ? '+' : ''}${lastTemp[1].tempDeviation}°) em ${fmtDate(lastTemp[0], lang)}.` : `Body temperature deviation detected on ${fmtDate(lastTemp[0], lang)}.`}
+        </div>
+      )}
     </div>
   );
 }
-function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash, health }) {
+function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash, health, onOpen }) {
   const [adding, setAdding] = useState(null); // 'condition' | 'allergy' | 'medication'
   const [analyzing, setAnalyzing] = useState(false); const [analyzeProgress, setAnalyzeProgress] = useState('');
   const [dietOpen, setDietOpen] = useState(false); const [mealLoading, setMealLoading] = useState(false);
+  const [showAllIndicators, setShowAllIndicators] = useState(false);
   const mealFileRef = useRef();
   const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const pickMealPhoto = (e) => {
@@ -2001,7 +2091,20 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
       )}
 
       <SectionTitle icon={Activity} label={lang === 'pt' ? 'Indicadores' : 'Indicators'} color={C.blue} />
-      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : visibleIndicators.sort((a, b) => a[0].localeCompare(b[0])).map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
+      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : (() => {
+        const sorted = visibleIndicators.sort((a, b) => a[0].localeCompare(b[0]));
+        const flagged = sorted.filter(([, pts]) => pts[pts.length - 1] && pts[pts.length - 1].status && pts[pts.length - 1].status !== 'normal');
+        const rest = sorted.filter(([n]) => !flagged.some(([n2]) => n2 === n));
+        return (
+          <>
+            {flagged.length > 0 && flagged.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
+            {flagged.length > 0 && rest.length > 0 && !showAllIndicators && (
+              <button onClick={() => setShowAllIndicators(true)} style={{ background: 'none', border: `1px dashed ${C.border}`, borderRadius: 12, color: C.text2, cursor: 'pointer', width: '100%', padding: '10px', fontSize: 12.5, marginBottom: 8 }}>{lang === 'pt' ? `Ver todos os ${sorted.length} indicadores` : `See all ${sorted.length} indicators`}</button>
+            )}
+            {(flagged.length === 0 || showAllIndicators) && rest.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
+          </>
+        );
+      })()}
 
       <SectionTitle icon={Moon} label={lang === 'pt' ? 'Sono & Rotina (Oura)' : 'Sleep & Routine'} color={C.violet} />
       <SleepReadinessHistory health={health} lang={lang} />
@@ -2009,35 +2112,39 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
 
       <SectionTitle icon={HeartPulse} label={lang === 'pt' ? 'Condições' : 'Conditions'} color={C.rose} />
       {conditions.length === 0 ? <Empty icon={HeartPulse} text={t('nothingHere')} /> : conditions.map((c) => (
-        <div key={c.id} style={{ ...card, padding: 12, marginBottom: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div key={c.id} onClick={() => onOpen && onOpen(c)} style={{ ...card, padding: 12, marginBottom: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: onOpen ? 'pointer' : 'default' }}>
           <div><div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.title}</div>{c.meta && c.meta.since && <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{lang === 'pt' ? 'desde' : 'since'} {fmtDate(c.meta.since, lang)}</div>}</div>
-          {c.meta && c.meta.status && <span style={{ fontSize: 10, color: c.meta.status === 'ativa' ? C.rose : C.green, border: `1px solid currentColor`, borderRadius: 999, padding: '2px 8px' }}>{c.meta.status}</span>}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            {c.meta && c.meta.status && <span style={{ fontSize: 10, color: c.meta.status === 'ativa' ? C.rose : C.green, border: `1px solid currentColor`, borderRadius: 999, padding: '2px 8px' }}>{c.meta.status}</span>}
+            <Pencil size={13} style={{ color: C.text3, flexShrink: 0 }} />
+          </div>
         </div>
       ))}
       <Btn kind="soft" onClick={() => setAdding('condition')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={14} />{lang === 'pt' ? 'Adicionar condição' : 'Add condition'}</Btn>
 
       <SectionTitle icon={AlertTriangle} label={lang === 'pt' ? 'Alergias' : 'Allergies'} color={C.accent} />
       {allergies.length === 0 ? <Empty icon={AlertTriangle} text={t('nothingHere')} /> : allergies.map((a) => (
-        <div key={a.id} style={{ ...card, padding: 12, marginBottom: 7 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{a.title}</div>
-          {(a.meta && (a.meta.reaction || a.meta.severity)) && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{[a.meta.severity, a.meta.reaction].filter(Boolean).join(' · ')}</div>}
+        <div key={a.id} onClick={() => onOpen && onOpen(a)} style={{ ...card, padding: 12, marginBottom: 7, cursor: onOpen ? 'pointer' : 'default', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div><div style={{ fontSize: 13.5, fontWeight: 600 }}>{a.title}</div>{(a.meta && (a.meta.reaction || a.meta.severity)) && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{[a.meta.severity, a.meta.reaction].filter(Boolean).join(' · ')}</div>}</div>
+          <Pencil size={13} style={{ color: C.text3, flexShrink: 0 }} />
         </div>
       ))}
       <Btn kind="soft" onClick={() => setAdding('allergy')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={14} />{lang === 'pt' ? 'Adicionar alergia' : 'Add allergy'}</Btn>
 
       <SectionTitle icon={Pill} label={lang === 'pt' ? 'Medicações em uso' : 'Current medications'} color={C.violet} />
       {activeMeds.length === 0 ? <Empty icon={Pill} text={t('nothingHere')} /> : activeMeds.map((m) => (
-        <div key={m.id} style={{ ...card, padding: 12, marginBottom: 7 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{m.title}</div>
+        <div key={m.id} onClick={() => onOpen && onOpen(m)} style={{ ...card, padding: 12, marginBottom: 7, cursor: onOpen ? 'pointer' : 'default', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div><div style={{ fontSize: 13.5, fontWeight: 600 }}>{m.title}</div>
           <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{[m.meta && m.meta.dose, m.meta && m.meta.frequency].filter(Boolean).join(' · ')}</div>
-          {m.meta && m.meta.prescribedBy && <div style={{ fontSize: 10.5, color: C.violet, marginTop: 3 }}>Dr(a). {m.meta.prescribedBy}</div>}
+          {m.meta && m.meta.prescribedBy && <div style={{ fontSize: 10.5, color: C.violet, marginTop: 3 }}>Dr(a). {m.meta.prescribedBy}</div>}</div>
+          <Pencil size={13} style={{ color: C.text3, flexShrink: 0, marginTop: 2 }} />
         </div>
       ))}
       <Btn kind="soft" onClick={() => setAdding('medication')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><Plus size={14} />{lang === 'pt' ? 'Adicionar medicação' : 'Add medication'}</Btn>
       {pastMeds.length > 0 && (
         <>
           <SectionTitle icon={Pill} label={lang === 'pt' ? 'Histórico de medicações' : 'Past medications'} color={C.text2} />
-          {pastMeds.map((m) => <div key={m.id} style={{ ...card, padding: 12, marginBottom: 7, opacity: 0.65 }}><div style={{ fontSize: 13, fontWeight: 600 }}>{m.title}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{fmtDate(m.meta.startDate, lang)} – {fmtDate(m.meta.endDate, lang)}</div></div>)}
+          {pastMeds.map((m) => <div key={m.id} onClick={() => onOpen && onOpen(m)} style={{ ...card, padding: 12, marginBottom: 7, opacity: 0.65, cursor: onOpen ? 'pointer' : 'default' }}><div style={{ fontSize: 13, fontWeight: 600 }}>{m.title}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{fmtDate(m.meta.startDate, lang)} – {fmtDate(m.meta.endDate, lang)}</div></div>)}
         </>
       )}
 
@@ -2847,10 +2954,24 @@ function PurchaseCard({ p, lang, onOpen }) {
 function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, onOpen, flash }) {
   const [adding, setAdding] = useState(false);
   const [days, setDays] = useState(30);
-  const [ml, setMl] = useState({ loading: true, connected: false, purchases: [], error: null });
+  const [ml, setMl] = useState({ loading: true, connected: false, error: null, syncedAt: null });
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
   const [storeFilter, setStoreFilter] = useState('all');
-  const loadMl = (d) => { setMl((p) => ({ ...p, loading: true })); authFetch('/api/mercadolivre?days=' + d).then((r) => r.json()).then((j) => setMl({ loading: false, connected: !!j.connected, purchases: j.purchases || [], error: j.error || null })).catch(() => setMl((p) => ({ ...p, loading: false }))); };
+  const loadMl = (d) => {
+    setMl((p) => ({ ...p, loading: true }));
+    authFetch('/api/mercadolivre?days=' + d).then((r) => r.json()).then((j) => {
+      setMl({ loading: false, connected: !!j.connected, error: j.error || null, syncedAt: new Date().toISOString() });
+      // persiste cada pedido buscado como item de verdade — nunca mais some quando o fetch seguinte usar outro período
+      (j.purchases || []).forEach((p) => {
+        const existing = items.find((i) => i.type === 'purchase' && i.meta && i.meta.orderId === p.meta.orderId);
+        if (!existing) addItem(p);
+        else if (existing.meta.stage !== p.meta.stage || existing.meta.tracking !== p.meta.tracking) {
+          // atualiza só se algo relevante mudou (ex: pedido que estava "enviado" agora está "entregue")
+          updateItem(existing.id, { meta: { ...existing.meta, stage: p.meta.stage, tracking: p.meta.tracking, shipStatus: p.meta.shipStatus, deliveredDate: p.meta.deliveredDate, etaDate: p.meta.etaDate } });
+        }
+      });
+    }).catch(() => setMl((p) => ({ ...p, loading: false })));
+  };
   useEffect(() => { loadMl(days); }, []);
   const runScan = () => {
     setScan({ loading: true, list: null, error: null });
@@ -2867,8 +2988,8 @@ function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, on
     flash(t('savedOne'));
   };
 
-  const manualPurchases = items.filter((i) => i.type === 'purchase' && (!i.meta || i.meta.external !== 'mercadolivre'));
-  const allRaw = [...ml.purchases, ...manualPurchases];
+  // fonte única de verdade: tudo que já foi persistido como 'purchase' (ML sincronizado + e-mail aceito + manual)
+  const allRaw = items.filter((i) => i.type === 'purchase');
   const today = todayISO();
   const isArchived = (p) => { const st = p.meta && p.meta.stage; if (st !== 'delivered') return false; const dd = (p.meta && p.meta.deliveredDate) || p.date; if (!dd) return false; return addDays(dd, 5) < today; };
   const [showArchived, setShowArchived] = useState(false);
@@ -3348,10 +3469,37 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 }
 
 /* ---------------- Health dashboard ---------------- */
-function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical }) {
+function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, healthSummary, setHealthSummary }) {
   const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
+  const [sumLoading, setSumLoading] = useState(false);
   const today = todayISO(); const w = health[today] || {};
   const hd = items.filter((i) => i.domain === 'health');
+  const genSummary = async () => {
+    setSumLoading(true);
+    try {
+      const last7 = Object.entries(health || {}).filter(([d]) => d >= addDays(today, -7)).map(([d, v]) => ({ date: d, sleep: v.sleep, readiness: v.readiness, activity: v.activity, tempDeviation: v.tempDeviation }));
+      const metrics = items.filter((i) => i.type === 'healthMetric' && i.title !== '__checked__').slice(-40).map((i) => ({ indicator: i.title, value: i.amount, unit: i.meta && i.meta.unit, status: i.meta && i.meta.status, date: i.date }));
+      const conditions = items.filter((i) => i.type === 'condition' && i.meta && i.meta.status === 'ativa').map((i) => i.title);
+      const allergies = items.filter((i) => i.type === 'allergy').map((i) => i.title);
+      const meds = items.filter((i) => i.type === 'medication' && !(i.meta && i.meta.endDate)).map((i) => i.title);
+      const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health' && i.date >= addDays(today, -3)).map((i) => ({ title: i.title, calories: i.meta && i.meta.calories, protein: i.meta && i.meta.protein }));
+      const system = `Você é o Dr. Claude, assistente de saúde pessoal. Com base nos dados abaixo, escreva um resumo de NO MÁXIMO 3 linhas (curto, direto, em ${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre o estado geral de saúde da pessoa AGORA, terminando com uma recomendação prática pro dia/semana. Tom acolhedor mas objetivo, como o resumo diário de um app de wearable. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado, trabalhe com o que tiver e não invente. Responda em texto puro, sem markdown, sem aspas.
+Sono/prontidão (últimos 7 dias): ${JSON.stringify(last7)}
+Indicadores de exames recentes: ${JSON.stringify(metrics)}
+Condições ativas: ${JSON.stringify(conditions)}
+Alergias: ${JSON.stringify(allergies)}
+Medicações em uso: ${JSON.stringify(meds)}
+Refeições recentes: ${JSON.stringify(meals)}
+Data de hoje: ${today}`;
+      const text = await callClaude(system, [{ role: 'user', content: lang === 'pt' ? 'Gere o resumo de hoje.' : "Generate today's summary." }]);
+      setHealthSummary({ date: today, text: text.trim() });
+    } catch (e) { flash(lang === 'pt' ? 'Não consegui gerar o resumo agora.' : "Couldn't generate summary."); }
+    setSumLoading(false);
+  };
+  useEffect(() => {
+    if (!healthSummary || healthSummary.date !== today) { genSummary(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const consultas = hd.filter((i) => i.type === 'appointment' && i.date && i.date >= today).sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const treat = hd.filter((i) => i.type === 'med');
   const pharm = hd.filter((i) => i.type === 'expense' && i.amount);
@@ -3363,6 +3511,15 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ ...card, padding: 15, marginBottom: 12, border: '1px solid #5B8DEF33', background: 'linear-gradient(135deg, #5B8DEF14, ' + C.surface + ')' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#5B8DEF' }}>{lang === 'pt' ? 'Resumo de hoje' : "Today's summary"}</span></div>
+          <button onClick={genSummary} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3 }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
+        </div>
+        {sumLoading && !healthSummary ? <div style={{ fontSize: 13, color: C.text3 }}>{lang === 'pt' ? 'Gerando...' : 'Generating...'}</div> : (
+          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.text }}>{healthSummary ? healthSummary.text : (lang === 'pt' ? 'Toque para gerar seu resumo do dia.' : 'Tap to generate today\'s summary.')}</div>
+        )}
+      </div>
       <button onClick={goMedical} style={{ ...card, width: '100%', padding: 14, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', border: 'none', textAlign: 'left', color: C.text, background: 'linear-gradient(135deg, #5B8DEF1c, ' + C.surface + ')', borderColor: '#5B8DEF33' }}>
         <DrClaudeBadge size={36} />
         <div style={{ flex: 1 }}>
@@ -5380,6 +5537,7 @@ function App() {
   };
   const delItem = (id) => setItems((p) => persistNow(p.filter((i) => i.id !== id)));
   const setHealth = (fn) => setSettings((s) => ({ ...s, health: typeof fn === 'function' ? fn(s.health || {}) : fn }));
+  const setHealthSummary = (v) => setSettings((s) => ({ ...s, healthSummary: v }));
   const setProfile = (fn) => setSettings((s) => ({ ...s, profile: typeof fn === 'function' ? fn(s.profile || {}) : fn }));
   const addWeight = (kg) => setSettings((s) => {
     const d = todayISO();
@@ -5416,7 +5574,7 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} /></ErrorBoundary>;
+    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -5488,7 +5646,7 @@ function App() {
           onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
           onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
-        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} />}
+        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
