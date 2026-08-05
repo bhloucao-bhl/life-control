@@ -63,7 +63,8 @@ export async function GET(req) {
 
       const itemsList = (o.order_items || []).map((it) => ({ title: it.item && it.item.title, qty: it.quantity, price: it.unit_price }));
       const title = itemsList.length === 1 ? itemsList[0].title : (itemsList[0] ? `${itemsList[0].title} +${itemsList.length - 1}` : 'Compra Mercado Livre');
-      const store = (o.seller && (o.seller.nickname || o.seller.id)) ? String(o.seller.nickname || o.seller.id) : 'Mercado Livre';
+      // Bruno não usa o nome do vendedor individual do ML pra filtrar — deixa fixo como "Mercado Livre"
+      const store = 'Mercado Livre';
 
       const stage = stageOf(o, shipStatus);
       return {
