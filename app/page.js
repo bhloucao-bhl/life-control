@@ -163,7 +163,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -345,12 +345,12 @@ const META = {
   flight: [['airline', 'Companhia', 'Airline'], ['flightNumber', 'Nº do voo', 'Flight #'], ['from', 'Origem', 'From'], ['to', 'Destino', 'To'], ['seat', 'Assento', 'Seat'], ['locator', 'Localizador', 'Locator'], ['aircraft', 'Aeronave', 'Aircraft'], ['durationMin', 'Duração (min)', 'Duration (min)', 'number']],
   trip: [['destination', 'Destino', 'Destination'], ['endDate', 'Volta', 'Return', 'date'], ['locator', 'Reserva', 'Booking'], ['hotel', 'Hotel', 'Hotel']],
   vehicle: [['make', 'Montadora', 'Make'], ['model', 'Modelo', 'Model'], ['year', 'Ano', 'Year', 'number'], ['km', 'KM', 'Odometer', 'number']],
-  document: [['number', 'Número', 'Number'], ['issuer', 'Emissor', 'Issuer'], ['holder', 'De quem é', 'Belongs to']],
+  document: [['tag', 'Etiqueta', 'Tag'], ['number', 'Número', 'Number'], ['issuer', 'Emissor', 'Issuer'], ['holder', 'De quem é', 'Belongs to']],
   med: [['dose', 'Dose', 'Dose'], ['frequency', 'Frequência', 'Frequency']],
   appointment: [['doctor', 'Médico', 'Doctor'], ['specialty', 'Especialidade', 'Specialty'], ['location', 'Local', 'Location']],
   bill: [['payee', 'Beneficiário', 'Payee']],
   maintenance: [['workshop', 'Oficina', 'Workshop'], ['km', 'KM', 'Odometer', 'number'], ['nextKm', 'Próx. revisão (km)', 'Next service (km)', 'number']],
-  person: [['relationship', 'Relação', 'Relationship'], ['role', 'Papel', 'Role'], ['company', 'Empresa', 'Company'], ['phone', 'Telefone', 'Phone'], ['email', 'E-mail', 'Email'], ['address', 'Endereço', 'Address'], ['birthdate', 'Nascimento', 'Birthdate', 'date']],
+  person: [['relationship', 'Relação', 'Relationship'], ['role', 'Papel', 'Role'], ['company', 'Empresa', 'Company'], ['address', 'Endereço', 'Address'], ['addressComplement', 'Complemento', 'Complement'], ['birthdate', 'Nascimento', 'Birthdate', 'date']],
   account: [['institution', 'Instituição', 'Institution'], ['balance', 'Saldo atual', 'Current balance', 'number']],
   message: [['sender', 'Remetente', 'Sender']],
   income: [['source', 'Origem', 'Source']],
@@ -497,7 +497,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v54 · 04ago';
+const APP_VERSION = 'v55 · 04ago';
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -711,6 +711,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
           {item.meta && item.meta.moura && <MouraBadge />}
           {item.meta && item.meta.external === 'google' && !((item.meta && item.meta.moura)) && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
+          {item.type === 'document' && item.meta && item.meta.tag && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 8px' }}>{item.meta.tag}</span>}
           {item.meta && item.meta.external === 'ticktick' && item.meta.project && <span style={{ fontSize: 10, color: C.violet, border: `1px solid ${C.violet}44`, borderRadius: 999, padding: '1px 7px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 90 }}>{item.meta.project}</span>}
           {item.meta && item.meta.external === 'ticktick' && <span style={{ fontSize: 10, color: C.green, border: `1px solid ${C.green}44`, borderRadius: 999, padding: '1px 7px' }}>TickTick</span>}
         </div>
@@ -986,6 +987,31 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           </div>
         </Field>
       )}
+      {type === 'task' && (
+        <div onClick={() => up({ domain: f.domain === 'work' ? 'personal' : 'work', meta: { ...f.meta, moura: f.domain !== 'work' } })} style={{ ...card, padding: '11px 13px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+          <div style={{ width: 40, height: 24, borderRadius: 999, background: f.domain === 'work' ? C.accent : C.surface2, position: 'relative', flexShrink: 0 }}>
+            <span style={{ position: 'absolute', top: 3, left: f.domain === 'work' ? 19 : 3, width: 18, height: 18, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
+          </div>
+          <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+            {f.domain === 'work' && <MouraBadge size={13} />}
+            <span style={{ fontSize: 13, color: C.text }}>{lang === 'pt' ? 'É uma tarefa de trabalho?' : 'Work task?'}</span>
+          </div>
+        </div>
+      )}
+      {type === 'task' && (
+        <Field label={lang === 'pt' ? 'Lista (TickTick)' : 'List (TickTick)'}><input value={f.meta.project || ''} onChange={(e) => upMeta({ project: e.target.value })} style={inputStyle} placeholder={lang === 'pt' ? 'Ex: Casa, Projetos...' : 'e.g. Home, Projects...'} /></Field>
+      )}
+      {type === 'task' && people.length > 0 && (
+        <Field label={lang === 'pt' ? 'Pessoas envolvidas' : 'Involved people'}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {people.map((p) => {
+              const ids = (f.meta.peopleIds || []);
+              const on = ids.includes(p.id);
+              return <Chip key={p.id} active={on} onClick={() => upMeta({ peopleIds: on ? ids.filter((x) => x !== p.id) : [...ids, p.id] })}>{p.title}</Chip>;
+            })}
+          </div>
+        </Field>
+      )}
       {!['person', 'account', 'message'].includes(type) && (
         <div style={{ display: 'flex', gap: 10 }}>
           <div style={{ flex: 1 }}><Field label={t('date')}><input type="date" value={f.date || ''} onChange={(e) => up({ date: e.target.value || null })} style={{ ...inputStyle, colorScheme: 'dark' }} /></Field></div>
@@ -1010,7 +1036,44 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
               </select></Field></div>;
             }
             if (k === 'address') {
-              return <div key={k} style={{ gridColumn: '1 / -1' }}><Field label={lang === 'pt' ? ptL : enL}><AddressAutocomplete value={f.meta[k] ?? ''} onChange={(v) => upMeta({ [k]: v })} lang={lang} /></Field></div>;
+              if (!f.meta.phones && f.meta.phone) upMeta({ phones: [f.meta.phone] });
+              if (!f.meta.emails && f.meta.email) upMeta({ emails: [f.meta.email] });
+              const phones = f.meta.phones || (f.meta.phone ? [f.meta.phone] : ['']);
+              const emails = f.meta.emails || (f.meta.email ? [f.meta.email] : ['']);
+              const fmtPhone = (v) => {
+                const d = String(v).replace(/\D/g, '').slice(0, 13);
+                let n = d; if (!n.startsWith('55')) n = '55' + n;
+                const ddd = n.slice(2, 4), p1 = n.slice(4, 9), p2 = n.slice(9, 13);
+                let out = '+55'; if (ddd) out += ` (${ddd}`; if (ddd.length === 2) out += ')'; if (p1) out += ` ${p1}`; if (p2) out += `-${p2}`;
+                return out;
+              };
+              return (
+                <React.Fragment key="contacts">
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Field label={lang === 'pt' ? 'Telefones' : 'Phones'}>
+                      {phones.map((ph, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                          <input type="tel" value={ph} onChange={(e) => { const arr = [...phones]; arr[idx] = fmtPhone(e.target.value); upMeta({ phones: arr }); }} placeholder="+55 (11) 99999-9999" style={inputStyle} />
+                          {phones.length > 1 && <button onClick={() => upMeta({ phones: phones.filter((_, i) => i !== idx) })} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', padding: '0 6px' }}><X size={16} /></button>}
+                        </div>
+                      ))}
+                      <button onClick={() => upMeta({ phones: [...phones, ''] })} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', padding: '2px 0' }}><Plus size={13} />{lang === 'pt' ? 'Adicionar telefone' : 'Add phone'}</button>
+                    </Field>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}>
+                    <Field label={lang === 'pt' ? 'E-mails' : 'Emails'}>
+                      {emails.map((em, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                          <input type="email" value={em} onChange={(e) => { const arr = [...emails]; arr[idx] = e.target.value; upMeta({ emails: arr }); }} placeholder="nome@email.com" style={inputStyle} />
+                          {emails.length > 1 && <button onClick={() => upMeta({ emails: emails.filter((_, i) => i !== idx) })} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', padding: '0 6px' }}><X size={16} /></button>}
+                        </div>
+                      ))}
+                      <button onClick={() => upMeta({ emails: [...emails, ''] })} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', padding: '2px 0' }}><Plus size={13} />{lang === 'pt' ? 'Adicionar e-mail' : 'Add email'}</button>
+                    </Field>
+                  </div>
+                  <div style={{ gridColumn: '1 / -1' }}><Field label={lang === 'pt' ? ptL : enL}><AddressAutocomplete value={f.meta[k] ?? ''} onChange={(v) => upMeta({ [k]: v })} lang={lang} /></Field></div>
+                </React.Fragment>
+              );
             }
             if (k === 'phone') {
               const fmtPhone = (v) => {
@@ -1022,7 +1085,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
               };
               return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type="tel" value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: fmtPhone(e.target.value) })} placeholder="+55 (11) 99999-9999" style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field></div>;
             }
-            return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type={it === 'number' ? 'number' : it === 'date' ? 'date' : 'text'} value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field></div>;
+            return <div key={k} style={{ gridColumn: type === 'message' ? '1 / -1' : 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><input type={it === 'number' ? 'number' : it === 'date' ? 'date' : 'text'} value={f.meta[k] ?? ''} onChange={(e) => upMeta({ [k]: e.target.value })} placeholder={k === 'tag' ? (lang === 'pt' ? 'Ex: Exame de sangue, Bruno...' : 'e.g. Blood test, Bruno...') : undefined} style={{ ...inputStyle, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field></div>;
           })}
         </div>
       )}
@@ -1129,9 +1192,27 @@ function DraftReview({ drafts, lang, t, onDone, onCancel }) {
     </div>
   );
 }
-function QuickCapture({ lang, t, addItems, flash }) {
+function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
   const [text, setText] = useState(''); const [loading, setLoading] = useState(false); const [drafts, setDrafts] = useState(null);
+  const [searching, setSearching] = useState(false); const [sq, setSq] = useState('');
+  const [listening, setListening] = useState(false);
+  const recRef = useRef();
   const fileRef = useRef();
+  const toggleVoice = () => {
+    if (listening) { recRef.current && recRef.current.stop(); return; }
+    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+    if (!SR) { flash(lang === 'pt' ? 'Ditado por voz não é suportado neste navegador.' : 'Voice input not supported in this browser.'); return; }
+    const rec = new SR();
+    rec.lang = lang === 'pt' ? 'pt-BR' : 'en-US';
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onstart = () => setListening(true);
+    rec.onerror = () => { setListening(false); flash(lang === 'pt' ? 'Não entendi. Tente de novo.' : "Didn't catch that."); };
+    rec.onend = () => setListening(false);
+    rec.onresult = (e) => { const t = e.results[0][0].transcript; setText((p) => (p ? p + ' ' : '') + t); };
+    recRef.current = rec;
+    try { rec.start(); } catch (e) { setListening(false); }
+  };
   const run = async () => { if (!text.trim()) return; setLoading(true);
     try { setDrafts(await classifyCapture(text.trim(), lang)); } catch (e) { addItems([{ type: 'note', domain: 'personal', title: text.trim(), priority: 3, status: 'inbox' }]); flash(t('couldntParse')); setText(''); }
     setLoading(false); };
@@ -1147,15 +1228,28 @@ function QuickCapture({ lang, t, addItems, flash }) {
     };
     reader.readAsDataURL(file);
   };
+  const results = sq.trim().length >= 2 ? (items || []).filter((i) => (i.title || '').toLowerCase().includes(sq.toLowerCase()) || (i.notes || '').toLowerCase().includes(sq.toLowerCase())).slice(0, 30) : [];
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ ...card, padding: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder={t('capturePh')} onKeyDown={(e) => { if (e.key === 'Enter') run(); }} style={{ ...inputStyle, background: 'transparent', border: 'none' }} />
         <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={pickImage} style={{ display: 'none' }} />
+        <button onClick={() => setSearching(true)} title={lang === 'pt' ? 'Buscar no app' : 'Search app'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}><Search size={17} /></button>
+        <button onClick={toggleVoice} title={lang === 'pt' ? 'Ditar por voz' : 'Voice input'} style={{ background: listening ? C.rose + '22' : 'none', border: 'none', color: listening ? C.rose : C.text3, cursor: 'pointer', padding: '9px 4px', borderRadius: 8 }}><Mic size={17} /></button>
         <button onClick={() => fileRef.current && fileRef.current.click()} disabled={loading} title={lang === 'pt' ? 'Anexar imagem' : 'Attach image'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}><ImageIcon size={17} /></button>
         <Btn onClick={run} disabled={loading || !text.trim()} style={{ padding: '9px 13px' }}>{loading ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}</Btn>
       </div>
       {drafts && <DraftReview drafts={drafts} lang={lang} t={t} onDone={(arr, status) => { if (arr.length) addItems(arr.map((x) => ({ ...x, status }))); flash(arr.length + ' ✓'); setDrafts(null); setText(''); }} onCancel={() => setDrafts(null)} />}
+      {searching && (
+        <Modal onClose={() => { setSearching(false); setSq(''); }}>
+          <SheetHead title={lang === 'pt' ? 'Buscar no app' : 'Search'} onClose={() => { setSearching(false); setSq(''); }} icon={Search} />
+          <input autoFocus value={sq} onChange={(e) => setSq(e.target.value)} placeholder={lang === 'pt' ? 'Digite pelo menos 2 letras...' : 'Type to search...'} style={{ ...inputStyle, marginBottom: 12 }} />
+          {sq.trim().length >= 2 && results.length === 0 && <Empty icon={Search} text={lang === 'pt' ? 'Nada encontrado.' : 'Nothing found.'} />}
+          <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+            {results.map((r) => <ItemRow key={r.id} item={r} lang={lang} t={t} onToggle={() => {}} onOpen={(it) => { setSearching(false); setSq(''); onOpen && onOpen(it); }} />)}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -1465,11 +1559,11 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           )}
         </div>
       </div>
-      <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} />
+      <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} items={items} onOpen={onOpen} />
       <WeatherCard lang={lang} t={t} wx={live && live.weather} loading={liveLoading} />
       <div style={{ display: 'flex', gap: 8, margin: '10px 0' }}>
-        <CompactScore label={t('readiness')} value={w.readiness ?? null} color={C.green} onClick={() => !ouraOn && setLogOpen(true)} />
-        <CompactScore label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => !ouraOn && setLogOpen(true)} />
+        <CompactScore label={t('readiness')} value={w.readiness ?? null} color={C.green} onClick={() => goModule('health')} />
+        <CompactScore label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} onClick={() => goModule('health')} />
         {(() => {
           const acc = (todayAccountId && items.find((i) => i.id === todayAccountId && i.type === 'account')) || items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
           const val = acc ? accountBalance(acc, items) : null;
@@ -1900,7 +1994,10 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
       <div style={{ ...card, padding: 12, marginBottom: 12 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <button onClick={() => (mode === 'month' ? shiftMonth(-1) : shiftWeek(-1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronLeft size={20} /></button>
-          <span style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{mode === 'month' ? monthLabel : `${t('week')} · ${fmtDate(cells[0], lang)}`}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{mode === 'month' ? monthLabel : `${t('week')} · ${fmtDate(cells[0], lang)}`}</span>
+            {vm !== today.slice(0, 7) && <button onClick={() => { setVm(today.slice(0, 7)); setSel(today); }} style={{ background: C.accentSoft, border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11, fontWeight: 600, borderRadius: 999, padding: '3px 10px' }}>{lang === 'pt' ? 'Hoje' : 'Today'}</button>}
+          </div>
           <button onClick={() => (mode === 'month' ? shiftMonth(1) : shiftWeek(1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronRight size={20} /></button>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>{WD[lang].map((wd) => <div key={wd} style={{ textAlign: 'center', fontSize: 10.5, color: C.text3, padding: '2px 0' }}>{wd}</div>)}</div>
@@ -2005,7 +2102,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const list = (module.key === 'tasks' ? base.filter((i) => (TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) && (!ttProjectFilter || (i.meta && i.meta.project) === ttProjectFilter)) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
   if (module.key === 'docs') { const soon = items.filter((i) => i.type === 'document' && i.date && i.date <= addDays(todayISO(), 60)).length; hi = { label: `${t('expiring')} (60d)`, value: String(soon), color: soon ? C.rose : C.text2 }; }
-  else if (module.key === 'tasks') hi = { label: t('open'), value: String(items.filter((i) => i.type === 'task' && i.status !== 'done').length), color: C.accent };
+  else if (module.key === 'tasks') hi = { label: t('open'), value: String(list.filter((i) => i.status !== 'done').length), color: C.accent };
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -2015,12 +2112,12 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
         </div>
       )}
       {module.key === 'tasks' && !ttConnected && <HintCard icon={RefreshCw} text={t('tickHint')} />}
-      {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
+      {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
       {module.key === 'tasks' && (() => {
         const projects = [...new Set(base.filter((i) => i.meta && i.meta.project).map((i) => i.meta.project))];
         if (!projects.length) return null;
         return (
-          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 6 }}>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 6, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>
             <Chip active={!ttProjectFilter} onClick={() => setTtProjectFilter(null)} color={C.violet}>{lang === 'pt' ? 'Todas as listas' : 'All lists'}</Chip>
             {projects.map((p) => <Chip key={p} active={ttProjectFilter === p} onClick={() => setTtProjectFilter(p)} color={C.violet}>{p}</Chip>)}
           </div>
@@ -2043,12 +2140,13 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
 
 /* ---------------- Documents dashboard ---------------- */
 function DocsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash }) {
-  const [adding, setAdding] = useState(false); const [cat, setCat] = useState('all');
+  const [adding, setAdding] = useState(false); const [cat, setCat] = useState('all'); const [q, setQ] = useState('');
   const docs = items.filter((i) => i.type === 'document');
   const catOf = (d) => ['work', 'health', 'personal', 'kids'].includes(d.domain) ? d.domain : 'personal';
   const CATS = [['all', lang === 'pt' ? 'Tudo' : 'All'], ['work', lang === 'pt' ? 'Trabalho' : 'Work'], ['health', lang === 'pt' ? 'Saúde' : 'Health'], ['personal', lang === 'pt' ? 'Pessoais' : 'Personal'], ['kids', lang === 'pt' ? 'Filhos' : 'Kids']];
   const soon = docs.filter((i) => i.date && i.date <= addDays(todayISO(), 60)).sort((a, b) => a.date.localeCompare(b.date));
-  const shown = cat === 'all' ? docs : docs.filter((d) => catOf(d) === cat);
+  const matches = (d) => { if (!q.trim()) return true; const s = q.toLowerCase(); return [d.title, d.meta && d.meta.tag, d.meta && d.meta.issuer, d.meta && d.meta.holder, d.meta && d.meta.number].filter(Boolean).some((v) => String(v).toLowerCase().includes(s)); };
+  const shown = docs.filter((d) => (cat === 'all' ? true : catOf(d) === cat) && matches(d));
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -2058,6 +2156,7 @@ function DocsScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
           <div><div style={{ fontSize: 13.5, fontWeight: 600 }}>{soon.length} {t('expiring').toLowerCase()} (60 dias)</div><div style={{ fontSize: 12, color: C.text3, marginTop: 3, lineHeight: 1.5 }}>{soon.slice(0, 3).map((d) => `${d.title} — ${fmtDate(d.date, lang)}`).join(' · ')}</div></div>
         </div>
       )}
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={lang === 'pt' ? 'Buscar por nome, etiqueta, número...' : 'Search...'} style={{ ...inputStyle, marginBottom: 10 }} />
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4 }}>
         {CATS.map(([k, lbl]) => <Chip key={k} active={cat === k} onClick={() => setCat(k)}>{lbl}</Chip>)}
       </div>
@@ -2346,33 +2445,57 @@ const PURCHASE_STAGES = {
   other: { pt: 'Em análise', en: 'Other', color: '#8A8F98' },
 };
 function PurchaseCard({ p, lang, onOpen }) {
+  const [open, setOpen] = useState(false);
   const stage = (p.meta && p.meta.stage) || 'paid';
   const sm = PURCHASE_STAGES[stage] || PURCHASE_STAGES.other;
   const isML = p.meta && p.meta.external === 'mercadolivre';
+  const subItems = (p.meta && p.meta.items) || [];
+  const hasGroup = subItems.length > 1;
   return (
-    <div onClick={() => onOpen(p)} style={{ ...card, padding: 13, marginBottom: 8, cursor: 'pointer' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{p.date ? fmtDate(p.date, lang) : ''}{p.meta && p.meta.tracking ? ` · ${p.meta.tracking}` : ''}</div>
+    <div style={{ ...card, padding: 13, marginBottom: 8 }}>
+      <div onClick={() => hasGroup ? setOpen((v) => !v) : onOpen(p)} style={{ cursor: 'pointer' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 6, alignItems: 'center' }}>
+            {hasGroup && <ChevronRight size={13} style={{ color: C.text3, flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+              <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{p.date ? fmtDate(p.date, lang) : ''}{p.meta && p.meta.tracking ? ` · ${p.meta.tracking}` : ''}</div>
+            </div>
+          </div>
+          {p.amount != null && <span style={{ fontSize: 13.5, fontWeight: 700, flexShrink: 0 }}>{fmtMoney(p.amount, lang)}</span>}
         </div>
-        {p.amount != null && <span style={{ fontSize: 13.5, fontWeight: 700, flexShrink: 0 }}>{fmtMoney(p.amount, lang)}</span>}
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, fontWeight: 700, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 999, padding: '2px 9px' }}>{sm[lang]}</span>
+          {p.meta && p.meta.store && <span style={{ fontSize: 10, color: C.text3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px' }}>{p.meta.store}</span>}
+          {isML && <span style={{ fontSize: 10, color: C.text3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px' }}>Mercado Livre</span>}
+          {p.meta && p.meta.etaDate && stage !== 'delivered' && <span style={{ fontSize: 10, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '2px 8px' }}>{lang === 'pt' ? 'chega' : 'arrives'} {fmtDate(p.meta.etaDate, lang)}</span>}
+        </div>
       </div>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 8 }}>
-        <span style={{ fontSize: 10, fontWeight: 700, color: sm.color, border: `1px solid ${sm.color}44`, borderRadius: 999, padding: '2px 9px' }}>{sm[lang]}</span>
-        {isML && <span style={{ fontSize: 10, color: C.text3, border: `1px solid ${C.border}`, borderRadius: 999, padding: '2px 8px' }}>Mercado Livre</span>}
-      </div>
+      {hasGroup && open && (
+        <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.borderSoft}` }}>
+          {subItems.map((it, idx) => (
+            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '5px 0', fontSize: 12 }}>
+              <span style={{ color: C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.qty > 1 ? `${it.qty}× ` : ''}{it.title}</span>
+              {it.price != null && <span style={{ color: C.text3, flexShrink: 0 }}>{fmtMoney(it.price, lang)}</span>}
+            </div>
+          ))}
+          <button onClick={() => onOpen(p)} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, padding: '6px 0 0', display: 'flex', gap: 4, alignItems: 'center' }}>{lang === 'pt' ? 'Ver detalhes' : 'View details'}<ChevronRight size={12} /></button>
+        </div>
+      )}
     </div>
   );
 }
 function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, onOpen, flash }) {
   const [adding, setAdding] = useState(false);
+  const [days, setDays] = useState(30);
   const [ml, setMl] = useState({ loading: true, connected: false, purchases: [], error: null });
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
-  useEffect(() => { authFetch('/api/mercadolivre').then((r) => r.json()).then((j) => setMl({ loading: false, connected: !!j.connected, purchases: j.purchases || [], error: j.error || null })).catch(() => setMl((p) => ({ ...p, loading: false }))); }, []);
+  const [storeFilter, setStoreFilter] = useState('all');
+  const loadMl = (d) => { setMl((p) => ({ ...p, loading: true })); authFetch('/api/mercadolivre?days=' + d).then((r) => r.json()).then((j) => setMl({ loading: false, connected: !!j.connected, purchases: j.purchases || [], error: j.error || null })).catch(() => setMl((p) => ({ ...p, loading: false }))); };
+  useEffect(() => { loadMl(days); }, []);
   const runScan = () => {
     setScan({ loading: true, list: null, error: null });
-    authFetch('/api/purchases-scan').then((r) => r.json())
+    authFetch('/api/purchases-scan?days=' + days).then((r) => r.json())
       .then((j) => {
         const knownIds = new Set(items.filter((i) => i.type === 'purchase' && i.meta && i.meta.messageId).map((i) => i.meta.messageId));
         setScan({ loading: false, list: (j.suggestions || []).filter((s) => !knownIds.has(s.messageId)), error: j.error || null });
@@ -2386,12 +2509,29 @@ function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, on
   };
 
   const manualPurchases = items.filter((i) => i.type === 'purchase' && (!i.meta || i.meta.external !== 'mercadolivre'));
-  const all = [...ml.purchases, ...manualPurchases];
+  const allRaw = [...ml.purchases, ...manualPurchases];
   const today = todayISO();
   const isArchived = (p) => { const st = p.meta && p.meta.stage; if (st !== 'delivered') return false; const dd = (p.meta && p.meta.deliveredDate) || p.date; if (!dd) return false; return addDays(dd, 5) < today; };
   const [showArchived, setShowArchived] = useState(false);
-  const active = all.filter((p) => !isArchived(p));
-  const archived = all.filter(isArchived);
+
+  // item 4f: compra enviada com data estimada de chegada -> cria/atualiza um evento (sem horário) no calendário automaticamente
+  useEffect(() => {
+    allRaw.forEach((p) => {
+      if (p.meta && p.meta.stage === 'shipped' && p.meta.etaDate) {
+        const evId = 'purchase_eta_' + p.id;
+        const already = items.find((i) => i.id === evId || (i.meta && i.meta.purchaseRef === p.id));
+        if (!already) {
+          addItem({ id: evId, type: 'event', domain: 'shopping', title: `${lang === 'pt' ? 'Chegada da compra' : 'Arrival'}: ${p.title}${p.meta.store ? ' (' + p.meta.store + ')' : ''}`, date: p.meta.etaDate, meta: { purchaseRef: p.id, auto: true } });
+        }
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ml.purchases.length]);
+
+  const stores = [...new Set(allRaw.map((p) => p.meta && p.meta.store).filter(Boolean))];
+  const byStore = storeFilter === 'all' ? allRaw : allRaw.filter((p) => (p.meta && p.meta.store) === storeFilter);
+  const active = byStore.filter((p) => !isArchived(p));
+  const archived = byStore.filter(isArchived);
   const shown = (showArchived ? archived : active).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   return (
@@ -2403,6 +2543,10 @@ function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, on
           <span style={{ flex: 1, fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Conecte o Mercado Livre em Ajustes → Conexões para ver seus pedidos aqui.' : 'Connect Mercado Livre in Settings to see orders here.'}</span>
         </div>
       )}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        {[15, 30, 60, 90].map((d) => <Chip key={d} active={days === d} onClick={() => { setDays(d); loadMl(d); }}>{d}d</Chip>)}
+        {ml.loading && <Loader2 size={14} className="spin" style={{ color: C.text3, alignSelf: 'center' }} />}
+      </div>
       <div style={{ ...card, padding: 12, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
         <Sparkles size={16} style={{ color: C.accent, flexShrink: 0 }} />
         <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{lang === 'pt' ? 'Buscar compras nos e-mails (label Compras)' : 'Scan email for purchases'}</span>
@@ -2430,12 +2574,51 @@ function PurchasesScreen({ module, items, lang, t, back, addItem, updateItem, on
       ))}
 
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{lang === 'pt' ? 'Adicionar compra manual' : 'Add purchase'}</Btn>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         <Chip active={!showArchived} onClick={() => setShowArchived(false)}>{lang === 'pt' ? 'Ativas' : 'Active'} ({active.length})</Chip>
         <Chip active={showArchived} onClick={() => setShowArchived(true)}>{lang === 'pt' ? 'Arquivadas' : 'Archived'} ({archived.length})</Chip>
       </div>
+      {stores.length > 1 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 6, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>
+          <Chip active={storeFilter === 'all'} onClick={() => setStoreFilter('all')} color={C.blue}>{lang === 'pt' ? 'Todas as lojas' : 'All stores'}</Chip>
+          {stores.map((s) => <Chip key={s} active={storeFilter === s} onClick={() => setStoreFilter(s)} color={C.blue}>{s}</Chip>)}
+        </div>
+      )}
       {shown.length === 0 ? <Empty icon={Package} text={t('nothingHere')} /> : shown.map((p) => <PurchaseCard key={p.id} p={p} lang={lang} onOpen={() => onOpen(p)} />)}
       {adding && <AddModal title={lang === 'pt' ? 'Compra' : 'Purchase'} icon={Package} draft={{ type: 'purchase', domain: 'shopping', meta: { stage: 'paid' } }} allowedTypes={['purchase']} lang={lang} t={t} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'shopping', ...x }); flash(t('savedOne')); setAdding(false); }} />}
+    </div>
+  );
+}
+function AllTransactionsScreen({ items, accounts, lang, t, back, onOpen, toggleTask, hidden }) {
+  const [q, setQ] = useState(''); const [accFilter, setAccFilter] = useState('all'); const [typeFilter, setTypeFilter] = useState('all');
+  const all = items.filter(isTx).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const filtered = all.filter((i) => {
+    if (accFilter !== 'all' && (!i.meta || i.meta.accountId !== accFilter)) return false;
+    if (typeFilter === 'in' && !isCredit(i)) return false;
+    if (typeFilter === 'out' && !isDebit(i)) return false;
+    if (q && !(i.title || '').toLowerCase().includes(q.toLowerCase())) return false;
+    return true;
+  });
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+        <button onClick={back} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex' }}><ChevronLeft size={20} /></button>
+        <div style={{ fontSize: 17, fontWeight: 700 }}>{lang === 'pt' ? 'Todos os lançamentos' : 'All transactions'}</div>
+      </div>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={lang === 'pt' ? 'Buscar por descrição...' : 'Search...'} style={{ ...inputStyle, marginBottom: 10 }} />
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8, overflowX: 'auto', paddingBottom: 6 }}>
+        <Chip active={typeFilter === 'all'} onClick={() => setTypeFilter('all')}>{lang === 'pt' ? 'Tudo' : 'All'}</Chip>
+        <Chip active={typeFilter === 'in'} onClick={() => setTypeFilter('in')} color={C.green}>{t('incomeL')}</Chip>
+        <Chip active={typeFilter === 'out'} onClick={() => setTypeFilter('out')} color={C.rose}>{t('outflow')}</Chip>
+      </div>
+      {accounts.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', paddingBottom: 6, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>
+          <Chip active={accFilter === 'all'} onClick={() => setAccFilter('all')}>{lang === 'pt' ? 'Todas as contas' : 'All accounts'}</Chip>
+          {accounts.map((a) => <Chip key={a.id} active={accFilter === a.id} onClick={() => setAccFilter(a.id)}>{a.title.split(' —')[0]}</Chip>)}
+        </div>
+      )}
+      <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{filtered.length} {lang === 'pt' ? 'lançamentos' : 'transactions'}</div>
+      {filtered.length === 0 ? <Empty icon={Wallet} text={t('nothingHere')} /> : filtered.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} hideAmount={hidden} />)}
     </div>
   );
 }
@@ -2716,6 +2899,7 @@ function StatementImport({ lang, t, existing, accounts, fixedAccountId, onClose,
 
 function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, flash }) {
   const [sub, setSub] = useState({ v: 'home' }); const [adding, setAdding] = useState(null); const [hidden, setHidden] = useState(true); const [importing, setImporting] = useState(false);
+  const [finPeriod, setFinPeriod] = useState('all');
   useEffect(() => {
     if (typeof window !== 'undefined' && window.__lccOpenAccount) {
       const id = window.__lccOpenAccount; window.__lccOpenAccount = null;
@@ -2724,9 +2908,9 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
   }, []);
   const accounts = items.filter((i) => i.type === 'account');
   if (sub.v === 'account') { const acc = sub.id ? items.find((i) => i.id === sub.id) : null; return <AccountDetail acc={acc} items={items} people={people} lang={lang} t={t} back={() => setSub({ v: "home" })} onOpen={onOpen} addItem={addItem} updateItem={updateItem} flash={flash} goReport={() => setSub({ v: "reports" })} />; }
+  if (sub.v === 'alltx') return <AllTransactionsScreen items={items} accounts={accounts} lang={lang} t={t} back={() => setSub({ v: 'home' })} onOpen={onOpen} toggleTask={toggleTask} hidden={hidden} />;
   if (sub.v === 'reports') return <ReportsScreen items={items} people={people} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
   if (sub.v === 'assistant') return <FinanceAssistant items={items} lang={lang} t={t} back={() => setSub({ v: 'home' })} />;
-  const [finPeriod, setFinPeriod] = useState('all');
   const month = todayISO().slice(0, 7);
   const inAccounts = accounts.filter((a) => (a.meta && a.meta.kind) !== 'credit').reduce((s, a) => s + accountBalance(a, items), 0);
   const invested = accounts.filter((a) => a.meta && a.meta.kind === 'investment').reduce((s, a) => s + (Number(a.meta.balance) || 0), 0);
@@ -2775,11 +2959,15 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
       )}
 
       {(() => {
-        const recentTx = items.filter(isTx).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
+        const allTx = items.filter(isTx).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const recentTx = allTx.slice(0, 10);
         if (recentTx.length === 0) return null;
         return (
           <>
-            <SectionTitle icon={Wallet} label={lang === 'pt' ? 'Últimos lançamentos' : 'Recent transactions'} color={C.accent} />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
+              <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Wallet size={14} style={{ color: C.accent }} />{lang === 'pt' ? 'Últimos lançamentos' : 'Recent transactions'}</span>
+              {allTx.length > 10 && <button onClick={() => setSub({ v: 'alltx' })} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, display: 'flex', gap: 3, alignItems: 'center' }}>{lang === 'pt' ? 'Ver todas' : 'See all'}<ChevronRight size={13} /></button>}
+            </div>
             {recentTx.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} hideAmount={hidden} />)}
           </>
         );
@@ -3832,11 +4020,19 @@ function PersonDetail({ person, items, people, lang, t, back, backLabel, onOpen,
         <>
           <SectionTitle icon={UserRound} label={t('contact')} color={C.sky} />
           <div style={{ ...card, overflow: 'hidden' }}>
-            {[['phone', Phone, 'tel:', C.green], ['email', Mail, 'mailto:', C.blue], ['company', Building2, null, C.text3], ['address', MapPin, null, C.text3], ['relationship', Heart, null, C.rose]].map(([k, Icn, href, col], idx) => {
-              const val = person.meta && person.meta[k]; if (!val) return null;
-              const inner = <div style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '11px 13px' }}><Icn size={15} style={{ color: col, flexShrink: 0 }} /><span style={{ fontSize: 13.5 }}>{val}</span></div>;
-              return href ? <a key={k} href={href + val} style={{ textDecoration: 'none', color: C.text, display: 'block', borderTop: idx ? `1px solid ${C.borderSoft}` : 'none' }}>{inner}</a> : <div key={k} style={{ borderTop: idx ? `1px solid ${C.borderSoft}` : 'none' }}>{inner}</div>;
-            })}
+            {(() => {
+              const rows = [];
+              const phones = (person.meta && (person.meta.phones || (person.meta.phone ? [person.meta.phone] : []))) || [];
+              const emails = (person.meta && (person.meta.emails || (person.meta.email ? [person.meta.email] : []))) || [];
+              phones.filter(Boolean).forEach((v, i) => rows.push(['phone_' + i, Phone, 'tel:', C.green, v]));
+              emails.filter(Boolean).forEach((v, i) => rows.push(['email_' + i, Mail, 'mailto:', C.blue, v]));
+              [['company', Building2, null, C.text3], ['address', MapPin, null, C.text3]].forEach(([k, Icn, href, col]) => { const v = person.meta && person.meta[k]; if (v) rows.push([k, Icn, href, col, v + (k === 'address' && person.meta.addressComplement ? ' · ' + person.meta.addressComplement : '')]); });
+              const rel = person.meta && person.meta.relationship; if (rel) rows.push(['relationship', Heart, null, C.rose, rel]);
+              return rows.map(([k, Icn, href, col, val], idx) => {
+                const inner = <div style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '11px 13px' }}><Icn size={15} style={{ color: col, flexShrink: 0 }} /><span style={{ fontSize: 13.5 }}>{val}</span></div>;
+                return href ? <a key={k} href={href + val} style={{ textDecoration: 'none', color: C.text, display: 'block', borderTop: idx ? `1px solid ${C.borderSoft}` : 'none' }}>{inner}</a> : <div key={k} style={{ borderTop: idx ? `1px solid ${C.borderSoft}` : 'none' }}>{inner}</div>;
+              });
+            })()}
             {person.meta && person.meta.birthdate && <div style={{ display: 'flex', gap: 11, alignItems: 'center', padding: '11px 13px', borderTop: `1px solid ${C.borderSoft}` }}><CalIcon size={15} style={{ color: C.text3 }} /><span style={{ fontSize: 13.5 }}>{fmtDate(person.meta.birthdate, lang)}</span></div>}
           </div>
           {person.notes && <div style={{ ...card, padding: 14, marginTop: 10, fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{person.notes}</div>}
