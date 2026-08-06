@@ -815,9 +815,10 @@ function buildContext(items) {
   const medications = items.filter((i) => i.type === 'medication' && !(i.meta && i.meta.endDate)).map((i) => i.title);
   const recentMeals = items.filter((i) => i.type === 'meal' && i.domain === 'health' && i.date >= addDays(today, -14)).map((i) => ({ title: i.title, date: i.date, calories: i.meta && i.meta.calories, proteinG: i.meta && (i.meta.proteinG ?? i.meta.protein), carbsG: i.meta && (i.meta.carbsG ?? i.meta.carbs), fatG: i.meta && (i.meta.fatG ?? i.meta.fat) }));
   const recentExercise = items.filter((i) => i.type === 'exercise' && i.date >= addDays(today, -14)).map((i) => ({ date: i.date, activity: i.meta && i.meta.activityType, durationMin: i.meta && i.meta.durationMin, distanceKm: i.meta && i.meta.distanceKm }));
+  const examHistory = buildExamHistory(items);
   return {
     today, openTasks: open, events, monthSpendBRL: exp.filter((i) => (i.date || '').startsWith(month)).reduce((a, b) => a + b.amount, 0),
-    health: { metrics: healthMetrics, conditions, allergies, medications, recentMeals, recentExercise },
+    health: { metrics: healthMetrics, conditions, allergies, medications, recentMeals, recentExercise, examHistory },
   };
 }
 
@@ -1696,7 +1697,7 @@ function CaptureSheet({ lang, t, onClose, addItems, flash }) {
 /* ---------------- Claude chat (screen + overlay) ---------------- */
 function Chat({ items, lang, t, name, seed, heightStyle }) {
   const [msgs, setMsgs] = useState([]); const [input, setInput] = useState(''); const [loading, setLoading] = useState(false); const endRef = useRef(); const seeded = useRef(false);
-  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items))}`;
+  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. When the topic is health: weigh EVERY piece of data under "health" equally — registered conditions, allergies, medications, recent meals/exercise, AND health.examHistory (past lab and imaging exam findings/reports) are just as important as the numeric health.metrics. Do not focus only on lab numbers; the narrative exam findings and the person's full medical history matter just as much for understanding them as a patient. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items))}`;
   const push = async (next) => { setMsgs(next); setLoading(true);
     try { const reply = await callClaude(system, next.map((mm) => ({ role: mm.role, content: mm.content }))); setMsgs((p) => [...p, { role: 'assistant', content: reply || '…' }]); }
     catch (e) { setMsgs((p) => [...p, { role: 'assistant', content: lang === 'pt' ? 'Não consegui responder agora.' : "Couldn't respond just now." }]); }
@@ -4101,6 +4102,19 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 
 /* ---------------- Health dashboard ---------------- */
 const isExamDoc = (i) => (i.meta && i.meta.isExam) || /exame|hemograma|raio|ultrass|resson|resultado|laudo|sangue|colesterol|glicose/i.test(i.title);
+// histórico compacto de TODOS os exames marcados (laboratoriais OU de imagem) — usado em toda
+// análise de saúde (Resumo de hoje, Dr. Claude geral, Dieta) pra considerar o documento inteiro,
+// não só os indicadores numéricos extraídos dele.
+function buildExamHistory(items) {
+  return (items || [])
+    .filter((i) => i.type === 'document' && i.domain === 'health' && isExamDoc(i))
+    .map((d) => ({
+      title: d.title, date: d.date || null, tag: (d.meta && d.meta.tag) || null,
+      findings: (d.meta && d.meta.examAnalysis) ? String(d.meta.examAnalysis).slice(0, 600) : 'ainda não analisado em detalhe — só o título/data estão disponíveis',
+    }))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .slice(0, 20);
+}
 function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, goDiet, goDocs, healthSummary, setHealthSummary, setPendingCount }) {
   const [adding, setAdding] = useState(null); const [addingEx, setAddingEx] = useState(false); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const [sumLoading, setSumLoading] = useState(false);
@@ -4129,9 +4143,11 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       const allergies = items.filter((i) => i.type === 'allergy').map((i) => i.title);
       const meds = items.filter((i) => i.type === 'medication' && !(i.meta && i.meta.endDate)).map((i) => i.title);
       const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health' && i.date >= addDays(today, -3)).map((i) => ({ title: i.title, calories: i.meta && i.meta.calories, protein: i.meta && i.meta.protein }));
-      const system = `Você é o Dr. Claude, assistente de saúde pessoal. Com base nos dados abaixo, escreva um resumo de NO MÁXIMO 3 linhas (curto, direto, em ${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre o estado geral de saúde da pessoa AGORA, terminando com uma recomendação prática pro dia/semana. Tom acolhedor mas objetivo, como o resumo diário de um app de wearable. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado, trabalhe com o que tiver e não invente. Responda em texto puro, sem markdown, sem aspas.
+      const examHistory = buildExamHistory(items);
+      const system = `Você é o Dr. Claude, assistente de saúde pessoal. Com base em TODOS os dados abaixo, escreva um resumo de NO MÁXIMO 3 linhas (curto, direto, em ${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre o estado geral de saúde da pessoa AGORA, terminando com uma recomendação prática pro dia/semana. Tom acolhedor mas objetivo, como o resumo diário de um app de wearable. IMPORTANTE: considere os achados dos exames (laboratoriais e de imagem, campo "Histórico de exames" abaixo) com o MESMO peso dos indicadores numéricos — não foque só em números; laudos, condições registradas e o histórico narrativo do paciente são igualmente relevantes. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado, trabalhe com o que tiver e não invente. Responda em texto puro, sem markdown, sem aspas.
 Sono/prontidão (últimos 7 dias): ${JSON.stringify(last7)}
 Indicadores de exames recentes: ${JSON.stringify(metrics)}
+Histórico de exames (laboratoriais e de imagem, com achados quando já analisados): ${JSON.stringify(examHistory)}
 Condições ativas: ${JSON.stringify(conditions)}
 Alergias: ${JSON.stringify(allergies)}
 Medicações em uso: ${JSON.stringify(meds)}
@@ -6104,9 +6120,11 @@ function ItemView({ item, lang, t, onAct, allItems, addItem }) {
 function ExamAnalysis({ item, lang, t, onAct, allItems, addItem }) {
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(null);
   const [busy2, setBusy2] = useState(false); const [err2, setErr2] = useState(null); const [foundCount, setFoundCount] = useState(null);
+  const [condSuggestions, setCondSuggestions] = useState([]);
   const saved = item.meta && item.meta.examAnalysis;
   const atts = (item.meta && item.meta.attachments) || [];
   const alreadyExtracted = (allItems || []).some((i) => i.type === 'healthMetric' && i.meta && i.meta.sourceDocId === item.id);
+  const existingConditionTitles = new Set((allItems || []).filter((i) => i.type === 'condition').map((i) => normTitle(i.title)));
 
   const analyze = async () => {
     setBusy(true); setErr(null);
@@ -6124,8 +6142,8 @@ function ExamAnalysis({ item, lang, t, onAct, allItems, addItem }) {
       }
       if (content.length === 0) throw new Error(lang === 'pt' ? 'Não consegui carregar o anexo. Tente reanexar o arquivo.' : 'Could not load attachment. Try re-attaching.');
       content.push({ type: 'text', text: lang === 'pt'
-        ? 'Você é um assistente de saúde cuidadoso. Analise este resultado de exame de forma clara e acessível para um leigo. Explique: (1) o que foi medido, (2) quais valores estão dentro ou fora da referência, (3) o que isso pode significar em linguagem simples, e (4) pontos que merecem atenção ou conversa com o médico. Seja informativo mas deixe claro que não substitui avaliação médica. Responda em português do Brasil, organizado e conciso.'
-        : 'Analyze this lab result for a layperson. Explain what was measured, what is in/out of range, what it may mean, and what to discuss with a doctor. Make clear it is not a substitute for medical advice.' });
+        ? 'Você é um assistente de saúde cuidadoso. Analise este exame (laboratorial ou de imagem) de forma clara e acessível para um leigo. Explique: (1) o que foi examinado/medido, (2) quais valores ou achados estão dentro ou fora do normal, (3) o que isso pode significar em linguagem simples, e (4) pontos que merecem atenção ou conversa com o médico. Seja informativo mas deixe claro que não substitui avaliação médica. Responda em português do Brasil, organizado e conciso.'
+        : 'Analyze this exam (lab or imaging) for a layperson. Explain what was measured/examined, what is in/out of normal, what it may mean, and what to discuss with a doctor. Make clear it is not a substitute for medical advice.' });
 
       const r = await authFetch('/api/claude', { method: 'POST', body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1400, messages: [{ role: 'user', content }] }) });
       const j = await r.json();
@@ -6137,7 +6155,7 @@ function ExamAnalysis({ item, lang, t, onAct, allItems, addItem }) {
   };
 
   const extractIndicators = async () => {
-    setBusy2(true); setErr2(null); setFoundCount(null);
+    setBusy2(true); setErr2(null); setFoundCount(null); setCondSuggestions([]);
     try {
       const atts2 = [];
       for (const a of atts) { const full = await loadAttachment(a.id); if (full && full.dataUrl) atts2.push({ dataUrl: full.dataUrl }); }
@@ -6149,8 +6167,16 @@ function ExamAnalysis({ item, lang, t, onAct, allItems, addItem }) {
         addItem({ type: 'healthMetric', domain: 'health', title: ind.indicator, amount: ind.value, date: ind.date || item.date, meta: { unit: ind.unit, refRange: ind.refRange, status: ind.status, sourceDocId: item.id } });
       });
       setFoundCount((j.indicators || []).length);
+      // achados/condições sugeridas — só as que ainda não existem na seção Condições
+      const newConds = (j.conditions || []).filter((c) => !existingConditionTitles.has(normTitle(c.title)));
+      setCondSuggestions(newConds);
     } catch (e) { setErr2(String(e.message || e)); }
     setBusy2(false);
+  };
+
+  const acceptCondition = (c) => {
+    addItem({ type: 'condition', domain: 'health', title: c.title, meta: { status: 'ativa', sourceDocId: item.id, why: c.why } });
+    setCondSuggestions((p) => p.filter((x) => x !== c));
   };
 
   return (
@@ -6166,12 +6192,28 @@ function ExamAnalysis({ item, lang, t, onAct, allItems, addItem }) {
       </div>
       <div style={{ ...card, padding: 14, marginTop: 10, border: `1px solid #5B8DEF33` }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#5B8DEF', display: 'flex', gap: 6, alignItems: 'center' }}><Stethoscope size={14} />{lang === 'pt' ? 'Dr. Claude — extrair indicadores' : 'Dr. Claude — extract indicators'}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: '#5B8DEF', display: 'flex', gap: 6, alignItems: 'center' }}><Stethoscope size={14} />{lang === 'pt' ? 'Dr. Claude — extrair indicadores e achados' : 'Dr. Claude — extract indicators & findings'}</span>
           <Btn kind="soft" onClick={extractIndicators} disabled={busy2 || atts.length === 0} style={{ fontSize: 11.5, padding: '6px 11px', display: 'flex', gap: 5, alignItems: 'center' }}>{busy2 ? <><Loader2 size={12} className="spin" />{lang === 'pt' ? 'Analisando...' : 'Analyzing...'}</> : (alreadyExtracted ? (lang === 'pt' ? 'Refazer' : 'Redo') : (lang === 'pt' ? 'Extrair' : 'Extract'))}</Btn>
         </div>
+        <div style={{ fontSize: 10.5, color: C.text3, marginTop: 6 }}>{lang === 'pt' ? 'Funciona pra exames laboratoriais (valores numéricos) e de imagem (achados/diagnósticos).' : 'Works for lab exams (numbers) and imaging (findings/diagnoses).'}</div>
         {err2 && <div style={{ fontSize: 11.5, color: C.rose, marginTop: 8 }}>{err2}</div>}
         {foundCount != null && !err2 && <div style={{ fontSize: 11.5, color: foundCount > 0 ? C.green : C.text3, marginTop: 8 }}>{foundCount > 0 ? `✓ ${foundCount} ${lang === 'pt' ? 'indicadores encontrados — veja no Histórico Médico.' : 'indicators found — check Medical History.'}` : (lang === 'pt' ? 'Nenhum indicador numérico foi encontrado neste documento.' : 'No numeric indicators found.')}</div>}
         {alreadyExtracted && foundCount == null && <div style={{ fontSize: 11, color: C.text3, marginTop: 8 }}>{lang === 'pt' ? 'Já extraído — veja no Histórico Médico.' : 'Already extracted.'}</div>}
+        {condSuggestions.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: C.text3, marginBottom: 6 }}>{lang === 'pt' ? 'Achados que podem virar condições registradas:' : 'Findings that could become tracked conditions:'}</div>
+            {condSuggestions.map((c, i) => (
+              <div key={i} style={{ ...card, padding: '9px 11px', marginBottom: 6, display: 'flex', gap: 8, alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{c.title}</div>
+                  {c.why && <div style={{ fontSize: 10.5, color: C.text3, marginTop: 1 }}>{c.why}</div>}
+                </div>
+                <Btn kind="soft" onClick={() => acceptCondition(c)} style={{ padding: '5px 9px', fontSize: 11, display: 'flex', gap: 4, alignItems: 'center', flexShrink: 0 }}><Plus size={12} />{lang === 'pt' ? 'Adicionar' : 'Add'}</Btn>
+                <button onClick={() => setCondSuggestions((p) => p.filter((x) => x !== c))} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3, flexShrink: 0 }}><X size={14} /></button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

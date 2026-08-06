@@ -3,23 +3,24 @@ import { userFromRequest } from '../../../lib/oauth';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const SYSTEM = `Você é o "Dr. Claude", um assistente que ajuda a organizar (NUNCA diagnosticar oficialmente) o histórico de saúde de uma pessoa a partir de exames laboratoriais.
+const SYSTEM = `Você é o "Dr. Claude", um assistente que ajuda a organizar (NUNCA diagnosticar oficialmente) o histórico de saúde de uma pessoa a partir de QUALQUER tipo de exame — laboratorial (sangue, urina) OU de imagem (raio-x, ressonância, tomografia, ultrassom, ecocardiograma, etc.) OU laudo médico em geral.
 
-Analise o(s) documento(s) anexado(s) (exames de sangue, laudos, resultados) e extraia todos os indicadores/biomarcadores numéricos encontrados.
-
-Responda SOMENTE com um array JSON, sem texto fora dele, sem cercas de código:
-[{"indicator":"nome padronizado em português (ex: Glicemia, Colesterol Total, HDL, LDL, Triglicerídeos, Hemoglobina, Hemoglobina Glicada, TSH, Vitamina D, Creatinina, Ureia, Ácido Úrico, PCR, Leucócitos, Hemácias, Plaquetas, etc.)",
+Analise o(s) documento(s) anexado(s) e responda SOMENTE com um objeto JSON, sem texto fora dele, sem cercas de código:
+{"indicators": [{"indicator":"nome padronizado em português (ex: Glicemia, Colesterol Total, HDL, LDL, Triglicerídeos, Hemoglobina, Hemoglobina Glicada, TSH, Vitamina D, Creatinina, Ureia, Ácido Úrico, PCR, Leucócitos, Hemácias, Plaquetas, etc.)",
 "value": número,
 "unit": "unidade (mg/dL, %, etc.)",
 "refRange": "faixa de referência do laudo, se houver, senão null",
 "status": "normal"|"alto"|"baixo"|null,
-"date": "YYYY-MM-DD (data do exame, se identificável, senão null)"}]
+"date": "YYYY-MM-DD (data do exame, se identificável, senão null)"}],
+"conditions": [{"title":"nome curto e claro do achado/condição/diagnóstico em português, ex: 'Escoliose leve', 'Hérnia de disco L4-L5', 'Nódulo tireoidiano', 'Esteatose hepática'",
+"confidence": 0..1,
+"why":"trecho ou motivo curto, 1 frase"}]}
 
 Regras:
-- Extraia SOMENTE valores que realmente aparecem no documento. Nunca invente.
-- Se o documento não for um exame com valores numéricos, devolva [].
-- "status" compara o valor com a faixa de referência do próprio laudo, se disponível.
-- Ignore texto administrativo (nome da clínica, dados do paciente) — foque nos indicadores.`;
+- "indicators": SOMENTE valores numéricos que realmente aparecem no documento (típico de exames de sangue/urina). Array vazio se o documento não tiver valores numéricos (ex: um laudo de imagem só com texto).
+- "conditions": achados, diagnósticos ou condições (agudas ou crônicas) MENCIONADOS EXPLICITAMENTE no laudo/documento — inclua achados de exames de imagem (ex: "leve espessamento", "cisto renal simples"), diagnósticos médicos e condições confirmadas. Array vazio se nada for identificável. NUNCA invente algo que não esteja escrito no documento.
+- "status" (dos indicadores) compara o valor com a faixa de referência do próprio laudo, se disponível.
+- Ignore texto administrativo (nome da clínica, dados do paciente) — foque no conteúdo clínico.`;
 
 export async function POST(req) {
   const user = await userFromRequest(req);
@@ -46,7 +47,7 @@ export async function POST(req) {
       return Response.json({ error: 'Não consegui ler o(s) anexo(s) (formato não reconhecido ou corrompido). Tente reanexar o arquivo.', indicators: [] });
     }
     if (notes) content.push({ type: 'text', text: 'Notas adicionais: ' + notes });
-    content.push({ type: 'text', text: 'Extraia os indicadores deste documento.' });
+    content.push({ type: 'text', text: 'Extraia os indicadores e as condições/achados deste documento.' });
 
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -56,11 +57,11 @@ export async function POST(req) {
     const j = await r.json();
     if (j.error) throw new Error(j.error.message || 'erro IA');
     const text = (j.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('').replace(/```json|```/g, '').trim();
-    const a = text.indexOf('['), b = text.lastIndexOf(']');
-    let arr = [];
-    try { arr = JSON.parse(a !== -1 && b !== -1 ? text.slice(a, b + 1) : text); } catch (e) { return Response.json({ error: 'Resposta não interpretável.', indicators: [] }); }
+    const a = text.indexOf('{'), b = text.lastIndexOf('}');
+    let obj = {};
+    try { obj = JSON.parse(a !== -1 && b !== -1 ? text.slice(a, b + 1) : text); } catch (e) { return Response.json({ error: 'Resposta não interpretável.', indicators: [], conditions: [] }); }
 
-    const indicators = (Array.isArray(arr) ? arr : []).map((x) => ({
+    const indicators = (Array.isArray(obj.indicators) ? obj.indicators : []).map((x) => ({
       indicator: String(x.indicator || '').slice(0, 80),
       value: typeof x.value === 'number' ? x.value : Number(x.value),
       unit: x.unit || '',
@@ -69,8 +70,14 @@ export async function POST(req) {
       date: x.date || fallbackDate || null,
     })).filter((x) => x.indicator && !isNaN(x.value));
 
-    return Response.json({ docId, indicators });
+    const conditions = (Array.isArray(obj.conditions) ? obj.conditions : []).map((x) => ({
+      title: String(x.title || '').slice(0, 140),
+      confidence: typeof x.confidence === 'number' ? x.confidence : 0.6,
+      why: String(x.why || '').slice(0, 200),
+    })).filter((x) => x.title);
+
+    return Response.json({ docId, indicators, conditions });
   } catch (e) {
-    return Response.json({ error: String(e.message || e), indicators: [] });
+    return Response.json({ error: String(e.message || e), indicators: [], conditions: [] });
   }
 }
