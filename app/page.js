@@ -103,13 +103,33 @@ function houseItemFromClassification(x) {
 async function markHouseEmailProcessed(x) {
   try { await authFetch('/api/house-scan', { method: 'POST', body: JSON.stringify({ messageId: x.id }) }); } catch (e) {}
 }
-// cria um convite de verdade na Google Agenda (com convidado) — o Google manda o e-mail de convite
-async function sendCalendarInvite({ title, date, time, durationMin, notes, personEmail, personName }) {
-  if (!personEmail) return { ok: false, error: 'Pessoa sem e-mail cadastrado.' };
+function personEmailOf(p) {
+  return (p.meta && ((p.meta.emails && p.meta.emails[0]) || p.meta.email)) || null;
+}
+// cria (ou soma convidados a) um convite de verdade na Google Agenda — o Google manda o e-mail de convite
+async function sendCalendarInvite({ title, date, time, durationMin, notes, attendees, googleEventId }) {
+  if (!attendees || !attendees.length) return { ok: false, error: 'Nenhuma pessoa com e-mail cadastrado.' };
   try {
-    const r = await authFetch('/api/calendar-invite', { method: 'POST', body: JSON.stringify({ title, date, time, durationMin, notes, personEmail, personName }) });
+    const r = await authFetch('/api/calendar-invite', { method: 'POST', body: JSON.stringify({ title, date, time, durationMin, notes, attendees, googleEventId }) });
     return await r.json();
   } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
+// dispara convites automaticamente pra qualquer evento/compromisso novo ou editado que tenha
+// convidados pendentes (meta.inviteePersonIds) ainda não convidados (meta.invitedPersonIds)
+async function maybeSendInvites(item, people, updateItem, lang) {
+  if (!item || (item.type !== 'event' && item.type !== 'appointment')) return;
+  const desired = (item.meta && item.meta.inviteePersonIds) || [];
+  const already = (item.meta && item.meta.invitedPersonIds) || [];
+  const newIds = desired.filter((id) => !already.includes(id));
+  if (!newIds.length) return;
+  const newPeople = newIds.map((id) => people.find((p) => p.id === id)).filter(Boolean);
+  const attendees = newPeople.map((p) => ({ email: personEmailOf(p), name: p.title })).filter((a) => a.email);
+  if (!attendees.length) return;
+  const res = await sendCalendarInvite({ title: item.title, date: item.date, time: item.time, notes: item.notes, attendees, googleEventId: item.meta.googleEventId });
+  if (!res.ok) return;
+  const invitedNow = [...already, ...newPeople.filter((p) => attendees.some((a) => a.email === personEmailOf(p))).map((p) => p.id)];
+  const invitedPeople = [...((item.meta && item.meta.invitedPeople) || []), ...newPeople.map((p) => ({ id: p.id, name: p.title, photo: p.meta && p.meta.photo }))];
+  updateItem(item.id, { meta: { ...item.meta, invitedPersonIds: invitedNow, invitedPeople, googleEventId: res.eventId || item.meta.googleEventId, googleEventLink: res.link || item.meta.googleEventLink } });
 }
 // rotina de verificação: junta duplicatas de itens vindos de e-mail "(Z)" que já foram
 // persistidas (ex.: de antes da trava de concorrência existir) — mantém 1 por e-mail de origem
@@ -760,6 +780,15 @@ If NO (it's a receipt, document, screenshot, ticket, note, etc.), output ONLY th
     amount: it.amount != null ? Number(it.amount) : null, person: it.person || null, priority: [1, 2, 3].includes(it.priority) ? it.priority : 3, confidence: it.confidence,
   })) };
 }
+// estima calorias/macros a partir só do nome/descrição da refeição digitada à mão (sem foto)
+async function estimateMealFromText(text, lang) {
+  const langName = lang === 'pt' ? 'Brazilian Portuguese' : 'US English';
+  const system = `You estimate nutrition for a personal diet-tracking app, from just a short meal description (no photo). Output ONLY this JSON (no prose, no fences): {"calories":number,"proteinG":number,"carbsG":number,"fatG":number}. Give a reasonable single-serving estimate based on the description, in ${langName === 'Brazilian Portuguese' ? 'typical Brazilian portions' : 'typical portions'}. Never return null — always give your best estimate number.`;
+  const t = await callClaude(system, [{ role: 'user', content: text }]);
+  let j = t; const a = t.indexOf('{'), b = t.lastIndexOf('}'); if (a !== -1 && b !== -1) j = t.slice(a, b + 1);
+  const x = JSON.parse(j);
+  return { calories: Number(x.calories) || 0, proteinG: Number(x.proteinG) || 0, carbsG: Number(x.carbsG) || 0, fatG: Number(x.fatG) || 0 };
+}
 async function classifyCapture(raw, lang) {
   const langName = lang === 'pt' ? 'Brazilian Portuguese' : 'US English';
   const system = `You are the capture classifier for a personal life app. Convert the raw note into one or more items, splitting compound notes. Output ONLY a JSON array — no prose, no fences. Each item: {"type": one of [task,event,expense,meal,med,appointment,document,trip,flight,shopping,bill,note], "domain": one of [${DOMAINS.join(',')}], "title": short title in ${langName}, "date":"YYYY-MM-DD" or null, "time":"HH:MM" or null, "amount": number or null, "person": string or null, "priority":1|2|3, "confidence":0..1}. Today is ${todayISO()}. Resolve relative dates. IMPORTANT for "time": always extract the time of day when present, converting Brazilian formats to 24h HH:MM. Examples: "14h"→"14:00", "14hs"→"14:00", "às 14"→"14:00", "9h30"→"09:30", "14:30"→"14:30", "2 da tarde"→"14:00", "meio-dia"→"12:00", "8 da manhã"→"08:00". If an event/appointment/meeting has a time, it MUST be in the time field. If unsure, type "note", domain "personal".`;
@@ -887,11 +916,12 @@ function MouraBadge({ size = 15 }) {
     </span>
   );
 }
-function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
+function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount, onDelete }) {
   const overdue = item.type === 'task' && item.status !== 'done' && item.date && item.date < todayISO();
   const Ic = typeIcon(item.type); const mile = item.meta && item.meta.milestone;
-  return (
-    <div onClick={() => onOpen(item)} style={{ ...card, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 8, cursor: 'pointer' }}>
+  const swipeable = item.type === 'task' && !!onDelete;
+  const row = (
+    <div onClick={() => onOpen(item)} style={{ ...card, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: swipeable ? 0 : 8, cursor: 'pointer' }}>
       {item.type === 'task' ? (
         <button onClick={(e) => { e.stopPropagation(); onToggle(item.id); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginTop: 1, color: item.status === 'done' ? C.green : C.text3 }}>{item.status === 'done' ? <CircleCheck size={20} style={{ animation: 'pop .32s ease' }} /> : <Circle size={20} />}</button>
       ) : <div style={{ marginTop: 2, color: mile ? C.accent : C.text3 }}><Ic size={18} /></div>}
@@ -912,9 +942,29 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
           {item.meta && item.meta.external === 'ticktick' && <span style={{ fontSize: 10, color: C.green, border: `1px solid ${C.green}44`, borderRadius: 999, padding: '1px 7px' }}>TickTick</span>}
         </div>
       </div>
-      {item.meta && item.meta.invitedPersonName && <div title={(lang === 'pt' ? 'Convite enviado: ' : 'Invite sent: ') + item.meta.invitedPersonName}><Avatar photo={item.meta.invitedPersonPhoto} name={item.meta.invitedPersonName} size={22} color={C.sky} /></div>}
+      {(() => {
+        // meta.invitedPeople (novo, vários) ou meta.invitedPersonName (formato antigo, 1 só) — mostra os avatares de quem foi convidado
+        const invited = (item.meta && item.meta.invitedPeople) || (item.meta && item.meta.invitedPersonName ? [{ name: item.meta.invitedPersonName, photo: item.meta.invitedPersonPhoto }] : []);
+        if (!invited.length) return null;
+        return (
+          <div style={{ display: 'flex', marginLeft: -6 }}>
+            {invited.slice(0, 3).map((p, i) => (
+              <div key={p.id || i} title={(lang === 'pt' ? 'Convite enviado: ' : 'Invite sent: ') + p.name} style={{ marginLeft: 6, border: `2px solid ${C.surface}`, borderRadius: 999 }}><Avatar photo={p.photo} name={p.name} size={22} color={C.sky} /></div>
+            ))}
+          </div>
+        );
+      })()}
       <ChevronRight size={16} style={{ color: C.text3, marginTop: 2 }} />
     </div>
+  );
+  if (!swipeable) return row;
+  return (
+    <SwipeRow
+      onRight={() => onToggle(item.id)} rightLabel={item.status === 'done' ? (lang === 'pt' ? 'Reabrir' : 'Reopen') : (lang === 'pt' ? 'Concluir' : 'Done')} rightColor={C.green} rightIcon={CheckCheck}
+      onLeft={() => onDelete(item.id)} leftLabel={lang === 'pt' ? 'Excluir' : 'Delete'} leftColor={C.rose} leftIcon={Trash2}
+    >
+      {row}
+    </SwipeRow>
   );
 }
 
@@ -1070,6 +1120,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
   const [f, setF] = useState({ priority: 2, status: 'planned', ...draft, meta: { ...(draft.meta || {}) } });
   const [fcode, setFcode] = useState('');
   const [resolving, setResolving] = useState(false); const [resolveMsg, setResolveMsg] = useState('');
+  const [mealEstimating, setMealEstimating] = useState(false);
   const up = (patch) => setF((p) => ({ ...p, ...patch }));
   const upMeta = (patch) => setF((p) => ({ ...p, meta: { ...p.meta, ...patch } }));
   const type = f.type; const metaFields = META[type] || []; const attList = f.meta.attachments || [];
@@ -1111,6 +1162,15 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
       }
     } catch (e) { setResolveMsg(lang === 'pt' ? 'Erro na busca.' : 'Lookup error.'); }
     setResolving(false);
+  };
+  const doEstimateMeal = async () => {
+    if (!(f.title || '').trim()) return;
+    setMealEstimating(true);
+    try {
+      const est = await estimateMealFromText(f.title, lang);
+      upMeta({ calories: est.calories, proteinG: est.proteinG, carbsG: est.carbsG, fatG: est.fatG });
+    } catch (e) {}
+    setMealEstimating(false);
   };
   return (
     <div>
@@ -1215,7 +1275,25 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           <div style={{ flex: 1 }}><Field label={t('time')}><input type="time" value={f.time || ''} onChange={(e) => up({ time: e.target.value || null })} style={{ ...inputStyle, colorScheme: 'dark' }} /></Field></div>
         </div>
       )}
+      {(type === 'event' || type === 'appointment') && people.length > 0 && (
+        <Field label={lang === 'pt' ? 'Convidar (envia convite de verdade por e-mail)' : 'Invite (sends a real calendar invite by email)'}>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {people.map((p) => {
+              const ids = f.meta.inviteePersonIds || [];
+              const on = ids.includes(p.id);
+              const already = (f.meta.invitedPersonIds || []).includes(p.id);
+              return <Chip key={p.id} active={on} onClick={() => upMeta({ inviteePersonIds: on ? ids.filter((x) => x !== p.id) : [...ids, p.id] })}>{p.title}{already ? ' ✓' : ''}</Chip>;
+            })}
+          </div>
+          {(f.meta.inviteePersonIds || []).length > 0 && <div style={{ fontSize: 10.5, color: C.text3, marginTop: 6 }}>{lang === 'pt' ? '✓ = já foi convidado antes' : '✓ = already invited'}</div>}
+        </Field>
+      )}
       {isMoney(type) && <Field label={type === 'maintenance' ? t('cost') : t('amount')}><input type="number" value={f.amount ?? ''} onChange={(e) => up({ amount: e.target.value })} style={inputStyle} placeholder="0,00" /></Field>}
+      {type === 'meal' && (
+        <Btn kind="soft" onClick={doEstimateMeal} disabled={mealEstimating || !(f.title || '').trim()} style={{ width: '100%', marginBottom: 12, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>
+          {mealEstimating ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}{mealEstimating ? (lang === 'pt' ? 'Consultando...' : 'Estimating...') : (lang === 'pt' ? 'Estimar calorias com IA' : 'Estimate calories with AI')}
+        </Btn>
+      )}
       {metaFields.length > 0 && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {metaFields.map(([k, ptL, enL, it]) => {
@@ -1872,7 +1950,7 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
   const [zBusy, setZBusy] = useState(false);
@@ -1978,14 +2056,14 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <button onClick={() => setQuickAttn(true)} title={lang === 'pt' ? 'Adicionar algo pra não esquecer' : 'Add a reminder'} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 3 }}><Plus size={16} /></button>
         </div>
       </div>
-      {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} onDelete={delItem} />)}
       {quickAttn && <AddModal title={lang === 'pt' ? 'Pra não esquecer' : "Don't forget"} icon={AlertTriangle} draft={{ type: 'task', domain: 'personal', priority: 1, date: today }} allowedTypes={['task']} lang={lang} t={t} onClose={() => setQuickAttn(false)} onSave={(x) => { addItems([{ ...x, status: 'planned' }]); flash(t('savedOne')); setQuickAttn(false); }} />}
       {houseTasksOpen.length > 0 && <>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
           <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Home size={14} style={{ color: C.blue }} />{t('houseTasks')}</span>
           {houseTasksOpen.length > 3 && <button onClick={() => goModule('house')} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', fontSize: 11.5 }}>{lang === 'pt' ? `ver todas (${houseTasksOpen.length})` : `see all (${houseTasksOpen.length})`}</button>}
         </div>
-        {houseTasksTop.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+        {houseTasksTop.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} onDelete={delItem} />)}
       </>}
       <SectionTitle icon={Clock} label={lang === 'pt' ? 'O que vai rolar nas próximas 24h' : 'Next 24 hours'} color={C.accent} />
       {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : <div style={{ ...card, padding: 14 }}><MiniPlanner items={next5} lang={lang} t={t} onOpen={onOpen} today={today} /></div>}
@@ -2883,7 +2961,7 @@ function ModuleHeader({ module, t, back }) {
   </>;
 }
 const TASK_FILTERS = [['fAll', (i) => i.status !== 'done'], ['fWork', (i) => i.domain === 'work' && i.status !== 'done'], ['fPersonal', (i) => !['work', 'home', 'kids'].includes(i.domain) && i.status !== 'done'], ['fHouse', (i) => i.domain === 'home' && i.status !== 'done'], ['fKids', (i) => i.domain === 'kids' && i.status !== 'done'], ['fDone', (i) => i.status === 'done']];
-function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick, setPendingCount }) {
+function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, delItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick, setPendingCount }) {
   const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0); const [toTick, setToTick] = useState(true);
   const itemsRef = useRef(items);
   itemsRef.current = items;
@@ -2975,7 +3053,7 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       {module.key === 'docs' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 6 }}>{[['all', 'Tudo', 'All'], ['work', 'Trabalho', 'Work'], ['health', 'Saúde', 'Health'], ['personal', 'Pessoais', 'Personal'], ['kids', 'Filhos', 'Kids']].map(([k, ptL, enL]) => <Chip key={k} active={docCat === k} onClick={() => setDocCat(k)}>{lang === 'pt' ? ptL : enL}</Chip>)}</div>}
       {hi && <div style={{ ...card, padding: 16, marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><span style={{ fontSize: 12.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em' }}>{hi.label}</span><span style={{ fontSize: 22, fontWeight: 600, color: hi.color }}>{hi.value}</span></div>}
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
-      {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={module.key === 'tasks' ? graceToggle : toggleTask} onOpen={onOpen} />)}
+      {list.length === 0 ? <Empty icon={module.icon} text={t('nothingHere')} /> : list.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={module.key === 'tasks' ? graceToggle : toggleTask} onOpen={onOpen} onDelete={delItem} />)}
       {module.key === 'tasks' && ttConnected && <div style={{ fontSize: 10.5, color: C.text3, textAlign: 'center', marginTop: 16, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><RefreshCw size={10} style={{ color: C.green }} />{lang === 'pt' ? 'Sincronizado com o TickTick' : 'Synced with TickTick'}</div>}
       {adding && <AddModal title={`${t('quickAdd')} · ${t(module.key)}`} icon={Plus} draft={{ type: module.types[0], domain: module.key === 'docs' ? (docCat !== 'all' ? docCat : 'personal') : moduleDomain(module.key) }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => {
         if (module.key === 'tasks' && ttConnected && toTick && x.type === 'task') { onCreateTick && onCreateTick({ title: x.title, notes: x.notes, date: x.date, priority: x.priority === 1 ? 5 : x.priority === 2 ? 3 : 0, tags: x.priority === 1 ? ['Importante'] : [] }); flash(lang === 'pt' ? 'Criado no TickTick ✓' : 'Created in TickTick ✓'); }
@@ -3237,7 +3315,7 @@ function Extrato({ tx, accounts, lang, t, onOpen }) {
     </div>
   );
 }
-function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, gmail }) {
+function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, delItem, flash, gmail }) {
   const [tab, setTab] = useState('all'); // all | events | tasks | emails
   const [adding, setAdding] = useState(false);
   const [expandAll, setExpandAll] = useState(false);
@@ -3273,7 +3351,7 @@ function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
         <><SectionTitle icon={CalIcon} label={lang === 'pt' ? 'Reuniões' : 'Meetings'} color={C.accent} />{workEvents.slice(0, tab === 'all' ? evShown : workEvents.length).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
       )}
       {(tab === 'all' || tab === 'tasks') && workTasks.length > 0 && (
-        <><SectionTitle icon={ListTodo} label={lang === 'pt' ? 'Tarefas' : 'Tasks'} color={C.blue} />{workTasks.slice(0, tab === 'all' ? taskShown : workTasks.length).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
+        <><SectionTitle icon={ListTodo} label={lang === 'pt' ? 'Tarefas' : 'Tasks'} color={C.blue} />{workTasks.slice(0, tab === 'all' ? taskShown : workTasks.length).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} onDelete={delItem} />)}</>
       )}
       {hiddenOpen > 0 && (
         <button onClick={() => setExpandAll(true)} style={{ ...card, width: '100%', padding: '10px', marginBottom: 14, color: C.text2, cursor: 'pointer', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>
@@ -3307,7 +3385,7 @@ const PURCHASE_STAGES = {
   delivered: { pt: 'Entregue', en: 'Delivered', color: '#5FBF8F' },
   other: { pt: 'Em análise', en: 'Other', color: '#8A8F98' },
 };
-function PurchaseCard({ p, lang, onOpen, selectMode, selected, onToggleSelect }) {
+function PurchaseCard({ p, lang, onOpen, selectMode, selected, onToggleSelect, onMarkReceived }) {
   const [open, setOpen] = useState(false);
   const stage = (p.meta && p.meta.stage) || 'paid';
   const sm = PURCHASE_STAGES[stage] || PURCHASE_STAGES.other;
@@ -3336,6 +3414,9 @@ function PurchaseCard({ p, lang, onOpen, selectMode, selected, onToggleSelect })
           {p.meta && p.meta.etaDate && stage !== 'delivered' && <span style={{ fontSize: 10, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '2px 8px' }}>{lang === 'pt' ? 'chega' : 'arrives'} {fmtDate(p.meta.etaDate, lang)}</span>}
         </div>
       </div>
+      {stage !== 'delivered' && onMarkReceived && (
+        <button onClick={(e) => { e.stopPropagation(); onMarkReceived(p); }} style={{ marginTop: 8, background: 'none', border: `1px solid ${C.green}44`, color: C.green, cursor: 'pointer', fontSize: 11.5, padding: '5px 10px', borderRadius: 8, display: 'flex', gap: 5, alignItems: 'center' }}><Check size={12} />{lang === 'pt' ? 'Marcar como recebida' : 'Mark as received'}</button>
+      )}
       {hasGroup && open && (
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.borderSoft}` }}>
           {subItems.map((it, idx) => (
@@ -3422,6 +3503,8 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
   const today = todayISO();
   const isArchived = (p) => { const st = p.meta && p.meta.stage; if (st !== 'delivered') return false; const dd = (p.meta && p.meta.deliveredDate) || p.date; if (!dd) return false; return addDays(dd, 5) < today; };
   const [showArchived, setShowArchived] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('all'); // all | transit | delivered
+  const markReceived = (p) => { updateItem(p.id, { meta: { ...p.meta, stage: 'delivered', deliveredDate: today } }); flash(lang === 'pt' ? 'Marcada como recebida ✓' : 'Marked as received ✓'); };
 
   // item 4f: compra enviada com data estimada de chegada -> cria/atualiza um evento (sem horário) no calendário automaticamente
   useEffect(() => {
@@ -3441,7 +3524,11 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
   const byStore = storeFilter === 'all' ? allRaw : allRaw.filter((p) => (p.meta && p.meta.store) === storeFilter);
   const active = byStore.filter((p) => !isArchived(p));
   const archived = byStore.filter(isArchived);
-  const shown = (showArchived ? archived : active).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const scoped = showArchived ? archived : active;
+  const inTransitCount = scoped.filter((p) => (p.meta && p.meta.stage) !== 'delivered').length;
+  const deliveredCount = scoped.filter((p) => (p.meta && p.meta.stage) === 'delivered').length;
+  const byStatus = statusFilter === 'all' ? scoped : statusFilter === 'delivered' ? scoped.filter((p) => (p.meta && p.meta.stage) === 'delivered') : scoped.filter((p) => (p.meta && p.meta.stage) !== 'delivered');
+  const shown = byStatus.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   return (
     <div>
@@ -3496,13 +3583,18 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
         <Chip active={!showArchived} onClick={() => setShowArchived(false)}>{lang === 'pt' ? 'Ativas' : 'Active'} ({active.length})</Chip>
         <Chip active={showArchived} onClick={() => setShowArchived(true)}>{lang === 'pt' ? 'Arquivadas' : 'Archived'} ({archived.length})</Chip>
       </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+        <Chip active={statusFilter === 'all'} onClick={() => setStatusFilter('all')} color={C.accent}>{lang === 'pt' ? 'Todas' : 'All'}</Chip>
+        <Chip active={statusFilter === 'transit'} onClick={() => setStatusFilter('transit')} color={C.blue}>{lang === 'pt' ? 'A caminho' : 'In transit'} ({inTransitCount})</Chip>
+        <Chip active={statusFilter === 'delivered'} onClick={() => setStatusFilter('delivered')} color={C.green}>{lang === 'pt' ? 'Entregues' : 'Delivered'} ({deliveredCount})</Chip>
+      </div>
       {stores.length > 1 && (
         <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', paddingBottom: 6, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>
           <Chip active={storeFilter === 'all'} onClick={() => setStoreFilter('all')} color={C.blue}>{lang === 'pt' ? 'Todas as lojas' : 'All stores'}</Chip>
           {stores.map((s) => <Chip key={s} active={storeFilter === s} onClick={() => setStoreFilter(s)} color={C.blue}>{s}</Chip>)}
         </div>
       )}
-      {shown.length === 0 ? <Empty icon={Package} text={t('nothingHere')} /> : shown.map((p) => <PurchaseCard key={p.id} p={p} lang={lang} onOpen={() => onOpen(p)} selectMode={selectMode} selected={selected.includes(p.id)} onToggleSelect={toggleSelect} />)}
+      {shown.length === 0 ? <Empty icon={Package} text={t('nothingHere')} /> : shown.map((p) => <PurchaseCard key={p.id} p={p} lang={lang} onOpen={() => onOpen(p)} selectMode={selectMode} selected={selected.includes(p.id)} onToggleSelect={toggleSelect} onMarkReceived={markReceived} />)}
       {adding && <AddModal title={lang === 'pt' ? 'Compra' : 'Purchase'} icon={Package} draft={{ type: 'purchase', domain: 'shopping', meta: { stage: 'paid' } }} allowedTypes={['purchase']} lang={lang} t={t} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'shopping', ...x }); flash(t('savedOne')); setAdding(false); }} />}
     </div>
   );
@@ -4102,20 +4194,39 @@ function CalorieChart({ meals, lang, days = 14 }) {
   const daysList = Array.from({ length: days }, (_, i) => addDays(today, -(days - 1 - i)));
   const vals = daysList.map((d) => byDay[d] || 0);
   const max = Math.max(...vals, 1);
-  const W = 300, H = 84, gap = 2, barW = W / days - gap;
+  const niceMax = Math.max(500, Math.ceil(max / 500) * 500);
+  const ML = 30, MR = 4, MT = 6, MB = 14;
+  const W = 320, H = 100;
+  const plotW = W - ML - MR, plotH = H - MT - MB;
+  const gap = 2, barW = plotW / days - gap;
+  const yTicks = [0, niceMax / 2, niceMax];
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H + 14}`} style={{ display: 'block' }}>
-      {daysList.map((d, i) => {
-        const v = vals[i]; const h = Math.max(v > 0 ? 2 : 0, (v / max) * H);
-        const x = i * (W / days);
-        return (
-          <g key={d}>
-            <rect x={x} y={H - h} width={barW} height={h} rx={2} fill={d === today ? C.accent : (_theme === 'light' ? '#5B8DEF66' : '#5B8DEF55')} />
-            {(days <= 14 || i % 7 === 0) && <text x={x + barW / 2} y={H + 11} fontSize="7" fill={C.text3} textAnchor="middle">{d.slice(8, 10)}</text>}
-          </g>
-        );
-      })}
-    </svg>
+    <div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ display: 'block' }}>
+        {yTicks.map((v) => {
+          const y = MT + plotH - (v / niceMax) * plotH;
+          return (
+            <g key={v}>
+              <line x1={ML} y1={y} x2={ML + plotW} y2={y} stroke={C.borderSoft} strokeWidth="0.6" />
+              <text x={ML - 4} y={y + 2.5} fontSize="6.5" fill={C.text3} textAnchor="end">{v}</text>
+            </g>
+          );
+        })}
+        <text x={0} y={MT + plotH / 2} fontSize="6.5" fill={C.text3} textAnchor="middle" transform={`rotate(-90 8 ${MT + plotH / 2})`}>kcal</text>
+        {daysList.map((d, i) => {
+          const v = vals[i]; const h = Math.max(v > 0 ? 2 : 0, (v / niceMax) * plotH);
+          const x = ML + i * (plotW / days);
+          const dt = new Date(d + 'T00:00:00');
+          return (
+            <g key={d}>
+              <rect x={x} y={MT + plotH - h} width={Math.max(barW, 1)} height={h} rx={2} fill={d === today ? C.accent : (_theme === 'light' ? '#5B8DEF66' : '#5B8DEF55')} />
+              {(days <= 14 || i % 7 === 0) && <text x={x + barW / 2} y={H - 2} fontSize="6.5" fill={C.text3} textAnchor="middle">{pad2(dt.getDate())}/{pad2(dt.getMonth() + 1)}</text>}
+            </g>
+          );
+        })}
+      </svg>
+      <div style={{ textAlign: 'center', fontSize: 10, color: C.text3, marginTop: 2 }}>{lang === 'pt' ? 'Data (dia/mês)' : 'Date (day/month)'}</div>
+    </div>
   );
 }
 function MealRow({ m, lang, onOpen }) {
@@ -5046,7 +5157,8 @@ function HouseEmailReviewCard({ x, lang, t, people = [], onTask, onEvent, onIgno
   const [date, setDate] = useState(c.date || todayISO());
   const [time, setTime] = useState(c.time || '');
   const defaultPerson = people.find((p) => /carol/i.test(p.title || '')) || null;
-  const [personId, setPersonId] = useState(defaultPerson ? defaultPerson.id : null);
+  const [personIds, setPersonIds] = useState(defaultPerson ? [defaultPerson.id] : []);
+  const togglePerson = (id) => setPersonIds((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
   const inputStyle = { background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '6px 8px', fontSize: 12.5 };
   return (
     <div style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
@@ -5066,15 +5178,14 @@ function HouseEmailReviewCard({ x, lang, t, people = [], onTask, onEvent, onIgno
           </div>
           {people.length > 0 && (
             <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 11, color: C.text3, marginBottom: 6 }}>{lang === 'pt' ? 'Convidar (envia convite de verdade por e-mail)' : 'Invite (sends a real calendar invite by email)'}</div>
+              <div style={{ fontSize: 11, color: C.text3, marginBottom: 6 }}>{lang === 'pt' ? 'Convidar (envia convite de verdade por e-mail, pode escolher mais de uma pessoa)' : 'Invite (sends a real calendar invite by email, pick more than one if you like)'}</div>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <Chip active={!personId} onClick={() => setPersonId(null)}>{lang === 'pt' ? 'Ninguém' : 'Nobody'}</Chip>
-                {people.slice(0, 6).map((p) => <Chip key={p.id} active={personId === p.id} onClick={() => setPersonId(p.id)}>{p.title}</Chip>)}
+                {people.slice(0, 8).map((p) => <Chip key={p.id} active={personIds.includes(p.id)} onClick={() => togglePerson(p.id)}>{p.title}</Chip>)}
               </div>
             </div>
           )}
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-            <Btn kind="solid" onClick={() => onEvent(x, date, time || null, personId ? people.find((p) => p.id === personId) : null)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('save')}</Btn>
+            <Btn kind="solid" onClick={() => onEvent(x, date, time || null, personIds)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('save')}</Btn>
             <Btn kind="soft" onClick={() => setAsEvent(false)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('cancel')}</Btn>
           </div>
         </div>
@@ -5112,23 +5223,13 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
     setZScan((p) => ({ ...p, pending: p.pending.filter((y) => y.id !== x.id) }));
     flash(t('savedOne'));
   };
-  const resolveAsEvent = async (x, date, time, person) => {
-    const id = uid();
-    const item = { ...houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'event', date, time } }), id };
-    addItem(item);
+  const resolveAsEvent = (x, date, time, personIds) => {
+    const item = houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'event', date, time } });
+    // addItem já dispara o convite de verdade sozinho quando meta.inviteePersonIds vem preenchido
+    addItem({ ...item, meta: { ...item.meta, inviteePersonIds: personIds && personIds.length ? personIds : undefined } });
     markHouseEmailProcessed(x);
     setZScan((p) => ({ ...p, pending: p.pending.filter((y) => y.id !== x.id) }));
     flash(t('savedOne'));
-    if (person) {
-      const personEmail = person.meta && ((person.meta.emails && person.meta.emails[0]) || person.meta.email);
-      const res = await sendCalendarInvite({ title: item.title, date, time, notes: null, personEmail, personName: person.title });
-      if (res.ok) {
-        updateItem(id, { meta: { ...item.meta, invitedPersonId: person.id, invitedPersonName: person.title, invitedPersonPhoto: person.meta && person.meta.photo, googleEventId: res.eventId, googleEventLink: res.link } });
-        flash(lang === 'pt' ? `Convite enviado pra ${person.title} ✓` : `Invite sent to ${person.title} ✓`);
-      } else {
-        flash((lang === 'pt' ? 'Não consegui enviar o convite: ' : 'Could not send invite: ') + (res.error || ''));
-      }
-    }
   };
   const ignoreEmail = (x) => {
     markHouseEmailProcessed(x);
@@ -5241,7 +5342,7 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       </div>
       <SectionTitle icon={ListTodo} label={t('houseTasks')} color={C.blue} />
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
-      {tasks.length === 0 ? <Empty icon={Home} text={t('nothingHere')} /> : tasks.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {tasks.length === 0 ? <Empty icon={Home} text={t('nothingHere')} /> : tasks.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} onDelete={delItem} />)}
       {houseEvents.length > 0 && <>
         <SectionTitle icon={CalendarDays} label={t('upcomingHouseEvents')} color={C.violet} />
         {houseEvents.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
@@ -6234,6 +6335,12 @@ function App() {
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
   const dock = settings.dock && settings.dock.length ? settings.dock : DEFAULT_DOCK;
+  // mesma ordem usada no Painel (arrastar pra reordenar lá reflete aqui no menu lateral)
+  const orderedModules = [...MODULES].sort((a, b) => {
+    const ord = settings.moduleOrder || [];
+    const ia = ord.indexOf(a.key), ib = ord.indexOf(b.key);
+    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+  });
 
   useEffect(() => { (async () => {
     const s = await loadState();
@@ -6337,9 +6444,20 @@ function App() {
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
   const persistNow = (next) => { persistItems(next).then(() => { if (typeof window !== 'undefined' && window.__lccSaveError) flash(t('saveError')); }); return next; };
-  const addItems = (arr) => setItems((p) => persistNow([...arr.map((x) => ({ id: uid(), createdAt: Date.now(), status: 'planned', currency: 'BRL', meta: {}, ...x })), ...p]));
+  const addItems = (arr) => {
+    const withIds = arr.map((x) => ({ id: uid(), createdAt: Date.now(), status: 'planned', currency: 'BRL', meta: {}, ...x }));
+    setItems((p) => persistNow([...withIds, ...p]));
+    // qualquer evento/compromisso novo com convidados pendentes já dispara o convite de verdade
+    withIds.forEach((it) => maybeSendInvites(it, people, updateItem, lang));
+    return withIds;
+  };
   const addItem = (x) => addItems([x]);
-  const updateItem = (id, patch) => setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, ...patch } : i))));
+  const updateItem = (id, patch) => {
+    const prev = items.find((i) => i.id === id);
+    setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, ...patch } : i))));
+    // idem quando o item é editado (ex.: adicionou uma pessoa a um compromisso já existente)
+    if (prev) maybeSendInvites({ ...prev, ...patch, meta: { ...prev.meta, ...(patch.meta || {}) } }, people, updateItem, lang);
+  };
   const toggleTask = (id) => {
     if (String(id).startsWith('tt_')) { const it = ttItems.find((x) => x.id === id); if (it && it.status !== 'done') ttComplete(it); return; }
     const it = items.find((i) => i.id === id);
@@ -6459,7 +6577,7 @@ function App() {
                   </button>
                   {sideDash && (
                     <div style={{ marginLeft: 12, marginTop: 2, borderLeft: `1px solid ${C.borderSoft}`, paddingLeft: 6 }}>
-                      {MODULES.map((mo) => {
+                      {orderedModules.map((mo) => {
                         const on = active.screen === 'dashboard' && active.module && active.module.key === mo.key;
                         const MIc = mo.icon;
                         return <button key={mo.key} onClick={() => setActive({ screen: 'dashboard', module: mo })} style={{ background: on ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: on ? C.accent : C.text3, display: 'flex', alignItems: 'center', gap: 9, padding: '7px 11px', borderRadius: 9, fontSize: 12.5, fontWeight: on ? 600 : 400, width: '100%', textAlign: 'left' }}>
