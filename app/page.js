@@ -2025,9 +2025,9 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const houseTasksTop = [...houseTasksOpen].sort((a, b) => houseTaskScore(b) - houseTaskScore(a) || (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 3);
   const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   // próximas 24h: de agora até a mesma hora de amanhã — só compromissos de verdade (nunca
-  // encomendas/entregas, que não são um compromisso pessoal ou de trabalho)
+  // encomendas/entregas nem refeições, que não são um compromisso pessoal ou de trabalho)
   const tomorrow = addDays(today, 1);
-  const in24hItems = items.filter((i) => i.status !== 'done' && i.type !== 'task' && i.type !== 'purchase' && !(i.meta && i.meta.purchaseRef) && (
+  const in24hItems = items.filter((i) => i.status !== 'done' && i.type !== 'task' && i.type !== 'purchase' && i.type !== 'meal' && !(i.meta && i.meta.purchaseRef) && (
     (i.date === today && (!i.time || i.time >= hm)) ||
     (i.date === tomorrow && (!i.time || i.time <= hm))
   )).sort((a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99')));
