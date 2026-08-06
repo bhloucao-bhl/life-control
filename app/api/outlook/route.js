@@ -1,4 +1,5 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
+import { brDate } from '../../../lib/tz';
 export const runtime = 'nodejs';
 
 export async function GET(req) {
@@ -8,9 +9,15 @@ export async function GET(req) {
   const token = await validToken(user.id, 'microsoft');
   if (!token) return Response.json({ connected: false, events: [] });
 
-  const now = new Date();
-  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0).toISOString();
-  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0).toISOString();
+  // janela do dia "de hoje" em horario de Brasilia — o servidor (Vercel) roda em UTC, e como o
+  // Prefer abaixo pede pro Graph interpretar start/end no fuso de Sao Paulo, as strings precisam
+  // ser wall-clock BR (sem "Z"/offset), não a meia-noite UTC do servidor.
+  const todayStr = brDate(Date.now());
+  const tomorrowDt = new Date(todayStr + 'T00:00:00Z');
+  tomorrowDt.setUTCDate(tomorrowDt.getUTCDate() + 1);
+  const tomorrowStr = tomorrowDt.toISOString().slice(0, 10);
+  const start = `${todayStr}T00:00:00`;
+  const end = `${tomorrowStr}T00:00:00`;
   const url = `https://graph.microsoft.com/v1.0/me/calendarView?startDateTime=${start}&endDateTime=${end}&$orderby=start/dateTime&$top=20`;
 
   try {

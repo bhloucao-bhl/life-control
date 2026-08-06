@@ -1,4 +1,5 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
+import { brDate } from '../../../lib/tz';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -76,7 +77,7 @@ export async function GET(req) {
           id,
           from: header(m.payload, 'From'),
           subject: header(m.payload, 'Subject'),
-          date: m.internalDate ? new Date(Number(m.internalDate)).toISOString().slice(0, 10) : null,
+          date: m.internalDate ? brDate(Number(m.internalDate)) : null,
           body: (plainBody(m.payload) || m.snippet || '').slice(0, 3500),
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
@@ -120,7 +121,7 @@ export async function GET(req) {
 
   if (!mails.length && !calEvents.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = brDate(Date.now());
   const system = `Você é um assistente que identifica itens relacionados a SAÚDE (médico, clínica, exame, consulta, tratamento) em e-mails e eventos de agenda de uma pessoa, para um app pessoal de controle de vida.
 Hoje é ${today}. Responda SOMENTE com um array JSON, sem texto fora dele, sem cercas de código.
 

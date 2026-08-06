@@ -1,3 +1,5 @@
+import { brDateTime, brDate } from '../../../lib/tz';
+
 export const runtime = 'nodejs';
 export const revalidate = 0;
 
@@ -101,7 +103,11 @@ export async function GET(req) {
     }));
     // proximas 12 horas de chuva
     const hh = j.hourly || {};
-    const nowIso = new Date().toISOString().slice(0, 13);
+    // timezone=auto no open-meteo devolve os horarios em hora LOCAL (Sao Paulo, sem offset) —
+    // comparar com hora UTC do servidor (Vercel) deslocava o índice em 3h, cortando/atrasando
+    // a janela de "próximas 12h de chuva".
+    const { date: nowD, time: nowT } = brDateTime(Date.now());
+    const nowIso = `${nowD}T${nowT.slice(0, 2)}`;
     let idx = (hh.time || []).findIndex((x) => String(x).slice(0, 13) >= nowIso);
     if (idx < 0) idx = 0;
     const hours = (hh.time || []).slice(idx, idx + 12).map((x, k) => ({
@@ -139,7 +145,7 @@ export async function GET(req) {
   // Se a fonte nao trouxe variacao, compara com o fechamento anterior.
   if (out.fx && out.fx.some((x) => x.pct == null)) {
     try {
-      const d = new Date(Date.now() - 4 * 86400000).toISOString().slice(0, 10);
+      const d = brDate(Date.now() - 4 * 86400000);
       const r = await fetch(`https://api.frankfurter.dev/v1/${d}..?base=BRL&symbols=USD,EUR`, { next: { revalidate: 3600 } });
       if (r.ok) {
         const j = await r.json();

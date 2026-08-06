@@ -1,4 +1,5 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
+import { brDateTime } from '../../../lib/tz';
 
 export const runtime = 'nodejs';
 export const revalidate = 0;
@@ -58,7 +59,7 @@ export async function GET(req) {
       if (hasTime) {
         const m = startRaw.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
         if (m) { dateStr = m[1]; timeStr = m[2] + ':' + m[3]; }
-        else { const dt = new Date(startRaw); dateStr = isoDay(dt); timeStr = dt.toISOString().slice(11, 16); }
+        else { const bd = brDateTime(startRaw); dateStr = bd.date; timeStr = bd.time; }
         // duração a partir do end
         const endRaw = e.end && (e.end.dateTime || e.end.date);
         if (endRaw) { try { const diff = (new Date(endRaw) - new Date(startRaw)) / 60000; if (diff > 0 && diff < 1440) durationMin = Math.round(diff); } catch (x) {} }
@@ -114,15 +115,16 @@ export async function GET(req) {
         ((m.payload && m.payload.headers) || []).forEach((x) => { hs[x.name.toLowerCase()] = x.value; });
         const from = hs.from || '';
         const sender = from.replace(/<.*>/, '').replace(/"/g, '').trim() || from;
-        const when = m.internalDate ? new Date(Number(m.internalDate)) : null;
+        const when = m.internalDate ? Number(m.internalDate) : null;
+        const bd = when ? brDateTime(when) : null;
         return {
           id: 'g_' + id,
           type: 'message',
           domain: 'personal',
           title: hs.subject || '(sem assunto)',
           notes: m.snippet || '',
-          date: when ? isoDay(when) : null,
-          time: when ? when.toTimeString().slice(0, 5) : null,
+          date: bd ? bd.date : null,
+          time: bd ? bd.time : null,
           status: 'planned',
           priority: 2,
           createdAt: m.internalDate ? Number(m.internalDate) : Date.now(),

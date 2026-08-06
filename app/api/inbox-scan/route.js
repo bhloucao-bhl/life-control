@@ -1,4 +1,5 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
+import { brDate } from '../../../lib/tz';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -128,14 +129,14 @@ Ignore propaganda, newsletter, promoção e sugestão de destino. Se nada qualif
           id,
           from: header(m.payload, 'From'),
           subject: header(m.payload, 'Subject'),
-          date: m.internalDate ? new Date(Number(m.internalDate)).toISOString().slice(0, 10) : null,
+          date: m.internalDate ? brDate(Number(m.internalDate)) : null,
           body: (plainBody(m.payload) || m.snippet || '').slice(0, 4000),
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
     }))).filter(Boolean);
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = brDate(Date.now());
     const system = `Você extrai reservas de viagem e compromissos de e-mails, para um app pessoal.
 Hoje é ${today}. Responda SOMENTE com um array JSON, sem texto fora dele, sem cercas de código.
 
