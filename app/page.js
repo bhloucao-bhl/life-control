@@ -803,10 +803,22 @@ async function classifyCapture(raw, lang) {
   }));
 }
 function buildContext(items) {
+  const today = todayISO();
   const open = items.filter((i) => i.type === 'task' && i.status !== 'done').slice(0, 30).map((i) => ({ title: i.title, due: i.date, priority: i.priority, area: i.domain }));
   const events = items.filter((i) => i.date && ['event', 'appointment', 'trip', 'flight'].includes(i.type)).slice(0, 25).map((i) => ({ title: i.title, date: i.date, area: i.domain }));
-  const exp = items.filter((i) => i.type === 'expense' && i.amount); const month = todayISO().slice(0, 7);
-  return { today: todayISO(), openTasks: open, events, monthSpendBRL: exp.filter((i) => (i.date || '').startsWith(month)).reduce((a, b) => a + b.amount, 0) };
+  const exp = items.filter((i) => i.type === 'expense' && i.amount); const month = today.slice(0, 7);
+  // dados de saúde/dieta — mesma seleção usada no "Resumo de hoje" da aba Saúde, pra o Dr. Claude
+  // ter acesso completo em qualquer lugar do app que fale com ele (inclusive na aba Dieta).
+  const healthMetrics = items.filter((i) => i.type === 'healthMetric' && i.title !== '__checked__').slice(-40).map((i) => ({ indicator: i.title, value: i.amount, unit: i.meta && i.meta.unit, status: i.meta && i.meta.status, date: i.date }));
+  const conditions = items.filter((i) => i.type === 'condition' && i.meta && i.meta.status === 'ativa').map((i) => i.title);
+  const allergies = items.filter((i) => i.type === 'allergy').map((i) => i.title);
+  const medications = items.filter((i) => i.type === 'medication' && !(i.meta && i.meta.endDate)).map((i) => i.title);
+  const recentMeals = items.filter((i) => i.type === 'meal' && i.domain === 'health' && i.date >= addDays(today, -14)).map((i) => ({ title: i.title, date: i.date, calories: i.meta && i.meta.calories, proteinG: i.meta && (i.meta.proteinG ?? i.meta.protein), carbsG: i.meta && (i.meta.carbsG ?? i.meta.carbs), fatG: i.meta && (i.meta.fatG ?? i.meta.fat) }));
+  const recentExercise = items.filter((i) => i.type === 'exercise' && i.date >= addDays(today, -14)).map((i) => ({ date: i.date, activity: i.meta && i.meta.activityType, durationMin: i.meta && i.meta.durationMin, distanceKm: i.meta && i.meta.distanceKm }));
+  return {
+    today, openTasks: open, events, monthSpendBRL: exp.filter((i) => (i.date || '').startsWith(month)).reduce((a, b) => a + b.amount, 0),
+    health: { metrics: healthMetrics, conditions, allergies, medications, recentMeals, recentExercise },
+  };
 }
 
 /* ---------------- primitives ---------------- */
@@ -928,7 +940,7 @@ function MouraBadge({ size = 15 }) {
 }
 function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount, onDelete }) {
   const overdue = item.type === 'task' && item.status !== 'done' && item.date && item.date < todayISO();
-  const Ic = typeIcon(item.type); const mile = item.meta && item.meta.milestone;
+  const Ic = (item.meta && item.meta.purchaseRef) ? Package : typeIcon(item.type); const mile = item.meta && item.meta.milestone;
   const swipeable = item.type === 'task' && !!onDelete;
   const row = (
     <div onClick={() => onOpen(item)} style={{ ...card, padding: '12px 14px', display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: swipeable ? 0 : 8, cursor: 'pointer' }}>
@@ -2012,9 +2024,10 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const houseTaskScore = (i) => (i.priority === 1 ? 2 : 0) + (i.date && i.date < today ? 1 : 0);
   const houseTasksTop = [...houseTasksOpen].sort((a, b) => houseTaskScore(b) - houseTaskScore(a) || (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 3);
   const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
-  // próximas 24h: de agora até a mesma hora de amanhã
+  // próximas 24h: de agora até a mesma hora de amanhã — só compromissos de verdade (nunca
+  // encomendas/entregas, que não são um compromisso pessoal ou de trabalho)
   const tomorrow = addDays(today, 1);
-  const in24hItems = items.filter((i) => i.status !== 'done' && i.type !== 'task' && (
+  const in24hItems = items.filter((i) => i.status !== 'done' && i.type !== 'task' && i.type !== 'purchase' && !(i.meta && i.meta.purchaseRef) && (
     (i.date === today && (!i.time || i.time >= hm)) ||
     (i.date === tomorrow && (!i.time || i.time <= hm))
   )).sort((a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99')));
@@ -2716,19 +2729,53 @@ function teamsLink(notes) {
   const m = String(notes).match(/https:\/\/teams\.microsoft\.com\/[^\s)>\]"']+/i);
   return m ? m[0] : null;
 }
+// empacota eventos que se sobrepõem em colunas lado a lado (como o Google Calendar) em vez de
+// empilhar um em cima do outro. Retorna os mesmos itens com _col (índice da coluna) e _cols
+// (total de colunas do grupo que se sobrepõe) anexados.
+function layoutColumns(events) {
+  const sorted = [...events].sort((a, b) => a._s - b._s || a._e - b._e);
+  let columns = []; // fim (min) do último evento colocado em cada coluna
+  let cluster = []; let clusterEnd = -Infinity;
+  const out = [];
+  const flush = () => {
+    if (!cluster.length) return;
+    const cols = Math.max(...cluster.map((e) => e._col)) + 1;
+    cluster.forEach((e) => out.push({ ...e, _cols: cols }));
+    cluster = [];
+  };
+  sorted.forEach((e) => {
+    if (e._s >= clusterEnd) { flush(); columns = []; clusterEnd = -Infinity; }
+    let placed = false;
+    for (let c = 0; c < columns.length; c++) {
+      if (columns[c] <= e._s) { columns[c] = e._e; e._col = c; placed = true; break; }
+    }
+    if (!placed) { columns.push(e._e); e._col = columns.length - 1; }
+    clusterEnd = Math.max(clusterEnd, e._e);
+    cluster.push(e);
+  });
+  flush();
+  return out;
+}
+// pequeno emoji/ícone visual pra bater o olho no tipo do evento no calendário
+function eventKindBadge(i) {
+  if (i.type === 'meal') return <Utensils size={11} />;
+  if (i.meta && i.meta.purchaseRef) return <Package size={11} />;
+  return null;
+}
 function DayPlanner({ dayItems, lang, t, onOpen }) {
   const timed = dayItems.filter((i) => i.time && /^\d{2}:\d{2}/.test(i.time));
   const allDay = dayItems.filter((i) => !i.time || !/^\d{2}:\d{2}/.test(i.time));
   const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
   const dur = (i) => (i.meta && i.meta.durationMin) || (i.type === 'event' || i.type === 'appointment' ? 60 : 30);
-  const withConf = timed.map((i) => ({ ...i, _s: toMin(i.time), _e: toMin(i.time) + dur(i) }));
-  withConf.forEach((a) => { a._conf = withConf.some((b) => b.id !== a.id && a._s < b._e && b._s < a._e); });
+  const withConf = layoutColumns(timed.map((i) => ({ ...i, _s: toMin(i.time), _e: toMin(i.time) + dur(i) })));
   if (timed.length === 0 && allDay.length === 0) return <Empty icon={CalIcon} text={t('noItemsDay')} />;
   // régua fixa 08:00–19:00; só expande se algum compromisso real cair fora dela (nunca corta um evento)
   const startH = Math.min(8, ...withConf.map((i) => Math.floor(i._s / 60)));
   const endH = Math.max(19, ...withConf.map((i) => Math.ceil(i._e / 60)));
   const hours = []; for (let h = startH; h <= endH; h++) hours.push(h);
   const PX = 52; // altura por hora
+  const LANE = 50; // px reservados pra régua de horas à esquerda
+  const GUT = 6; // px de margem à direita
   return (
     <div>
       {timed.length > 0 && (
@@ -2745,14 +2792,19 @@ function DayPlanner({ dayItems, lang, t, onOpen }) {
               const col = eventColors(i);
               const link = teamsLink(i.notes);
               const isWork = i.domain === 'work' || (i.meta && i.meta.moura);
+              const cols = i._cols || 1;
+              const left = `calc(${LANE}px + (100% - ${LANE + GUT}px) * ${i._col / cols})`;
+              const width = `calc((100% - ${LANE + GUT}px) / ${cols} - 3px)`;
+              const badge = eventKindBadge(i);
               return (
-                <div key={i.id} onClick={() => onOpen(i)} style={{ position: 'absolute', top, height, left: i._conf ? '55%' : 50, right: 6, background: col.bg, borderLeft: `3px solid ${col.border}`, borderRadius: 8, padding: '5px 8px', cursor: 'pointer', overflow: 'hidden' }}>
+                <div key={i.id} onClick={() => onOpen(i)} style={{ position: 'absolute', top, height, left, width, background: col.bg, borderLeft: `3px solid ${col.border}`, borderRadius: 8, padding: '5px 8px', cursor: 'pointer', overflow: 'hidden', boxSizing: 'border-box', boxShadow: cols > 1 ? `0 0 0 1px ${C.surface}` : 'none' }}>
                   <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                     {isWork && <MouraBadge size={12} />}
+                    {badge && <span style={{ color: col.text, display: 'flex', flexShrink: 0 }}>{badge}</span>}
                     <span style={{ fontSize: 11.5, fontWeight: 600, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span>
                     {link && <Video size={11} style={{ color: col.text, flexShrink: 0 }} />}
                   </div>
-                  <div style={{ fontSize: 10, color: col.text, opacity: 0.8 }}>{i.time}{i._conf ? ' · ⚠' : ''}</div>
+                  <div style={{ fontSize: 10, color: col.text, opacity: 0.8 }}>{i.time}</div>
                 </div>
               );
             })}
@@ -2992,7 +3044,10 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const decideDomain = (item, domain) => updateItem(item.id, { domain, meta: { ...item.meta, needsDomainDecision: false } });
   const [workFilter, setWorkFilter] = useState('all'); // para aba trabalho: all | events | tasks
   const [docCat, setDocCat] = useState('all'); // para aba documentos: all | work | health | personal | kids
+  const [taskSrc, setTaskSrc] = useState('all'); // filtro de origem, acima de tudo: all | ticktick | rest
+  const isTT = (i) => !!(i.meta && i.meta.external === 'ticktick');
   const [ttProjectFilter, setTtProjectFilter] = useState(null); // filtro por lista do TickTick
+  useEffect(() => { if (taskSrc === 'ticktick' && tf !== 0 && tf !== 5) setTf(0); }, [taskSrc]);
   const [grace, setGrace] = useState({}); // id -> true: recem concluida, ainda visivel por 5s
   const graceToggle = (id) => {
     const it = items.find((x) => x.id === id) || {};
@@ -3006,7 +3061,11 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     }
   };
   const base = items.filter(module.filter);
-  const list = (module.key === 'tasks' ? base.filter((i) => !(i.meta && i.meta.needsDomainDecision) && (TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) && (!ttProjectFilter || (i.meta && i.meta.project) === ttProjectFilter)) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list = (module.key === 'tasks' ? base.filter((i) => !(i.meta && i.meta.needsDomainDecision)
+      && (taskSrc === 'all' || (taskSrc === 'ticktick' ? isTT(i) : !isTT(i)))
+      && (TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id]))
+      && (!ttProjectFilter || (i.meta && i.meta.project) === ttProjectFilter))
+    : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
   if (module.key === 'docs') { const soon = items.filter((i) => i.type === 'document' && i.date && i.date <= addDays(todayISO(), 60)).length; hi = { label: `${t('expiring')} (60d)`, value: String(soon), color: soon ? C.rose : C.text2 }; }
   else if (module.key === 'tasks') hi = { label: t('open'), value: String(list.filter((i) => i.status !== 'done').length), color: C.accent };
@@ -3048,9 +3107,16 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
         </div>
       )}
       {module.key === 'tasks' && !ttConnected && <HintCard icon={RefreshCw} text={t('tickHint')} />}
-      {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>{TASK_FILTERS.map(([lk], idx) => <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
-      {module.key === 'tasks' && (() => {
-        const projects = [...new Set(base.filter((i) => i.meta && i.meta.project).map((i) => i.meta.project))];
+      {module.key === 'tasks' && ttConnected && (
+        <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+          <Chip active={taskSrc === 'all'} onClick={() => setTaskSrc('all')}>{lang === 'pt' ? 'Tudo' : 'All'}</Chip>
+          <Chip active={taskSrc === 'ticktick'} onClick={() => setTaskSrc('ticktick')} color={C.green}>TickTick</Chip>
+          <Chip active={taskSrc === 'rest'} onClick={() => setTaskSrc('rest')} color={C.accent}>{lang === 'pt' ? 'Demais' : 'Rest'}</Chip>
+        </div>
+      )}
+      {module.key === 'tasks' && <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 4, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>{TASK_FILTERS.map(([lk], idx) => (idx !== 0 && idx !== 5 && taskSrc === 'ticktick') ? null : <Chip key={lk} active={tf === idx} onClick={() => setTf(idx)}>{t(lk)}</Chip>)}</div>}
+      {module.key === 'tasks' && taskSrc !== 'rest' && (() => {
+        const projects = [...new Set(base.filter((i) => isTT(i) && i.meta && i.meta.project).map((i) => i.meta.project))];
         if (!projects.length) return null;
         return (
           <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8, marginBottom: 6, WebkitMaskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)', maskImage: 'linear-gradient(to right, black calc(100% - 26px), transparent)' }}>
@@ -3516,14 +3582,15 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
   const [statusFilter, setStatusFilter] = useState('all'); // all | transit | delivered
   const markReceived = (p) => { updateItem(p.id, { meta: { ...p.meta, stage: 'delivered', deliveredDate: today } }); flash(lang === 'pt' ? 'Marcada como recebida ✓' : 'Marked as received ✓'); };
 
-  // item 4f: compra enviada com data estimada de chegada -> cria/atualiza um evento (sem horário) no calendário automaticamente
+  // item 4f: compra enviada com data estimada de chegada -> cria/atualiza um evento no calendário
+  // automaticamente, às 20h (fim do dia) em vez de dia inteiro — só pra marcar o dia, sem ocupar a agenda toda.
   useEffect(() => {
     allRaw.forEach((p) => {
       if (p.meta && p.meta.stage === 'shipped' && p.meta.etaDate) {
         const evId = 'purchase_eta_' + p.id;
         const already = items.find((i) => i.id === evId || (i.meta && i.meta.purchaseRef === p.id));
         if (!already) {
-          addItem({ id: evId, type: 'event', domain: 'shopping', title: `${lang === 'pt' ? 'Chegada da compra' : 'Arrival'}: ${p.title}${p.meta.store ? ' (' + p.meta.store + ')' : ''}`, date: p.meta.etaDate, meta: { purchaseRef: p.id, auto: true } });
+          addItem({ id: evId, type: 'event', domain: 'shopping', title: `${lang === 'pt' ? 'Chegada da compra' : 'Arrival'}: ${p.title}${p.meta.store ? ' (' + p.meta.store + ')' : ''}`, date: p.meta.etaDate, time: '20:00', meta: { purchaseRef: p.id, auto: true } });
         }
       }
     });
