@@ -120,6 +120,31 @@ function dedupeHouseItems(items, delItem) {
   return dupes.length;
 }
 function normTitle(s) { return String(s || '').trim().toLowerCase(); }
+async function markTravelEmailProcessed(messageId) {
+  if (!messageId) return;
+  try { await authFetch('/api/inbox-scan', { method: 'POST', body: JSON.stringify({ messageId }) }); } catch (e) {}
+}
+// chave de duplicata pra voos/viagens vindos de e-mail: mesmo tipo+título+data+hora, ou mesmo
+// nº de voo na mesma data quando disponível (mais confiável que o título, que a Claude pode variar)
+function travelDupeKey(i) {
+  const fn = i.meta && i.meta.flightNumber;
+  if (fn && i.date) return 'fn:' + normTitle(fn) + ':' + i.date;
+  return 'ti:' + i.type + ':' + normTitle(i.title) + ':' + (i.date || '') + ':' + (i.time || '');
+}
+// rotina de verificação: junta voos/viagens duplicados que vieram de e-mail (aceitos mais de uma vez)
+function dedupeTravelItems(items, delItem) {
+  const byKey = new Map();
+  const dupes = [];
+  (items || []).filter((i) => (i.type === 'flight' || i.type === 'trip') && i.meta && i.meta.fromEmail).forEach((i) => {
+    const key = travelDupeKey(i);
+    const kept = byKey.get(key);
+    if (!kept) { byKey.set(key, i); return; }
+    const keepCur = (kept.createdAt || 0) - (i.createdAt || 0);
+    if (keepCur <= 0) dupes.push(i); else { dupes.push(kept); byKey.set(key, i); }
+  });
+  dupes.forEach((i) => delItem(i.id));
+  return dupes.length;
+}
 // dedupe: um e-mail já virou item (por gmailId) ou já existe item com o mesmo título vindo de e-mail da casa
 function isHouseDuplicate(x, items) {
   const wantTitle = normTitle((x.classification && x.classification.title) || x.zText);
@@ -241,7 +266,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, Sparkle, GripVertical
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -364,7 +389,7 @@ const S = {
   claudeIntro: L('Sou o Claude, dentro do seu app. Vejo tudo o que você cataloga aqui e posso resumir seu dia, achar pendências, somar gastos, sugerir mensagens e ações.', "I'm Claude, inside your app. I see everything you catalog here and can summarize your day, find loose ends, add up spending, draft messages and actions."),
   total: L('Total', 'Total'), thisMonth: L('este mês', 'this month'), spent: L('Gasto', 'Spent'), expiring: L('Vencendo', 'Expiring'),
   quickAdd: L('Adicionar', 'Add'), open: L('Abertas', 'Open'),
-  t_task: L('Tarefa', 'Task'), t_event: L('Evento', 'Event'), t_expense: L('Gasto', 'Expense'), t_meal: L('Refeição', 'Meal'),
+  t_task: L('Tarefa', 'Task'), t_event: L('Evento', 'Event'), t_expense: L('Gasto', 'Expense'), t_meal: L('Refeição', 'Meal'), t_exercise: L('Atividade física', 'Exercise'),
   t_med: L('Medicação', 'Medication'), t_appointment: L('Consulta', 'Appointment'), t_document: L('Documento', 'Document'),
   t_vehicle: L('Veículo', 'Vehicle'), t_trip: L('Viagem', 'Trip'), t_flight: L('Voo', 'Flight'), t_shopping: L('Compra', 'Shopping'), t_purchase: L('Pedido', 'Order'), t_condition: L('Condição', 'Condition'), t_allergy: L('Alergia', 'Allergy'), t_medication: L('Medicação', 'Medication'), t_healthMetric: L('Indicador', 'Indicator'),
   t_bill: L('Conta', 'Bill'), t_note: L('Nota', 'Note'), t_person: L('Pessoa', 'Person'), t_account: L('Conta/Cartão', 'Account/Card'),
@@ -441,6 +466,8 @@ const META = {
   condition: [['status', 'Status', 'Status'], ['since', 'Desde', 'Since', 'date']],
   allergy: [['severity', 'Gravidade', 'Severity'], ['reaction', 'Reação', 'Reaction']],
   medication: [['dose', 'Dose', 'Dose'], ['frequency', 'Frequência', 'Frequency'], ['prescribedBy', 'Prescrito por', 'Prescribed by'], ['startDate', 'Início', 'Start', 'date'], ['endDate', 'Fim (deixe vazio se em uso)', 'End (blank if ongoing)', 'date']],
+  meal: [['calories', 'Calorias (kcal)', 'Calories (kcal)', 'number'], ['proteinG', 'Proteína (g)', 'Protein (g)', 'number'], ['carbsG', 'Carboidrato (g)', 'Carbs (g)', 'number'], ['fatG', 'Gordura (g)', 'Fat (g)', 'number']],
+  exercise: [['activityType', 'Atividade', 'Activity'], ['durationMin', 'Duração (min)', 'Duration (min)', 'number'], ['distanceKm', 'Distância (km)', 'Distance (km)', 'number'], ['calories', 'Calorias (kcal)', 'Calories (kcal)', 'number']],
 };
 
 const AIRLINES = { LA: 'LATAM', JJ: 'LATAM', G3: 'GOL', AD: 'Azul', AV: 'Avianca', CM: 'Copa', AA: 'American', UA: 'United', DL: 'Delta', B6: 'JetBlue', AC: 'Air Canada', QR: 'Qatar Airways', EK: 'Emirates', EY: 'Etihad', TK: 'Turkish', TP: 'TAP', IB: 'Iberia', UX: 'Air Europa', AF: 'Air France', KL: 'KLM', LH: 'Lufthansa', BA: 'British Airways', AZ: 'ITA Airways', QF: 'Qantas', JL: 'Japan Airlines', NH: 'ANA', SQ: 'Singapore', CX: 'Cathay Pacific', EI: 'Aer Lingus', LX: 'SWISS', AY: 'Finnair' };
@@ -485,7 +512,7 @@ function fmtLongPretty(iso, lang) {
   return `${wd}, ${mon} ${d.getDate()}, ${d.getFullYear()}`;
 }
 function fmtMoney(n, lang) { if (n == null || isNaN(n)) return ''; return new Intl.NumberFormat(loc(lang), { style: 'currency', currency: 'BRL' }).format(n); }
-const TYPES = ['task', 'event', 'expense', 'income', 'meal', 'med', 'appointment', 'document', 'vehicle', 'maintenance', 'trip', 'flight', 'shopping', 'purchase', 'bill', 'note', 'person', 'account', 'message', 'gift', 'condition', 'allergy', 'medication', 'healthMetric'];
+const TYPES = ['task', 'event', 'expense', 'income', 'meal', 'exercise', 'med', 'appointment', 'document', 'vehicle', 'maintenance', 'trip', 'flight', 'shopping', 'purchase', 'bill', 'note', 'person', 'account', 'message', 'gift', 'condition', 'allergy', 'medication', 'healthMetric'];
 const DOMAINS = ['personal', 'today', 'health', 'home', 'finance', 'kids', 'docs', 'cars', 'travel', 'work'];
 const isMoney = (ty) => ty === 'expense' || ty === 'income' || ty === 'bill' || ty === 'maintenance' || ty === 'purchase';
 const CATEGORIES = {
@@ -655,6 +682,27 @@ async function classifyCaptureFile(b64, mime, lang) {
     amount: x.amount != null ? Number(x.amount) : null, person: x.person || null, priority: [1, 2, 3].includes(x.priority) ? x.priority : 3, confidence: x.confidence,
   }));
 }
+// classifica uma foto tirada no captador rápido: se for comida, devolve uma estimativa de
+// refeição (calorias/macros) pra confirmar antes de salvar; senão, cai no capturador genérico
+async function classifyPhotoSmart(b64, mime, lang) {
+  const langName = lang === 'pt' ? 'Brazilian Portuguese' : 'US English';
+  const system = `You look at a photo taken from a personal life app's quick-capture button. First decide: is this a photo of a MEAL/FOOD/DRINK about to be eaten or already eaten?
+If YES, output ONLY this JSON (no prose, no fences): {"kind":"meal","title":"short dish name in ${langName}","calories":number,"proteinG":number,"carbsG":number,"fatG":number,"confidence":0..1}. Estimate calories and macros as best you can from what's visibly on the plate/glass — a reasonable single-serving estimate, never null.
+If NO (it's a receipt, document, screenshot, ticket, note, etc.), output ONLY this JSON: {"kind":"generic","items":[{"type": one of [task,event,expense,meal,med,appointment,document,trip,flight,shopping,bill,note], "domain": one of [${DOMAINS.join(',')}], "title": short title in ${langName}, "date":"YYYY-MM-DD" or null, "time":"HH:MM" or null, "amount": number or null, "person": string or null, "priority":1|2|3, "confidence":0..1}]}. Today is ${todayISO()}.`;
+  const block = { type: 'image', source: { type: 'base64', media_type: mime || 'image/jpeg', data: b64 } };
+  const text = await callClaude(system, [{ role: 'user', content: [block, { type: 'text', text: lang === 'pt' ? 'Analise esta foto.' : 'Analyze this photo.' }] }]);
+  let j = text; const a = text.indexOf('{'), b = text.lastIndexOf('}'); if (a !== -1 && b !== -1) j = text.slice(a, b + 1);
+  const x = JSON.parse(j);
+  if (x.kind === 'meal') {
+    return { kind: 'meal', title: String(x.title || (lang === 'pt' ? 'Refeição' : 'Meal')).slice(0, 140), calories: Number(x.calories) || 0, proteinG: Number(x.proteinG) || 0, carbsG: Number(x.carbsG) || 0, fatG: Number(x.fatG) || 0, confidence: typeof x.confidence === 'number' ? x.confidence : 0.5 };
+  }
+  const arr = Array.isArray(x.items) ? x.items : [];
+  return { kind: 'generic', items: arr.map((it) => ({
+    type: TYPES.includes(it.type) ? it.type : 'note', domain: DOMAINS.includes(it.domain) ? it.domain : 'personal',
+    title: String(it.title || 'Item').slice(0, 160), date: it.date || null, time: it.time || null,
+    amount: it.amount != null ? Number(it.amount) : null, person: it.person || null, priority: [1, 2, 3].includes(it.priority) ? it.priority : 3, confidence: it.confidence,
+  })) };
+}
 async function classifyCapture(raw, lang) {
   const langName = lang === 'pt' ? 'Brazilian Portuguese' : 'US English';
   const system = `You are the capture classifier for a personal life app. Convert the raw note into one or more items, splitting compound notes. Output ONLY a JSON array — no prose, no fences. Each item: {"type": one of [task,event,expense,meal,med,appointment,document,trip,flight,shopping,bill,note], "domain": one of [${DOMAINS.join(',')}], "title": short title in ${langName}, "date":"YYYY-MM-DD" or null, "time":"HH:MM" or null, "amount": number or null, "person": string or null, "priority":1|2|3, "confidence":0..1}. Today is ${todayISO()}. Resolve relative dates. IMPORTANT for "time": always extract the time of day when present, converting Brazilian formats to 24h HH:MM. Examples: "14h"→"14:00", "14hs"→"14:00", "às 14"→"14:00", "9h30"→"09:30", "14:30"→"14:30", "2 da tarde"→"14:00", "meio-dia"→"12:00", "8 da manhã"→"08:00". If an event/appointment/meeting has a time, it MUST be in the time field. If unsure, type "note", domain "personal".`;
@@ -743,7 +791,7 @@ function HintCard({ icon: Icon, text }) {
   return <div style={{ ...card, padding: 12, marginBottom: 10, display: 'flex', gap: 9, alignItems: 'flex-start', background: C.bg2 }}><Icon size={14} style={{ color: C.text3, marginTop: 1, flexShrink: 0 }} /><div style={{ fontSize: 11.5, color: C.text3, lineHeight: 1.5 }}>{text}</div></div>;
 }
 function typeIcon(type) {
-  const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, purchase: Package, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift, condition: HeartPulse, allergy: AlertTriangle, medication: Pill, healthMetric: Activity };
+  const m = { task: ListTodo, event: CalIcon, expense: Wallet, income: TrendingUp, meal: Utensils, exercise: Dumbbell, med: Pill, appointment: Stethoscope, document: FileText, vehicle: Car, maintenance: Wrench, trip: Plane, flight: Plane, shopping: ShoppingCart, purchase: Package, bill: Wallet, note: FileText, person: UserRound, account: CreditCard, message: MessageSquare, gift: Gift, condition: HeartPulse, allergy: AlertTriangle, medication: Pill, healthMetric: Activity };
   return m[type] || FileText;
 }
 function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: LI, rightLabel, rightColor, rightIcon: RI }) {
@@ -1310,6 +1358,30 @@ function DraftReview({ drafts, lang, t, onDone, onCancel }) {
     </div>
   );
 }
+function MealConfirmModal({ draft, lang, t, onSave, onCancel }) {
+  const [title, setTitle] = useState(draft.title);
+  const [calories, setCalories] = useState(draft.calories);
+  const [proteinG, setProteinG] = useState(draft.proteinG);
+  const [carbsG, setCarbsG] = useState(draft.carbsG);
+  const [fatG, setFatG] = useState(draft.fatG);
+  return (
+    <Modal onClose={onCancel}>
+      <SheetHead title={lang === 'pt' ? 'Registrar refeição' : 'Log meal'} onClose={onCancel} icon={Flame} />
+      <Field label={lang === 'pt' ? 'O que é' : 'What is it'}><input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyleBig} /></Field>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+        <Field label={lang === 'pt' ? 'Calorias (kcal)' : 'Calories (kcal)'}><input type="number" value={calories} onChange={(e) => setCalories(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
+        <Field label={lang === 'pt' ? 'Proteína (g)' : 'Protein (g)'}><input type="number" value={proteinG} onChange={(e) => setProteinG(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
+        <Field label={lang === 'pt' ? 'Carboidrato (g)' : 'Carbs (g)'}><input type="number" value={carbsG} onChange={(e) => setCarbsG(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
+        <Field label={lang === 'pt' ? 'Gordura (g)' : 'Fat (g)'}><input type="number" value={fatG} onChange={(e) => setFatG(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
+      </div>
+      <div style={{ fontSize: 11, color: C.text3, margin: '4px 0 16px', lineHeight: 1.4 }}>{lang === 'pt' ? 'Estimativa da IA a partir da foto — ajuste se quiser antes de salvar.' : "AI estimate from the photo — adjust if you'd like before saving."}</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn kind="ghost" onClick={onCancel} style={{ flex: 1 }}>{t('cancel')}</Btn>
+        <Btn onClick={() => onSave({ title, calories, proteinG, carbsG, fatG })} style={{ flex: 1.4 }}>{t('save')}</Btn>
+      </div>
+    </Modal>
+  );
+}
 function normDevText(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
 }
@@ -1373,6 +1445,7 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
   const [text, setText] = useState(''); const [loading, setLoading] = useState(false); const [drafts, setDrafts] = useState(null);
   const [searching, setSearching] = useState(false); const [sq, setSq] = useState('');
   const [listening, setListening] = useState(false);
+  const [mealDraft, setMealDraft] = useState(null);
   const recRef = useRef();
   const fileRef = useRef();
   const toggleVoice = () => {
@@ -1403,24 +1476,32 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
     const reader = new FileReader();
     reader.onload = async () => {
       const b64 = String(reader.result).split(',')[1];
-      try { const d = await classifyCaptureFile(b64, file.type, lang); setDrafts(d); }
-      catch (err) { flash(lang === 'pt' ? 'Não consegui ler a imagem.' : "Couldn't read image."); }
+      try {
+        const res = await classifyPhotoSmart(b64, file.type, lang);
+        if (res.kind === 'meal') setMealDraft(res); else setDrafts(res.items);
+      } catch (err) { flash(lang === 'pt' ? 'Não consegui ler a imagem.' : "Couldn't read image."); }
       setLoading(false);
     };
     reader.readAsDataURL(file);
+  };
+  const saveMeal = (m) => {
+    addItems([{ type: 'meal', domain: 'health', title: m.title, date: todayISO(), time: nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, source: 'photo' } }]);
+    flash(lang === 'pt' ? 'Refeição registrada ✓' : 'Meal logged ✓');
+    setMealDraft(null);
   };
   const results = sq.trim().length >= 2 ? (items || []).filter((i) => (i.title || '').toLowerCase().includes(sq.toLowerCase()) || (i.notes || '').toLowerCase().includes(sq.toLowerCase())).slice(0, 30) : [];
   return (
     <div style={{ marginBottom: 8 }}>
       <div style={{ ...card, padding: 6, display: 'flex', gap: 6, alignItems: 'center' }}>
         <input value={text} onChange={(e) => setText(e.target.value)} placeholder={t('capturePh')} onKeyDown={(e) => { if (e.key === 'Enter') run(); }} style={{ ...inputStyle, background: 'transparent', border: 'none' }} />
-        <input ref={fileRef} type="file" accept="image/*,application/pdf" onChange={pickImage} style={{ display: 'none' }} />
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={pickImage} style={{ display: 'none' }} />
         <button onClick={() => setSearching(true)} title={lang === 'pt' ? 'Buscar no app' : 'Search app'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}><Search size={17} /></button>
         <button onClick={toggleVoice} title={lang === 'pt' ? 'Ditar por voz' : 'Voice input'} style={{ background: listening ? C.rose + '22' : 'none', border: 'none', color: listening ? C.rose : C.text3, cursor: 'pointer', padding: '9px 4px', borderRadius: 8 }}><Mic size={17} /></button>
-        <button onClick={() => fileRef.current && fileRef.current.click()} disabled={loading} title={lang === 'pt' ? 'Anexar imagem' : 'Attach image'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}><ImageIcon size={17} /></button>
+        <button onClick={() => fileRef.current && fileRef.current.click()} disabled={loading} title={lang === 'pt' ? 'Foto (refeição, recibo, etc.)' : 'Photo (meal, receipt, etc.)'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}>{loading ? <Loader2 size={17} className="spin" /> : <Camera size={17} />}</button>
         <Btn onClick={run} disabled={loading || !text.trim()} style={{ padding: '9px 13px' }}>{loading ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}</Btn>
       </div>
       {drafts && <DraftReview drafts={drafts} lang={lang} t={t} onDone={(arr, status) => { if (arr.length) addItems(arr.map((x) => ({ ...x, status }))); flash(arr.length + ' ✓'); setDrafts(null); setText(''); }} onCancel={() => setDrafts(null)} />}
+      {mealDraft && <MealConfirmModal draft={mealDraft} lang={lang} t={t} onSave={saveMeal} onCancel={() => setMealDraft(null)} />}
       {searching && (
         <Modal onClose={() => { setSearching(false); setSq(''); }}>
           <SheetHead title={lang === 'pt' ? 'Buscar no app' : 'Search'} onClose={() => { setSearching(false); setSq(''); }} icon={Search} />
@@ -1737,6 +1818,13 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
   const [zBusy, setZBusy] = useState(false);
+  const [horo, setHoro] = useState(null); const [horoLoading, setHoroLoading] = useState(false); const [horoOpen, setHoroOpen] = useState(false);
+  const openHoroscope = () => {
+    setHoroOpen(true);
+    if (horo) return;
+    setHoroLoading(true);
+    authFetch('/api/horoscope').then((r) => r.json()).then((j) => { setHoro(j); setHoroLoading(false); }).catch(() => { setHoro({ text: null, error: 'network' }); setHoroLoading(false); });
+  };
   const checkHouseEmailsNow = () => {
     setZBusy(true);
     scanHouseEmails({ addItems, flash, t, lang, items }).then((res) => {
@@ -1854,9 +1942,22 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           ].map((s) => (
             <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 27, height: 27, borderRadius: 7, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}`, boxShadow: _theme === 'light' ? 'none' : '0 0 0 1px rgba(255,255,255,0.1)' }}>{s.svg}</a>
           ))}
+          <button onClick={openHoroscope} title={lang === 'pt' ? 'Horóscopo' : 'Horoscope'} style={{ width: 27, height: 27, borderRadius: 7, background: 'linear-gradient(135deg, #8B5CF6, #C084FC)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.border}`, cursor: 'pointer', flexShrink: 0 }}><Sparkle size={14} style={{ color: '#fff' }} /></button>
           <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5, marginLeft: 2 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
         </div>
       </div>
+      {horoOpen && (
+        <Modal onClose={() => setHoroOpen(false)}>
+          <SheetHead title={lang === 'pt' ? 'Horóscopo — Sagitário' : 'Horoscope — Sagittarius'} onClose={() => setHoroOpen(false)} icon={Sparkle} />
+          {horoLoading ? (
+            <div style={{ padding: 20, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={14} className="spin" />{lang === 'pt' ? 'Buscando...' : 'Fetching...'}</div>
+          ) : horo && horo.text ? (
+            <div style={{ fontSize: 14, lineHeight: 1.6, color: C.text }}>{horo.text}</div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.text3, lineHeight: 1.5 }}>{lang === 'pt' ? 'Não consegui buscar o horóscopo de hoje agora.' : "Couldn't fetch today's horoscope right now."}</div>
+          )}
+        </Modal>
+      )}
       <div style={{ ...card, overflow: 'hidden' }}>
         {news === null ? (
           <div style={{ padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
@@ -2613,6 +2714,62 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
 }
 
 /* ---------------- Dashboard grid + generic module ---------------- */
+// lista vertical com reordenação por arrastar (estilo iOS: segura a alça e arrasta pra cima/baixo).
+// Funciona com mouse e touch via Pointer Events — sem lib externa.
+function DragReorderList({ orderKeys, onReorder, renderItem, gap = 10 }) {
+  const [order, setOrder] = useState(orderKeys);
+  useEffect(() => { setOrder(orderKeys); }, [orderKeys.join('|')]);
+  const refs = useRef({});
+  const drag = useRef(null);
+  const [draggingKey, setDraggingKey] = useState(null);
+  const [dragY, setDragY] = useState(0);
+
+  const onPointerDown = (key, e) => {
+    e.preventDefault();
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch (err) {}
+    drag.current = { key, startY: e.clientY, index: order.indexOf(key) };
+    setDraggingKey(key); setDragY(0);
+  };
+  const onPointerMove = (e) => {
+    if (!drag.current) return;
+    const dy = e.clientY - drag.current.startY;
+    setDragY(dy);
+    const el = refs.current[drag.current.key];
+    if (!el) return;
+    const step = el.offsetHeight + gap;
+    const shift = Math.round(dy / step);
+    if (!shift) return;
+    const curIndex = order.indexOf(drag.current.key);
+    const newIndex = Math.max(0, Math.min(order.length - 1, curIndex + shift));
+    if (newIndex !== curIndex) {
+      const next = [...order];
+      next.splice(curIndex, 1);
+      next.splice(newIndex, 0, drag.current.key);
+      setOrder(next);
+      drag.current.startY = e.clientY;
+      setDragY(0);
+    }
+  };
+  const endDrag = () => {
+    if (!drag.current) return;
+    drag.current = null;
+    setDraggingKey(null); setDragY(0);
+    onReorder(order);
+  };
+  return (
+    <div>
+      {order.map((key, idx) => {
+        const isDragging = key === draggingKey;
+        return (
+          <div key={key} ref={(el) => (refs.current[key] = el)}
+            style={{ marginBottom: gap, transform: isDragging ? `translateY(${dragY}px)` : 'none', transition: isDragging ? 'none' : 'transform .15s', position: 'relative', zIndex: isDragging ? 5 : 1, boxShadow: isDragging ? '0 8px 20px rgba(0,0,0,.25)' : 'none', touchAction: draggingKey ? 'none' : undefined }}>
+            {renderItem(key, idx, { onPointerDown: (e) => onPointerDown(key, e), onPointerMove, onPointerUp: endDrag, onPointerCancel: endDrag, style: { cursor: 'grab', touchAction: 'none' } })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 function DashboardScreen({ items, lang, t, open, gmailCount, goNews, order, setOrder }) {
   const [editing, setEditing] = useState(false);
   // ordena os modulos conforme a ordem salva; novos modulos vao para o fim
@@ -2620,13 +2777,7 @@ function DashboardScreen({ items, lang, t, open, gmailCount, goNews, order, setO
     const ia = order.indexOf(a.key), ib = order.indexOf(b.key);
     return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
   });
-  const move = (key, dir) => {
-    const cur = ordered.map((m) => m.key);
-    const i = cur.indexOf(key); const j = i + dir;
-    if (j < 0 || j >= cur.length) return;
-    [cur[i], cur[j]] = [cur[j], cur[i]];
-    setOrder(cur);
-  };
+  const byKey = {}; MODULES.forEach((m) => { byKey[m.key] = m; });
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
@@ -2639,25 +2790,27 @@ function DashboardScreen({ items, lang, t, open, gmailCount, goNews, order, setO
         <div style={{ flex: 1 }}><div style={{ fontSize: 14.5, fontWeight: 600, color: C.text }}>{t('news')}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Curadoria do seu interesse' : 'Curated for you'}</div></div>
         <ChevronRight size={18} style={{ color: C.text3 }} />
       </button>
-      <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr' : '1fr 1fr', gap: 10 }}>
-        {ordered.map((mo, idx) => { const count = mo.key === 'gmail' ? (gmailCount || 0) : items.filter(mo.filter).length; const Ic = mo.icon; return (
-          editing ? (
-            <div key={mo.key} style={{ ...card, padding: 15, display: 'flex', alignItems: 'center', gap: 11 }}>
+      {editing ? (
+        <DragReorderList orderKeys={ordered.map((m) => m.key)} onReorder={setOrder} renderItem={(key, idx, handleProps) => {
+          const mo = byKey[key]; const count = mo.key === 'gmail' ? (gmailCount || 0) : items.filter(mo.filter).length; const Ic = mo.icon;
+          return (
+            <div style={{ ...card, padding: 15, display: 'flex', alignItems: 'center', gap: 11 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: mo.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ic size={18} style={{ color: mo.color }} /></div>
               <div style={{ flex: 1 }}><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <button onClick={() => move(mo.key, -1)} disabled={idx === 0} style={{ ...card, padding: 5, cursor: idx === 0 ? 'default' : 'pointer', opacity: idx === 0 ? 0.3 : 1, color: C.text2, border: 'none' }}><ChevronRight size={15} style={{ transform: 'rotate(-90deg)' }} /></button>
-                <button onClick={() => move(mo.key, 1)} disabled={idx === ordered.length - 1} style={{ ...card, padding: 5, cursor: idx === ordered.length - 1 ? 'default' : 'pointer', opacity: idx === ordered.length - 1 ? 0.3 : 1, color: C.text2, border: 'none' }}><ChevronRight size={15} style={{ transform: 'rotate(90deg)' }} /></button>
-              </div>
+              <div {...handleProps} style={{ ...handleProps.style, color: C.text3, padding: 6 }}><GripVertical size={18} /></div>
             </div>
-          ) : (
+          );
+        }} />
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+          {ordered.map((mo) => { const count = mo.key === 'gmail' ? (gmailCount || 0) : items.filter(mo.filter).length; const Ic = mo.icon; return (
             <button key={mo.key} onClick={() => open(mo)} style={{ ...card, padding: 15, textAlign: 'left', cursor: 'pointer', display: 'flex', flexDirection: 'column', gap: 10, minHeight: 92, alignItems: 'flex-start', border: 'none', color: C.text, width: '100%' }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: mo.color + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={18} style={{ color: mo.color }} /></div>
               <div><div style={{ fontSize: 14, fontWeight: 600 }}>{t(mo.key)}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{count} {t('items')}</div></div>
             </button>
-          )
-        ); })}
-      </div>
+          ); })}
+        </div>
+      )}
     </div>
   );
 }
@@ -3050,19 +3203,21 @@ const PURCHASE_STAGES = {
   delivered: { pt: 'Entregue', en: 'Delivered', color: '#5FBF8F' },
   other: { pt: 'Em análise', en: 'Other', color: '#8A8F98' },
 };
-function PurchaseCard({ p, lang, onOpen }) {
+function PurchaseCard({ p, lang, onOpen, selectMode, selected, onToggleSelect }) {
   const [open, setOpen] = useState(false);
   const stage = (p.meta && p.meta.stage) || 'paid';
   const sm = PURCHASE_STAGES[stage] || PURCHASE_STAGES.other;
   const isML = p.meta && p.meta.external === 'mercadolivre';
   const subItems = (p.meta && p.meta.items) || [];
   const hasGroup = subItems.length > 1;
+  const click = () => { if (selectMode) return onToggleSelect(p.id); if (hasGroup) return setOpen((v) => !v); return onOpen(p); };
   return (
-    <div style={{ ...card, padding: 13, marginBottom: 8 }}>
-      <div onClick={() => hasGroup ? setOpen((v) => !v) : onOpen(p)} style={{ cursor: 'pointer' }}>
+    <div style={{ ...card, padding: 13, marginBottom: 8, border: selectMode && selected ? `1px solid ${C.accent}` : undefined }}>
+      <div onClick={click} style={{ cursor: 'pointer' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
           <div style={{ flex: 1, minWidth: 0, display: 'flex', gap: 6, alignItems: 'center' }}>
-            {hasGroup && <ChevronRight size={13} style={{ color: C.text3, flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />}
+            {selectMode && (selected ? <CircleCheck size={16} style={{ color: C.accent, flexShrink: 0 }} /> : <Circle size={16} style={{ color: C.text3, flexShrink: 0 }} />)}
+            {!selectMode && hasGroup && <ChevronRight size={13} style={{ color: C.text3, flexShrink: 0, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />}
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
               <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2 }}>{p.date ? fmtDate(p.date, lang) : ''}{p.meta && p.meta.tracking ? ` · ${p.meta.tracking}` : ''}</div>
@@ -3091,12 +3246,14 @@ function PurchaseCard({ p, lang, onOpen }) {
     </div>
   );
 }
-function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems, updateItem, delItem, onOpen, flash }) {
+function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems, updateItem, delItem, onOpen, flash, setPendingCount }) {
   const [adding, setAdding] = useState(false);
   const [days, setDays] = useState(30);
   const [ml, setMl] = useState({ loading: true, connected: false, error: null, syncedAt: null });
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
   const [storeFilter, setStoreFilter] = useState('all');
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState([]);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const loadMl = (d) => {
@@ -3104,19 +3261,42 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
     authFetch('/api/mercadolivre?days=' + d).then((r) => r.json()).then((j) => {
       setMl({ loading: false, connected: !!j.connected, error: j.error || null, syncedAt: new Date().toISOString() });
       if (!j.connected) return;
-      // reset completo a cada sincronização: apaga tudo que veio do Mercado Livre (e os eventos de
-      // chegada automáticos ligados a eles) e recria do zero com o agrupamento mais recente — mais
-      // confiável do que tentar casar incrementalmente com formatos antigos de agrupamento já salvos.
+      // reset a cada sincronização, mas preservando grupos MONTADOS À MÃO (o agrupamento automático
+      // por pack_id/shipping id nem sempre existe na resposta do ML — quando não existe, o usuário
+      // agrupa manualmente selecionando os cartões, e isso não pode ser desfeito pela sincronização).
       const cur = itemsRef.current;
-      cur.filter((i) => i.type === 'purchase' && i.meta && i.meta.external === 'mercadolivre').forEach((old) => {
+      const manualGroups = cur.filter((i) => i.type === 'purchase' && i.meta && i.meta.manualGroup);
+      const coveredIds = new Set(manualGroups.flatMap((g) => g.meta.subOrderIds || []));
+      cur.filter((i) => i.type === 'purchase' && i.meta && i.meta.external === 'mercadolivre' && !i.meta.manualGroup).forEach((old) => {
         const ev = cur.find((i) => i.meta && i.meta.auto && i.meta.purchaseRef === old.id);
         if (ev) delItem(ev.id);
         delItem(old.id);
       });
-      if ((j.purchases || []).length) addItems(j.purchases);
+      // não recria pedidos que já foram cobertos por um agrupamento manual
+      const fresh = (j.purchases || []).filter((p) => !(p.meta.subOrderIds || []).some((id) => coveredIds.has(id)));
+      if (fresh.length) addItems(fresh);
     }).catch(() => setMl((p) => ({ ...p, loading: false })));
   };
   useEffect(() => { loadMl(days); }, []);
+  const toggleSelect = (id) => setSelected((p) => p.includes(id) ? p.filter((x) => x !== id) : [...p, id]);
+  const mergeSelected = () => {
+    const picks = itemsRef.current.filter((i) => selected.includes(i.id));
+    if (picks.length < 2) return;
+    const allItemsList = picks.flatMap((p) => (p.meta && p.meta.items) || [{ title: p.title, qty: 1, price: p.amount }]);
+    const title = allItemsList.length === 1 ? allItemsList[0].title : `${allItemsList[0].title} +${allItemsList.length - 1}`;
+    const amount = picks.reduce((a, p) => a + (Number(p.amount) || 0), 0) || null;
+    const date = picks.map((p) => p.date).filter(Boolean).sort()[0];
+    const stageRank = { pending: 0, paid: 1, shipped: 2, delivered: 3 };
+    const worst = picks.reduce((min, p) => (stageRank[p.meta.stage] < stageRank[min.meta.stage] ? p : min), picks[0]);
+    const subOrderIds = [...new Set(picks.flatMap((p) => (p.meta && p.meta.subOrderIds) || [p.id.replace(/^ml_/, '')]))];
+    addItem({
+      type: 'purchase', domain: 'shopping', title, amount, date, status: 'planned',
+      meta: { external: 'mercadolivre', manualGroup: true, orderId: 'manual_' + Date.now(), subOrderIds, stage: worst.meta.stage, store: 'Mercado Livre', tracking: picks.map((p) => p.meta.tracking).filter(Boolean)[0] || null, etaDate: picks.map((p) => p.meta.etaDate).filter(Boolean)[0] || null, deliveredDate: worst.meta.deliveredDate, items: allItemsList },
+    });
+    picks.forEach((p) => delItem(p.id));
+    setSelected([]); setSelectMode(false);
+    flash(lang === 'pt' ? 'Pedidos agrupados.' : 'Orders merged.');
+  };
   const runScan = () => {
     setScan({ loading: true, list: null, error: null });
     authFetch('/api/purchases-scan?days=' + days).then((r) => r.json())
@@ -3126,6 +3306,7 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
       })
       .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
   };
+  useEffect(() => { if (setPendingCount) setPendingCount('purchases', (scan.list || []).length); }, [scan.list]);
   const acceptSug = (sg) => {
     addItem({ type: 'purchase', domain: 'shopping', title: sg.title, amount: sg.amount, date: sg.date, meta: { external: 'email', messageId: sg.messageId, stage: sg.stage, tracking: sg.tracking, trackingLink: sg.trackingLink, store: sg.store, paymentMethod: sg.paymentMethod, sourceLink: sg.source && sg.source.link } });
     setScan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
@@ -3197,7 +3378,16 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
         </div>
       ))}
 
-      <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{lang === 'pt' ? 'Adicionar compra manual' : 'Add purchase'}</Btn>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+        <Btn kind="soft" onClick={() => setAdding(true)} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{lang === 'pt' ? 'Adicionar compra manual' : 'Add purchase'}</Btn>
+        <Btn kind="soft" onClick={() => { setSelectMode((v) => !v); setSelected([]); }} style={{ display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center', padding: '0 14px' }}>{selectMode ? t('cancel') : (lang === 'pt' ? 'Agrupar pedidos' : 'Group orders')}</Btn>
+      </div>
+      {selectMode && (
+        <div style={{ ...card, padding: 10, marginBottom: 10, display: 'flex', gap: 10, alignItems: 'center', borderColor: C.accent + '44' }}>
+          <span style={{ flex: 1, fontSize: 12, color: C.text2 }}>{lang === 'pt' ? `Selecione os cartões do mesmo pedido/envio (${selected.length} selecionado${selected.length === 1 ? '' : 's'})` : `Select cards from the same order/shipment (${selected.length} selected)`}</span>
+          <Btn kind="solid" onClick={mergeSelected} disabled={selected.length < 2} style={{ padding: '7px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Agrupar' : 'Merge'}</Btn>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
         <Chip active={!showArchived} onClick={() => setShowArchived(false)}>{lang === 'pt' ? 'Ativas' : 'Active'} ({active.length})</Chip>
         <Chip active={showArchived} onClick={() => setShowArchived(true)}>{lang === 'pt' ? 'Arquivadas' : 'Archived'} ({archived.length})</Chip>
@@ -3208,7 +3398,7 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
           {stores.map((s) => <Chip key={s} active={storeFilter === s} onClick={() => setStoreFilter(s)} color={C.blue}>{s}</Chip>)}
         </div>
       )}
-      {shown.length === 0 ? <Empty icon={Package} text={t('nothingHere')} /> : shown.map((p) => <PurchaseCard key={p.id} p={p} lang={lang} onOpen={() => onOpen(p)} />)}
+      {shown.length === 0 ? <Empty icon={Package} text={t('nothingHere')} /> : shown.map((p) => <PurchaseCard key={p.id} p={p} lang={lang} onOpen={() => onOpen(p)} selectMode={selectMode} selected={selected.includes(p.id)} onToggleSelect={toggleSelect} />)}
       {adding && <AddModal title={lang === 'pt' ? 'Compra' : 'Purchase'} icon={Package} draft={{ type: 'purchase', domain: 'shopping', meta: { stage: 'paid' } }} allowedTypes={['purchase']} lang={lang} t={t} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'shopping', ...x }); flash(t('savedOne')); setAdding(false); }} />}
     </div>
   );
@@ -3637,10 +3827,9 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 }
 
 /* ---------------- Health dashboard ---------------- */
-function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, healthSummary, setHealthSummary }) {
-  const [adding, setAdding] = useState(null); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
+function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, goDiet, healthSummary, setHealthSummary, setPendingCount }) {
+  const [adding, setAdding] = useState(null); const [addingEx, setAddingEx] = useState(false); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const [sumLoading, setSumLoading] = useState(false);
-  const [sumOpen, setSumOpen] = useState(false);
   const [hscan, setHscan] = useState({ loading: false, list: null, error: null });
   const [hscanDays, setHscanDays] = useState(30);
   const runHealthScan = () => {
@@ -3649,6 +3838,7 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       .then((j) => setHscan({ loading: false, list: j.suggestions || [], error: j.error || null }))
       .catch((e) => setHscan({ loading: false, list: [], error: String(e) }));
   };
+  useEffect(() => { if (setPendingCount) setPendingCount('health', (hscan.list || []).length); }, [hscan.list]);
   const acceptHsug = (sg) => {
     addItem({ type: sg.type, domain: 'health', title: sg.title, date: sg.date, time: sg.time, meta: { ...(sg.meta || {}), fromEmail: sg.sourceType === 'email', fromCalendar: sg.sourceType === 'calendar', sourceLink: sg.source && sg.source.link } });
     setHscan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
@@ -3690,6 +3880,11 @@ Data de hoje: ${today}`;
   const isExam = (i) => (i.meta && i.meta.isExam) || /exame|hemograma|raio|ultrass|resson|resultado|laudo|sangue|colesterol|glicose/i.test(i.title);
   const exams = hdocs.filter(isExam); const support = hdocs.filter((i) => !isExam(i));
   const bmi = profile.weight && profile.height ? (Number(profile.weight) / Math.pow(Number(profile.height) / 100, 2)).toFixed(1) : null;
+  const exercises = hd.filter((i) => i.type === 'exercise').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const weekAgo = addDays(today, -7);
+  const weekEx = exercises.filter((i) => i.date >= weekAgo);
+  const weekMin = weekEx.reduce((a, b) => a + (Number(b.meta && b.meta.durationMin) || 0), 0);
+  const weekKm = weekEx.reduce((a, b) => a + (Number(b.meta && b.meta.distanceKm) || 0), 0);
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -3729,18 +3924,15 @@ Data de hoje: ${today}`;
         );
       })}
       <div style={{ ...card, padding: 15, marginBottom: 12, border: '1px solid #5B8DEF33', background: 'linear-gradient(135deg, #5B8DEF14, ' + C.surface + ')' }}>
-        <div onClick={() => setSumOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: sumOpen ? 8 : 0, cursor: 'pointer' }}>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#5B8DEF' }}>{lang === 'pt' ? 'Resumo de hoje' : "Today's summary"}</span>{!sumOpen && healthSummary && <span style={{ fontSize: 10, color: C.text3, fontWeight: 400 }}>({lang === 'pt' ? 'toque pra ler' : 'tap to read'})</span>}</div>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <button onClick={(e) => { e.stopPropagation(); genSummary(); }} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3 }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
-            <ChevronRight size={15} style={{ color: C.text3, transform: sumOpen ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#5B8DEF' }}>{lang === 'pt' ? 'Resumo de hoje' : "Today's summary"}</span></div>
+          <button onClick={genSummary} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3 }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
         </div>
-        {sumOpen && (sumLoading && !healthSummary ? <div style={{ fontSize: 13, color: C.text3 }}>{lang === 'pt' ? 'Gerando...' : 'Generating...'}</div> : (
+        {sumLoading && !healthSummary ? <div style={{ fontSize: 13, color: C.text3 }}>{lang === 'pt' ? 'Gerando...' : 'Generating...'}</div> : (
           <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.text }}>{healthSummary ? healthSummary.text : (lang === 'pt' ? 'Toque em atualizar pra gerar seu resumo do dia.' : 'Tap refresh to generate today\'s summary.')}</div>
-        ))}
+        )}
       </div>
-      <button onClick={goMedical} style={{ ...card, width: '100%', padding: 14, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', border: 'none', textAlign: 'left', color: C.text, background: 'linear-gradient(135deg, #5B8DEF1c, ' + C.surface + ')', borderColor: '#5B8DEF33' }}>
+      <button onClick={goMedical} style={{ ...card, width: '100%', padding: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', border: 'none', textAlign: 'left', color: C.text, background: 'linear-gradient(135deg, #5B8DEF1c, ' + C.surface + ')', borderColor: '#5B8DEF33' }}>
         <DrClaudeBadge size={36} />
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 14, fontWeight: 700 }}>{lang === 'pt' ? 'Histórico Médico' : 'Medical History'}</div>
@@ -3748,6 +3940,16 @@ Data de hoje: ${today}`;
         </div>
         <ChevronRight size={18} style={{ color: C.text3 }} />
       </button>
+      {goDiet && (
+        <button onClick={goDiet} style={{ ...card, width: '100%', padding: 14, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', border: 'none', textAlign: 'left', color: C.text, background: 'linear-gradient(135deg, #E5544B1c, ' + C.surface + ')', borderColor: '#E5544B33' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #F0928A, #E5544B)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Flame size={19} style={{ color: '#fff' }} /></div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{lang === 'pt' ? 'Dieta' : 'Diet'}</div>
+            <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Refeições, calorias e análise do Dr. Claude' : 'Meals, calories and Dr. Claude analysis'}</div>
+          </div>
+          <ChevronRight size={18} style={{ color: C.text3 }} />
+        </button>
+      )}
       <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
         <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} locked={ouraOn} onClick={() => setLogOpen(true)} />
         <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} locked={ouraOn} onClick={() => setLogOpen(true)} />
@@ -3766,6 +3968,15 @@ Data de hoje: ${today}`;
         <Btn kind="soft" onClick={() => setAdding('document')} style={{ flex: 1, fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><FileText size={14} />{t('addDoc')}</Btn>
       </div>
       <WeightHistory weights={weights} lang={lang} t={t} />
+      <SectionTitle icon={Dumbbell} label={t('t_exercise')} color={C.rose} />
+      <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+        <MiniStat label={lang === 'pt' ? 'Essa semana' : 'This week'} value={String(weekEx.length)} color={C.rose} small />
+        <MiniStat label="Min" value={String(weekMin)} color={C.blue} small />
+        {weekKm > 0 && <MiniStat label="Km" value={weekKm.toFixed(1)} color={C.green} small />}
+      </div>
+      <Btn kind="soft" onClick={() => setAddingEx(true)} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{lang === 'pt' ? 'Registrar atividade' : 'Log activity'}</Btn>
+      {exercises.length === 0 ? <Empty icon={Dumbbell} text={t('nothingHere')} /> : exercises.slice(0, 6).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {addingEx && <AddModal title={t('t_exercise')} icon={Dumbbell} draft={{ type: 'exercise', domain: 'health', date: todayISO(), meta: {} }} allowedTypes={['exercise']} lang={lang} t={t} people={people} onClose={() => setAddingEx(false)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAddingEx(false); }} />}
       {consultas.length > 0 && <><SectionTitle icon={Stethoscope} label={t('consultations')} color={C.rose} />{consultas.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       {treat.length > 0 && <><SectionTitle icon={Pill} label={t('treatments')} color={C.violet} />{treat.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
       <SectionTitle icon={Wallet} label={`${t('pharmacy')} · ${fmtMoney(pharmTotal, lang)}`} color={C.green} />
@@ -3777,6 +3988,127 @@ Data de hoje: ${today}`;
       {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
       {editP && <WeightLog lang={lang} t={t} current={profile.weight} onSave={(kg) => { addWeight(kg); setEditP(false); }} onClose={() => setEditP(false)} />}
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'health', meta: {} }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(null); }} />}
+    </div>
+  );
+}
+function CalorieChart({ meals, lang, days = 14 }) {
+  const today = todayISO();
+  const byDay = {};
+  meals.forEach((m) => { if (!m.date) return; byDay[m.date] = (byDay[m.date] || 0) + (Number(m.meta && m.meta.calories) || 0); });
+  const daysList = Array.from({ length: days }, (_, i) => addDays(today, -(days - 1 - i)));
+  const vals = daysList.map((d) => byDay[d] || 0);
+  const max = Math.max(...vals, 1);
+  const W = 300, H = 84, gap = 2, barW = W / days - gap;
+  return (
+    <svg width="100%" viewBox={`0 0 ${W} ${H + 14}`} style={{ display: 'block' }}>
+      {daysList.map((d, i) => {
+        const v = vals[i]; const h = Math.max(v > 0 ? 2 : 0, (v / max) * H);
+        const x = i * (W / days);
+        return (
+          <g key={d}>
+            <rect x={x} y={H - h} width={barW} height={h} rx={2} fill={d === today ? C.accent : (_theme === 'light' ? '#5B8DEF66' : '#5B8DEF55')} />
+            {(days <= 14 || i % 7 === 0) && <text x={x + barW / 2} y={H + 11} fontSize="7" fill={C.text3} textAnchor="middle">{d.slice(8, 10)}</text>}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+function MealRow({ m, lang, onOpen }) {
+  const cal = m.meta && m.meta.calories;
+  return (
+    <div onClick={() => onOpen(m)} style={{ ...card, padding: '11px 13px', display: 'flex', alignItems: 'center', gap: 11, marginBottom: 8, cursor: 'pointer' }}>
+      <div style={{ width: 30, height: 30, borderRadius: 9, background: '#E5544B1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Utensils size={14} style={{ color: '#E5544B' }} /></div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.title}</div>
+        <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{m.date ? fmtDate(m.date, lang) : ''}{m.time ? ' · ' + m.time : ''}</div>
+      </div>
+      {cal != null && <span style={{ fontSize: 12.5, fontWeight: 700, color: '#E5544B', flexShrink: 0 }}>{cal} kcal</span>}
+    </div>
+  );
+}
+function DietScreen({ items, lang, t, back, addItem, delItem, onOpen, flash, dietSummary, setDietSummary, openClaude }) {
+  const [sumLoading, setSumLoading] = useState(false);
+  const [mealDraft, setMealDraft] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [chartDays, setChartDays] = useState(14);
+  const fileRef = useRef();
+  const today = todayISO();
+  const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health').sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
+  const todayMeals = meals.filter((m) => m.date === today);
+  const todayCals = todayMeals.reduce((a, b) => a + (Number(b.meta && b.meta.calories) || 0), 0);
+  const genDietSummary = async () => {
+    setSumLoading(true);
+    try {
+      const last14 = meals.filter((m) => m.date >= addDays(today, -14)).map((m) => ({ date: m.date, title: m.title, calories: m.meta && m.meta.calories, proteinG: m.meta && m.meta.proteinG }));
+      const exList = items.filter((i) => i.type === 'exercise' && i.date >= addDays(today, -14)).map((i) => ({ date: i.date, activity: i.meta && i.meta.activityType, durationMin: i.meta && i.meta.durationMin, distanceKm: i.meta && i.meta.distanceKm }));
+      const system = `Você é o Dr. Claude, personal trainer/nutricionista pessoal embutido num app de vida pessoal. Com base nas refeições e atividades físicas dos últimos 14 dias, escreva NO MÁXIMO 3 linhas (${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre como a dieta e a rotina de exercícios estão indo, terminando com 1-2 dicas práticas. Tom acolhedor mas direto, como o resumo diário de um app de wearable. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado (poucos registros), diga isso e incentive registrar mais. Responda em texto puro, sem markdown, sem aspas.
+Refeições (14d): ${JSON.stringify(last14)}
+Atividades físicas (14d): ${JSON.stringify(exList)}
+Hoje: ${today}`;
+      const text = await callClaude(system, [{ role: 'user', content: lang === 'pt' ? 'Gere a análise.' : 'Generate the analysis.' }]);
+      setDietSummary({ date: today, text: text.trim() });
+    } catch (e) { flash(lang === 'pt' ? 'Não consegui gerar a análise agora.' : "Couldn't generate analysis now."); }
+    setSumLoading(false);
+  };
+  useEffect(() => {
+    if (!dietSummary || dietSummary.date !== today) genDietSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const pickImage = (e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const b64 = String(reader.result).split(',')[1];
+      try {
+        const res = await classifyPhotoSmart(b64, file.type, lang);
+        if (res.kind === 'meal') setMealDraft(res);
+        else flash(lang === 'pt' ? 'Não parece uma foto de refeição.' : "Doesn't look like a meal photo.");
+      } catch (err) { flash(lang === 'pt' ? 'Não consegui ler a imagem.' : "Couldn't read image."); }
+    };
+    reader.readAsDataURL(file);
+  };
+  const saveMeal = (m) => {
+    addItem({ type: 'meal', domain: 'health', title: m.title, date: today, time: nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, source: 'photo' } });
+    flash(lang === 'pt' ? 'Refeição registrada ✓' : 'Meal logged ✓');
+    setMealDraft(null);
+  };
+  return (
+    <div>
+      <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{t('health')}</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'linear-gradient(135deg, #F0928A, #E5544B)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Flame size={20} style={{ color: '#fff' }} /></div>
+        <div style={{ fontSize: 22, fontWeight: 600 }}>{lang === 'pt' ? 'Dieta' : 'Diet'}</div>
+      </div>
+      <div style={{ ...card, padding: 15, marginBottom: 14, border: '1px solid #E5544B33', background: 'linear-gradient(135deg, #E5544B14, ' + C.surface + ')' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#E5544B' }}>{lang === 'pt' ? 'Como estou indo' : 'How am I doing'}</span></div>
+          <button onClick={genDietSummary} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3 }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
+        </div>
+        {sumLoading && !dietSummary ? <div style={{ fontSize: 13, color: C.text3 }}>{lang === 'pt' ? 'Gerando...' : 'Generating...'}</div> : (
+          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.text }}>{dietSummary ? dietSummary.text : (lang === 'pt' ? 'Toque em atualizar pra gerar sua análise.' : 'Tap refresh to generate your analysis.')}</div>
+        )}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <Btn onClick={() => fileRef.current && fileRef.current.click()} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Camera size={16} />{lang === 'pt' ? 'Fotografar refeição' : 'Photo meal'}</Btn>
+        <Btn kind="soft" onClick={() => setAdding(true)} style={{ flex: 1, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{lang === 'pt' ? 'Manual' : 'Manual'}</Btn>
+        <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={pickImage} style={{ display: 'none' }} />
+      </div>
+      <div style={{ ...card, padding: 15, marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+          <div><span style={{ fontSize: 22, fontWeight: 700, color: '#E5544B' }}>{todayCals}</span><span style={{ fontSize: 12, color: C.text3, marginLeft: 5 }}>kcal {lang === 'pt' ? 'hoje' : 'today'}</span></div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Chip active={chartDays === 14} onClick={() => setChartDays(14)}>14d</Chip>
+            <Chip active={chartDays === 30} onClick={() => setChartDays(30)}>30d</Chip>
+          </div>
+        </div>
+        <CalorieChart meals={meals} lang={lang} days={chartDays} />
+      </div>
+      {openClaude && <Btn kind="ghost" onClick={() => openClaude(lang === 'pt' ? 'Quero conversar sobre como melhorar minha dieta e meus hábitos alimentares.' : 'I want to talk about improving my diet and eating habits.')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><DrClaudeBadge size={16} />{lang === 'pt' ? 'Falar com o Dr. Claude' : 'Talk to Dr. Claude'}</Btn>}
+      <SectionTitle icon={Utensils} label={lang === 'pt' ? 'Histórico de refeições' : 'Meal history'} color={C.rose} />
+      {meals.length === 0 ? <Empty icon={Utensils} text={t('nothingHere')} /> : meals.slice(0, 40).map((m) => <MealRow key={m.id} m={m} lang={lang} onOpen={onOpen} />)}
+      {mealDraft && <MealConfirmModal draft={mealDraft} lang={lang} t={t} onSave={saveMeal} onCancel={() => setMealDraft(null)} />}
+      {adding && <AddModal title={t('t_meal')} icon={Utensils} draft={{ type: 'meal', domain: 'health', date: today, time: nowHM(), meta: {} }} allowedTypes={['meal']} lang={lang} t={t} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(false); }} />}
     </div>
   );
 }
@@ -4637,7 +4969,7 @@ function HouseEmailReviewCard({ x, lang, t, onTask, onEvent, onIgnore }) {
     </div>
   );
 }
-function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs }) {
+function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs, setPendingCount }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
   const [zScan, setZScan] = useState({ loading: false, pending: [] });
   const itemsRef = useRef(items);
@@ -4646,6 +4978,7 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
     setZScan((p) => ({ ...p, loading: true }));
     scanHouseEmails({ addItems, flash, t, lang, items: itemsRef.current }).then((res) => setZScan({ loading: false, pending: res.pending }));
   };
+  useEffect(() => { if (setPendingCount) setPendingCount('house', (zScan.pending || []).length); }, [zScan.pending]);
   const scannedOnMount = useRef(false);
   useEffect(() => {
     if (scannedOnMount.current) return;
@@ -5125,7 +5458,7 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
     </div>
   );
 }
-function TravelScreen({ module, items = [], people = [], lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
+function TravelScreen({ module, items = [], people = [], lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash, setPendingCount }) {
   const [view, setView] = useState('flights'); const [period, setPeriod] = useState('year'); const [adding, setAdding] = useState(null); const [selTrip, setSelTrip] = useState(null);
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
   const [scanDays, setScanDays] = useState(15);
@@ -5135,9 +5468,19 @@ function TravelScreen({ module, items = [], people = [], lang, t, back, toggleTa
       .then((j) => setScan({ loading: false, list: j.suggestions || [], error: j.error || null }))
       .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
   };
-  // toda vez que a aba Viagens abre, já busca sozinho (últimos 15 dias) pra tentar estar sempre atualizado
+  useEffect(() => { if (setPendingCount) setPendingCount('travel', (scan.list || []).length); }, [scan.list]);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  // toda vez que a aba Viagens abre, já busca sozinho (últimos 15 dias) pra tentar estar sempre atualizado,
+  // e também limpa voos/viagens duplicados que já tenham sido aceitos mais de uma vez por engano
   const scannedOnMount = useRef(false);
-  useEffect(() => { if (scannedOnMount.current) return; scannedOnMount.current = true; runScan(15); }, []);
+  useEffect(() => {
+    if (scannedOnMount.current) return;
+    scannedOnMount.current = true;
+    const removed = dedupeTravelItems(itemsRef.current, delItem);
+    if (removed) flash(lang === 'pt' ? `${removed} voo(s)/viagem(ns) duplicado(s) removido(s).` : `${removed} duplicate flight(s)/trip(s) removed.`);
+    runScan(15);
+  }, []);
   const flights = items.filter((i) => i.type === 'flight');
   const trips = items.filter((i) => i.type === 'trip').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const today = todayISO();
@@ -5169,8 +5512,12 @@ function TravelScreen({ module, items = [], people = [], lang, t, back, toggleTa
   const acceptSug = (sg) => {
     const domain = (sg.type === 'flight' || sg.type === 'trip') ? 'travel' : sg.type === 'bill' ? 'finance' : 'personal';
     const match = sg.type === 'flight' ? findMatchTrip(sg) : null;
-    addItem({ type: sg.type, domain, title: sg.title, date: sg.date, time: sg.time, amount: sg.amount, meta: { ...(sg.meta || {}), fromEmail: true, tripId: match ? match.id : null, needsCorrelation: sg.type === 'flight' && !match } });
+    const draft = { type: sg.type, domain, title: sg.title, date: sg.date, time: sg.time, meta: { ...(sg.meta || {}) } };
+    const already = (sg.type === 'flight' || sg.type === 'trip') && itemsRef.current.some((i) => i.type === draft.type && travelDupeKey(i) === travelDupeKey(draft));
     setScan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
+    markTravelEmailProcessed(sg.messageId);
+    if (already) { flash(lang === 'pt' ? 'Já estava salvo — ignorado.' : 'Already saved — skipped.'); return; }
+    addItem({ ...draft, amount: sg.amount, meta: { ...draft.meta, fromEmail: true, tripId: match ? match.id : null, needsCorrelation: sg.type === 'flight' && !match } });
     flash(match ? (lang === 'pt' ? `Vinculado à viagem "${match.title}" ✓` : 'Linked to trip ✓') : t('savedOne'));
   };
   return (
@@ -5732,6 +6079,7 @@ function App() {
   // em vez de ficar com a mesma largura de conteúdo de um iPad Mini/Air em paisagem.
   const [xwide, setXwide] = useState(false);
   const [sideDash, setSideDash] = useState(false);
+  const [sideEditing, setSideEditing] = useState(false);
   useEffect(() => {
     const check = () => {
       const w = typeof window !== 'undefined' ? window.innerWidth : 0;
@@ -5871,6 +6219,7 @@ function App() {
   const delItem = (id) => setItems((p) => persistNow(p.filter((i) => i.id !== id)));
   const setHealth = (fn) => setSettings((s) => ({ ...s, health: typeof fn === 'function' ? fn(s.health || {}) : fn }));
   const setHealthSummary = (v) => setSettings((s) => ({ ...s, healthSummary: v }));
+  const setDietSummary = (v) => setSettings((s) => ({ ...s, dietSummary: v }));
   const setProfile = (fn) => setSettings((s) => ({ ...s, profile: typeof fn === 'function' ? fn(s.profile || {}) : fn }));
   const addWeight = (kg) => setSettings((s) => {
     const d = todayISO();
@@ -5883,6 +6232,38 @@ function App() {
   const openAccount = (accId) => { if (typeof window !== 'undefined') window.__lccOpenAccount = accId; setActive({ screen: 'dashboard', module: moduleByKey('finance') }); };
   const greeting = () => { const h = new Date().getHours(); return h < 12 ? t('goodMorning') : h < 18 ? t('goodAfternoon') : t('goodEvening'); };
   const navTo = (k) => { if (SCREEN_ICONS[k]) setActive({ screen: k, module: k === 'dashboard' ? null : null }); else setActive({ screen: 'dashboard', module: moduleByKey(k) }); };
+
+  // pendências: itens de varreduras de e-mail que esperam uma decisão sua (aceitar/recusar) —
+  // cada tela dona da fila (Casa, Viagens, Saúde, Compras) reporta sua contagem aqui, pro sino global
+  const [pendingCounts, setPendingCounts] = useState({ house: 0, travel: 0, health: 0, purchases: 0 });
+  const setPendingCount = (key, n) => setPendingCounts((p) => (p[key] === n ? p : { ...p, [key]: n }));
+  const pendingTotal = Object.values(pendingCounts).reduce((a, b) => a + b, 0);
+  const [bellOpen, setBellOpen] = useState(false);
+  const PENDING_MODULES = { house: 'house', travel: 'travel', health: 'health', purchases: 'shopping' };
+  const PENDING_LABELS = { house: lang === 'pt' ? 'Casa' : 'House', travel: lang === 'pt' ? 'Viagens' : 'Travel', health: lang === 'pt' ? 'Saúde' : 'Health', purchases: lang === 'pt' ? 'Compras' : 'Purchases' };
+  const NotifBell = ({ small }) => (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setBellOpen((v) => !v)} style={small ? { ...card, padding: 7, color: C.text2, cursor: 'pointer', position: 'relative' } : { background: 'none', border: 'none', color: C.text2, cursor: 'pointer', position: 'relative', display: 'flex' }}>
+        <Bell size={small ? 15 : 19} />
+        {pendingTotal > 0 && <span style={{ position: 'absolute', top: -3, right: -3, minWidth: 15, height: 15, borderRadius: 999, background: C.rose, color: '#fff', fontSize: 9.5, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{pendingTotal}</span>}
+      </button>
+      {bellOpen && (
+        <>
+          <div onClick={() => setBellOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 59 }} />
+          <div style={{ ...card, position: 'absolute', top: '110%', right: 0, width: 240, padding: 8, zIndex: 60 }}>
+            {pendingTotal === 0 ? (
+              <div style={{ padding: 10, fontSize: 12.5, color: C.text3, textAlign: 'center' }}>{lang === 'pt' ? 'Nenhuma pendência.' : 'Nothing pending.'}</div>
+            ) : Object.entries(pendingCounts).filter(([, n]) => n > 0).map(([k, n]) => (
+              <button key={k} onClick={() => { setBellOpen(false); openModuleKey(PENDING_MODULES[k]); }} style={{ width: '100%', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 8px', borderRadius: 8, color: C.text }}>
+                <span style={{ fontSize: 13 }}>{PENDING_LABELS[k]}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.rose, background: C.rose + '1e', borderRadius: 999, padding: '2px 8px' }}>{n}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   if (!ready) return <div style={{ background: C.bg, color: C.text, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
     <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: C.accent, fontFamily: "'Outfit', sans-serif" }}>BhL</div>
@@ -5898,7 +6279,7 @@ function App() {
   }));
   const allItems = [...items, ...(gEvents || []), ...(gMsgs || []), ...ttItems];
   const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
-  const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, addItems, updateItem, delItem, flash };
+  const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, addItems, updateItem, delItem, flash, setPendingCount };
   const renderModule = (mo) => {
     const back = () => setActive({ screen: 'dashboard', module: null });
     if (mo.custom === 'travel') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><TravelScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
@@ -5907,7 +6288,7 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
+    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -5919,8 +6300,24 @@ function App() {
     <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: wide ? (xwide ? 1440 : 1080) : 480, margin: '0 auto', position: 'relative', paddingBottom: wide ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)', display: wide ? 'flex' : 'block', gap: wide ? 0 : undefined, alignItems: 'flex-start' }}>
       {wide && (
         <div style={{ width: xwide ? 232 : 210, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: `1px solid ${C.borderSoft}`, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, padding: '4px 10px 16px' }}><span style={{ width: 9, height: 9, borderRadius: 2, background: C.accent }} />Life in Control</button>
-          {dock.map((k) => {
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px 16px' }}>
+            <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: C.accent }} />Life in Control</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <NotifBell />
+              <button onClick={() => setSideEditing((v) => !v)} title={lang === 'pt' ? 'Ordenar menu' : 'Reorder menu'} style={{ background: 'none', border: 'none', color: sideEditing ? C.accent : C.text3, cursor: 'pointer', display: 'flex', padding: 4 }}>{sideEditing ? <Check size={15} /> : <Pencil size={13} />}</button>
+            </div>
+          </div>
+          {sideEditing ? (
+            <DragReorderList orderKeys={dock} onReorder={(next) => setSettings((s) => ({ ...s, dock: next }))} renderItem={(k, idx, handleProps) => {
+              const Ic = navIcon(k);
+              return (
+                <div style={{ background: 'none', display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, color: C.text2, border: `1px solid ${C.borderSoft}` }}>
+                  <Ic size={19} />{navLabel(k, t)}
+                  <div {...handleProps} style={{ ...handleProps.style, marginLeft: 'auto', color: C.text3, padding: 4 }}><GripVertical size={16} /></div>
+                </div>
+              );
+            }} />
+          ) : dock.map((k) => {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
             const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
             if (k === 'dashboard') {
@@ -5967,6 +6364,7 @@ function App() {
         <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7, padding: 0 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life in Control</button>
         <div style={{ display: 'flex', gap: 6 }}>
           <button onClick={() => setSettings((s) => ({ ...s, lang: s.lang === 'pt' ? 'en' : 'pt' }))} style={{ ...card, padding: '5px 10px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5 }}><Globe size={13} />{lang.toUpperCase()}</button>
+          <NotifBell small />
           <button onClick={() => setShowSettings(true)} style={{ ...card, padding: 7, color: C.text2, cursor: 'pointer' }}><Cog size={15} /></button>
         </div>
       </div>
@@ -5980,6 +6378,7 @@ function App() {
           onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
         {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} />}
+        {active.screen === 'diet' && <DietScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} delItem={delItem} onOpen={setDetail} flash={flash} dietSummary={settings.dietSummary} setDietSummary={setDietSummary} openClaude={(q) => setClaudeSeed(q)} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={() => Promise.all([refreshGoogle(), loadGmail()])} onMount={() => { refreshGoogle(); loadGmail(); }} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
