@@ -50,18 +50,34 @@ export async function GET(req) {
     const oj = await rOrders.json();
     const orders = oj.results || [];
 
-    // O ML às vezes divide UMA compra (checkout) em vários "orders" — normalmente um por vendedor —
-    // que compartilham o mesmo pack_id. Agrupamos por pack_id (com fallback pro id do próprio order)
-    // pra virar 1 pedido só, com todos os produtos juntos, em vez de um item por order.
+    // O ML às vezes divide UMA compra em vários "orders" — por pack_id (checkout com vários
+    // vendedores) ou porque pedidos distintos acabam consolidados no mesmo envio (mesmo
+    // shipping id). Agrupamos por qualquer um dos dois (union-find), pra virar 1 pedido só
+    // com todos os produtos juntos, em vez de um item por order.
+    const parent = orders.map((_, i) => i);
+    const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+    const firstIndexByKey = new Map();
+    orders.forEach((o, i) => {
+      const keys = [];
+      if (o.pack_id) keys.push('pack:' + o.pack_id);
+      const shId = o.shipping && (o.shipping.id || o.shipping);
+      if (shId) keys.push('ship:' + shId);
+      keys.forEach((k) => {
+        if (firstIndexByKey.has(k)) union(i, firstIndexByKey.get(k));
+        else firstIndexByKey.set(k, i);
+      });
+    });
     const groups = new Map();
-    for (const o of orders) {
-      const key = o.pack_id ? 'pack_' + o.pack_id : 'order_' + o.id;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key).push(o);
-    }
+    orders.forEach((o, i) => {
+      const root = find(i);
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root).push(o);
+    });
     const STAGE_RANK = { pending: 0, paid: 1, shipped: 2, delivered: 3 };
 
-    const purchases = await Promise.all([...groups.entries()].map(async ([key, os]) => {
+    const purchases = await Promise.all([...groups.values()].map(async (os) => {
+      const key = os.map((o) => String(o.id)).sort().join('-');
       const parts = await Promise.all(os.map(async (o) => {
         let shipStatus = null, tracking = null, eta = null;
         const shId = o.shipping && (o.shipping.id || o.shipping);
