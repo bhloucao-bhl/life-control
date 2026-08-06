@@ -36,6 +36,14 @@ async function claude(system, messages) {
  * GET /api/inbox-scan
  * Procura, nos e-mails recentes, reservas de voo/hotel/viagem e compromissos,
  * e devolve SUGESTOES de itens para o usuario aprovar (nada e salvo aqui).
+ *
+ * Abordagem em duas fases (a busca antiga, só por palavras-chave/remetentes conhecidos
+ * em "q=", vinha voltando vazia — muitos e-mails de viagem reais não batiam com nenhuma
+ * palavra do fallback nem com os domínios fixos):
+ *  1) pega um lote amplo de e-mails recentes (sem depender de palavra-chave bater) e pede
+ *     pra Claude, só com assunto/remetente/trecho, triar quais parecem viagem;
+ *  2) só então busca o corpo completo dos poucos que passaram na triagem, pra extrair os
+ *     detalhes (datas, localizador, etc.) com o prompt de extração de sempre.
  */
 export async function GET(req) {
   const user = await userFromRequest(req);
@@ -48,36 +56,68 @@ export async function GET(req) {
   const days = new URL(req.url).searchParams.get('days') || '30';
 
   try {
-    // Busca 1: palavras-chave gerais de viagem (fallback amplo).
-    // Busca 2: label "(V) Viagens" criada pelo usuário (mais precisa, se existir).
-    // Busca 3: remetentes conhecidos de companhias aéreas / OTAs — é a mais confiável pra
-    // confirmações transacionais (compra de passagem, check-in, cartão de embarque, reserva de hotel),
-    // que às vezes não usam nenhuma das palavras-chave do fallback.
-    const query = `newer_than:${days}d (voo OR "sua viagem" OR passagem OR passagens OR reserva OR "confirmação de reserva" OR "confirmação da reserva" OR embarque OR "cartão de embarque" OR "cartao de embarque" OR itinerário OR itinerario OR hotel OR hospedagem OR "check-in" OR checkin OR voucher OR flight OR booking OR reservation OR boarding OR "boarding pass" OR itinerary OR confirmation)`;
+    // Busca 1: e-mails recentes em geral (rede ampla, sem depender de palavra-chave bater).
+    // Busca 2: label "(V) Viagens" criada pelo usuário, se existir.
+    // Busca 3: remetentes conhecidos de companhias aéreas / OTAs (reforço, mesmo já cobertos pela busca 1).
+    const queryBroad = `newer_than:${days}d -in:spam -in:trash`;
     const queryLabel = `label:"(V) Viagens" newer_than:${days}d`;
     const querySenders = `newer_than:${days}d from:(latam.com OR voegol.com.br OR voeazul.com.br OR avianca.com OR aa.com OR united.com OR delta.com OR copaair.com OR tap.pt OR tap.fr OR iberia.com OR airfrance.fr OR klm.com OR emirates.com OR booking.com OR airbnb.com OR decolar.com OR despegar.com OR expedia.com OR hoteis.com OR hotels.com OR trivago.com OR agoda.com OR cvc.com.br OR submarinoviagens.com.br OR maxmilhas.com.br OR 123milhas.com OR smiles.com.br OR livelo.com.br)`;
-    const [r, rLabel, rSenders] = await Promise.all([
-      fetch(`${G}/messages?q=${encodeURIComponent(query)}&maxResults=30`, { headers: h, cache: 'no-store' }),
+    const [rBroad, rLabel, rSenders] = await Promise.all([
+      fetch(`${G}/messages?q=${encodeURIComponent(queryBroad)}&maxResults=90`, { headers: h, cache: 'no-store' }),
       fetch(`${G}/messages?q=${encodeURIComponent(queryLabel)}&maxResults=30`, { headers: h, cache: 'no-store' }),
       fetch(`${G}/messages?q=${encodeURIComponent(querySenders)}&maxResults=30`, { headers: h, cache: 'no-store' }),
     ]);
-    if (!r.ok) {
-      const txt = await r.text();
-      throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 200));
+    if (!rBroad.ok) {
+      const txt = await rBroad.text();
+      throw new Error('HTTP ' + rBroad.status + ' — ' + txt.slice(0, 200));
     }
-    const j = await r.json();
+    const jBroad = await rBroad.json();
     let jLabel = { messages: [] };
     try { if (rLabel.ok) jLabel = await rLabel.json(); } catch (e) {}
     let jSenders = { messages: [] };
     try { if (rSenders.ok) jSenders = await rSenders.json(); } catch (e) {}
+    const senderIds = new Set([...(jSenders.messages || []).map((m) => m.id), ...(jLabel.messages || []).map((m) => m.id)]);
     const ids = [...new Set([
-      ...(j.messages || []).map((m) => m.id),
-      ...(jLabel.messages || []).map((m) => m.id),
-      ...(jSenders.messages || []).map((m) => m.id),
-    ])].slice(0, 60);
+      ...(jBroad.messages || []).map((m) => m.id),
+      ...senderIds,
+    ])].slice(0, 150);
     if (!ids.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
-    const mails = (await Promise.all(ids.map(async (id) => {
+    // fase 1: metadata leve (barato) pra triar
+    const metas = (await Promise.all(ids.map(async (id) => {
+      try {
+        const rr = await fetch(`${G}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`, { headers: h, cache: 'no-store' });
+        if (!rr.ok) return null;
+        const m = await rr.json();
+        return { id, from: header(m.payload, 'From'), subject: header(m.payload, 'Subject'), snippet: (m.snippet || '').slice(0, 200) };
+      } catch (e) { return null; }
+    }))).filter(Boolean);
+    if (!metas.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
+
+    // e-mails de remetentes conhecidos de companhia aérea/OTA já entram direto na fase 2 —
+    // não dependem da triagem da Claude, que é reservada pro resto do lote amplo
+    const knownSenderMetas = metas.filter((m) => senderIds.has(m.id));
+    const restMetas = metas.filter((m) => !senderIds.has(m.id));
+
+    let triagedIds = [];
+    if (restMetas.length) {
+      const triageSystem = `Você tria e-mails pra achar reservas/compromissos de viagem (voo, hotel, aluguel de carro, itinerário, cartão de embarque), em qualquer idioma.
+Responda SOMENTE com um array JSON de strings (os "id" dos e-mails que parecem viagem), sem texto fora dele, sem cercas de código.
+Inclua qualquer e-mail que pareça confirmação de compra/reserva de passagem, hospedagem, aluguel de carro, itinerário ou embarque — mesmo que o texto disponível seja curto.
+Ignore propaganda, newsletter, promoção e sugestão de destino. Se nada qualificar, devolva [].`;
+      const triageText = await claude(triageSystem, [{ role: 'user', content: JSON.stringify(restMetas.map((m) => ({ id: m.id, from: m.from, subject: m.subject, snippet: m.snippet }))) }]);
+      try {
+        const a = triageText.indexOf('['), b = triageText.lastIndexOf(']');
+        const arr = JSON.parse(a !== -1 && b !== -1 ? triageText.slice(a, b + 1) : triageText);
+        if (Array.isArray(arr)) triagedIds = arr.map(String);
+      } catch (e) { triagedIds = []; }
+    }
+    const triagedSet = new Set(triagedIds);
+    const candidateIds = [...new Set([...knownSenderMetas.map((m) => m.id), ...restMetas.filter((m) => triagedSet.has(m.id)).map((m) => m.id)])].slice(0, 60);
+    if (!candidateIds.length) return Response.json({ connected: true, suggestions: [], scanned: metas.length });
+
+    // fase 2: corpo completo só dos que passaram na triagem, pra extrair os detalhes
+    const mails = (await Promise.all(candidateIds.map(async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=full`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;

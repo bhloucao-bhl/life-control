@@ -103,7 +103,18 @@ function houseItemFromClassification(x) {
 async function markHouseEmailProcessed(x) {
   try { await authFetch('/api/house-scan', { method: 'POST', body: JSON.stringify({ messageId: x.id }) }); } catch (e) {}
 }
-async function scanHouseEmails({ addItems, flash, t, lang }) {
+function normTitle(s) { return String(s || '').trim().toLowerCase(); }
+// dedupe: um e-mail já virou item (por gmailId) ou já existe item com o mesmo título vindo de e-mail da casa
+function isHouseDuplicate(x, items) {
+  const wantTitle = normTitle((x.classification && x.classification.title) || x.zText);
+  return (items || []).some((i) => i.meta && i.meta.houseEmail && (i.meta.gmailId === x.id || normTitle(i.title) === wantTitle));
+}
+// trava global: evita que duas varreduras (ex.: Casa abrindo + botão da Hoje) rodem ao mesmo tempo
+// e processem o mesmo e-mail duas vezes antes da label ser aplicada no Gmail
+let houseScanInFlight = false;
+async function scanHouseEmails({ addItems, flash, t, lang, items }) {
+  if (houseScanInFlight) return { added: 0, pending: [] };
+  houseScanInFlight = true;
   try {
     const r = await authFetch('/api/house-scan');
     const j = await r.json();
@@ -112,8 +123,11 @@ async function scanHouseEmails({ addItems, flash, t, lang }) {
     const results = j.results || [];
     const confirmed = results.filter((x) => x.classification && x.classification.kind !== 'ambiguous' && x.classification.confidence >= 0.6);
     const pending = results.filter((x) => !confirmed.includes(x));
-    const toAdd = confirmed.map(houseItemFromClassification);
+    const dupes = confirmed.filter((x) => isHouseDuplicate(x, items));
+    const fresh = confirmed.filter((x) => !dupes.includes(x));
+    const toAdd = fresh.map(houseItemFromClassification);
     if (toAdd.length) addItems(toAdd);
+    // marca TODOS os confirmados (inclusive duplicados) como processados, senão o duplicado fica sem label e reaparece na próxima varredura
     await Promise.all(confirmed.map(markHouseEmailProcessed));
     if (toAdd.length) {
       const nt = toAdd.filter((i) => i.type === 'task').length, ne = toAdd.filter((i) => i.type === 'event').length;
@@ -128,6 +142,8 @@ async function scanHouseEmails({ addItems, flash, t, lang }) {
   } catch (e) {
     flash(String((e && e.message) || e));
     return { added: 0, pending: [] };
+  } finally {
+    houseScanInFlight = false;
   }
 }
 
@@ -678,10 +694,14 @@ function Field({ label, children }) {
 function Empty({ icon: Icon, text }) {
   return <div style={{ ...card, padding: '26px 18px', textAlign: 'center', color: C.text3 }}>{Icon && <Icon size={22} style={{ opacity: 0.6, marginBottom: 8 }} />}<div style={{ fontSize: 13.5, lineHeight: 1.5 }}>{text}</div></div>;
 }
-function Modal({ children, onClose }) {
+function Modal({ children, onClose, wide }) {
   return <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 50 }}>
-    <div onClick={(e) => e.stopPropagation()} style={{ background: C.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, border: `1px solid ${C.border}`, borderBottom: 'none', width: '100%', maxWidth: 480, maxHeight: '90vh', overflowY: 'auto', padding: 18, boxSizing: 'border-box' }}>{children}</div>
+    <div onClick={(e) => e.stopPropagation()} style={{ background: C.surface, borderTopLeftRadius: 22, borderTopRightRadius: 22, border: `1px solid ${C.border}`, borderBottom: 'none', width: '100%', maxWidth: wide ? 640 : 480, maxHeight: '90vh', overflowY: 'auto', padding: 18, boxSizing: 'border-box' }}>{children}</div>
   </div>;
+}
+// grade responsiva: uma coluna no celular, se ajusta pra 2+ colunas sozinha em telas maiores (iPad etc.), sem precisar medir viewport em JS
+function ResponsiveGrid({ children, min = 220 }) {
+  return <div style={{ display: 'grid', gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))`, gap: 12 }}>{children}</div>;
 }
 function SheetHead({ title, onClose, icon: Icon }) {
   return <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
@@ -1703,7 +1723,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const [zBusy, setZBusy] = useState(false);
   const checkHouseEmailsNow = () => {
     setZBusy(true);
-    scanHouseEmails({ addItems, flash, t, lang }).then((res) => {
+    scanHouseEmails({ addItems, flash, t, lang, items }).then((res) => {
       setZBusy(false);
       if (res.pending.length) flash((lang === 'pt' ? `${res.pending.length} e-mail(s) da casa precisam da sua decisão na aba Casa.` : `${res.pending.length} house email(s) need your decision in the House tab.`));
     });
@@ -1737,6 +1757,10 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const localAttention = items.filter((i) => i.type === 'task' && i.status !== 'done' && (i.priority === 1 || (i.date && i.date < today)) && !String(i.id).startsWith('tt_'));
   // Contas vencendo hoje primeiro, depois tarefas 'Importante' do TickTick, depois locais urgentes
   const attention = [...billsDue, ...ttImportant, ...localAttention].slice(0, 5);
+  // curadoria: até 3 tarefas da casa em aberto, priorizando marcadas como importante, depois atrasadas, depois as mais antigas
+  const houseTasksOpen = items.filter((i) => i.domain === 'home' && i.type === 'task' && i.status !== 'done');
+  const houseTaskScore = (i) => (i.priority === 1 ? 2 : 0) + (i.date && i.date < today ? 1 : 0);
+  const houseTasksTop = [...houseTasksOpen].sort((a, b) => houseTaskScore(b) - houseTaskScore(a) || (a.createdAt || 0) - (b.createdAt || 0)).slice(0, 3);
   const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
   // próximas 24h: de agora até a mesma hora de amanhã
   const tomorrow = addDays(today, 1);
@@ -1794,6 +1818,13 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       </div>
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {quickAttn && <AddModal title={lang === 'pt' ? 'Pra não esquecer' : "Don't forget"} icon={AlertTriangle} draft={{ type: 'task', domain: 'personal', priority: 1, date: today }} allowedTypes={['task']} lang={lang} t={t} onClose={() => setQuickAttn(false)} onSave={(x) => { addItems([{ ...x, status: 'planned' }]); flash(t('savedOne')); setQuickAttn(false); }} />}
+      {houseTasksOpen.length > 0 && <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
+          <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Home size={14} style={{ color: C.blue }} />{t('houseTasks')}</span>
+          {houseTasksOpen.length > 3 && <button onClick={() => goModule('house')} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', fontSize: 11.5 }}>{lang === 'pt' ? `ver todas (${houseTasksOpen.length})` : `see all (${houseTasksOpen.length})`}</button>}
+        </div>
+        {houseTasksTop.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      </>}
       <SectionTitle icon={Clock} label={lang === 'pt' ? 'O que vai rolar nas próximas 24h' : 'Next 24 hours'} color={C.accent} />
       {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : <div style={{ ...card, padding: 14 }}><MiniPlanner items={next5} lang={lang} t={t} onOpen={onOpen} today={today} /></div>}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
@@ -3029,7 +3060,7 @@ function PurchaseCard({ p, lang, onOpen }) {
     </div>
   );
 }
-function PurchasesScreen({ module, items = [], lang, t, back, addItem, updateItem, onOpen, flash }) {
+function PurchasesScreen({ module, items = [], lang, t, back, addItem, updateItem, delItem, onOpen, flash }) {
   const [adding, setAdding] = useState(false);
   const [days, setDays] = useState(30);
   const [ml, setMl] = useState({ loading: true, connected: false, error: null, syncedAt: null });
@@ -3041,11 +3072,14 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, updateIte
       setMl({ loading: false, connected: !!j.connected, error: j.error || null, syncedAt: new Date().toISOString() });
       // persiste cada pedido buscado como item de verdade — nunca mais some quando o fetch seguinte usar outro período
       (j.purchases || []).forEach((p) => {
+        const subIds = new Set(p.meta.subOrderIds || []);
         const existing = items.find((i) => i.type === 'purchase' && i.meta && i.meta.orderId === p.meta.orderId);
+        // migra entradas antigas (de antes do agrupamento por pack_id) que correspondem a uma sub-ordem deste pedido
+        items.filter((i) => i.type === 'purchase' && i.meta && i.meta.orderId !== p.meta.orderId && subIds.has(String(i.meta.orderId))).forEach((old) => delItem(old.id));
         if (!existing) addItem(p);
-        else if (existing.meta.stage !== p.meta.stage || existing.meta.tracking !== p.meta.tracking) {
+        else if (existing.meta.stage !== p.meta.stage || existing.meta.tracking !== p.meta.tracking || (existing.meta.items || []).length !== p.meta.items.length) {
           // atualiza só se algo relevante mudou (ex: pedido que estava "enviado" agora está "entregue")
-          updateItem(existing.id, { meta: { ...existing.meta, stage: p.meta.stage, tracking: p.meta.tracking, shipStatus: p.meta.shipStatus, deliveredDate: p.meta.deliveredDate, etaDate: p.meta.etaDate } });
+          updateItem(existing.id, { meta: { ...existing.meta, stage: p.meta.stage, tracking: p.meta.tracking, shipStatus: p.meta.shipStatus, deliveredDate: p.meta.deliveredDate, etaDate: p.meta.etaDate, items: p.meta.items, subOrderIds: p.meta.subOrderIds } });
         }
       });
     }).catch(() => setMl((p) => ({ ...p, loading: false })));
@@ -4574,11 +4608,14 @@ function HouseEmailReviewCard({ x, lang, t, onTask, onEvent, onIgnore }) {
 function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
   const [zScan, setZScan] = useState({ loading: false, pending: [] });
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const runZScan = () => {
     setZScan((p) => ({ ...p, loading: true }));
-    scanHouseEmails({ addItems, flash, t, lang }).then((res) => setZScan({ loading: false, pending: res.pending }));
+    scanHouseEmails({ addItems, flash, t, lang, items: itemsRef.current }).then((res) => setZScan({ loading: false, pending: res.pending }));
   };
-  useEffect(() => { runZScan(); }, []);
+  const scannedOnMount = useRef(false);
+  useEffect(() => { if (scannedOnMount.current) return; scannedOnMount.current = true; runZScan(); }, []);
   const resolveAsTask = (x) => {
     addItem(houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'task' } }));
     markHouseEmailProcessed(x);
@@ -5495,12 +5532,12 @@ function Connections({ lang, t }) {
   };
   if (!st) return <div style={{ ...card, padding: 14, marginBottom: 10, color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center' }}><Loader2 size={13} className="spin" />…</div>;
   return (
-    <div style={{ marginBottom: 14 }}>
+    <ResponsiveGrid min={280}>
       <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
       <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
       <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
       <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
-    </div>
+    </ResponsiveGrid>
   );
 }
 
@@ -5510,10 +5547,12 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
   const toggleDock = (k) => setSettings((s) => { const cur = s.dock || DEFAULT_DOCK; const has = cur.includes(k); if (has) return { ...s, dock: cur.filter((x) => x !== k) }; if (cur.length >= 5) return s; return { ...s, dock: [...cur, k] }; });
   const exportJSON = () => { const blob = new Blob([JSON.stringify({ items, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'life-control-export.json'; a.click(); URL.revokeObjectURL(url); };
   return (
-    <Modal onClose={onClose}>
+    <Modal onClose={onClose} wide>
       <SheetHead title={t('settings')} onClose={onClose} icon={Cog} />
-      <Field label={t('name')}><input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setSettings((s) => ({ ...s, name }))} style={inputStyleBig} /></Field>
-      <Field label={t('height') + ' (cm)'}><input type="number" value={settings.profile && settings.profile.height || ''} onChange={(e) => setSettings((s) => ({ ...s, profile: { ...(s.profile || {}), height: e.target.value } }))} style={inputStyleBig} /></Field>
+      <ResponsiveGrid min={200}>
+        <Field label={t('name')}><input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setSettings((s) => ({ ...s, name }))} style={inputStyleBig} /></Field>
+        <Field label={t('height') + ' (cm)'}><input type="number" value={settings.profile && settings.profile.height || ''} onChange={(e) => setSettings((s) => ({ ...s, profile: { ...(s.profile || {}), height: e.target.value } }))} style={inputStyleBig} /></Field>
+      </ResponsiveGrid>
       <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{t('editDock')}</div>
       <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
@@ -5529,21 +5568,23 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
-      <div style={{ ...card, padding: 14, marginBottom: 12 }}>
-        <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Saldo na tela Hoje' : 'Balance on Today'}</div>
-        <select value={settings.todayAccountId || ''} onChange={(e) => setSettings((s) => ({ ...s, todayAccountId: e.target.value || null }))} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
-          <option value="">{lang === 'pt' ? 'Automático (conta Alelo)' : 'Auto (Alelo)'}</option>
-          {items.filter((i) => i.type === 'account').map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-        </select>
-        <div style={{ fontSize: 11, color: C.text3, marginTop: 6, lineHeight: 1.4 }}>{lang === 'pt' ? 'Escolha qual conta ou cartão aparece no terceiro card da tela Hoje.' : 'Pick which account shows on Today.'}</div>
-      </div>
-      <div style={{ ...card, padding: 14, marginBottom: 12 }}>
-        <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Aparência' : 'Appearance'}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => applyTheme && applyTheme('dark')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme !== 'light' ? C.accent : C.border}`, color: theme !== 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Moon size={15} />{lang === 'pt' ? 'Escuro' : 'Dark'}</button>
-          <button onClick={() => applyTheme && applyTheme('light')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme === 'light' ? C.accent : C.border}`, color: theme === 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Sun size={15} />{lang === 'pt' ? 'Claro' : 'Light'}</button>
+      <ResponsiveGrid min={230}>
+        <div style={{ ...card, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Saldo na tela Hoje' : 'Balance on Today'}</div>
+          <select value={settings.todayAccountId || ''} onChange={(e) => setSettings((s) => ({ ...s, todayAccountId: e.target.value || null }))} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+            <option value="">{lang === 'pt' ? 'Automático (conta Alelo)' : 'Auto (Alelo)'}</option>
+            {items.filter((i) => i.type === 'account').map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+          </select>
+          <div style={{ fontSize: 11, color: C.text3, marginTop: 6, lineHeight: 1.4 }}>{lang === 'pt' ? 'Escolha qual conta ou cartão aparece no terceiro card da tela Hoje.' : 'Pick which account shows on Today.'}</div>
         </div>
-      </div>
+        <div style={{ ...card, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Aparência' : 'Appearance'}</div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={() => applyTheme && applyTheme('dark')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme !== 'light' ? C.accent : C.border}`, color: theme !== 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Moon size={15} />{lang === 'pt' ? 'Escuro' : 'Dark'}</button>
+            <button onClick={() => applyTheme && applyTheme('light')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme === 'light' ? C.accent : C.border}`, color: theme === 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Sun size={15} />{lang === 'pt' ? 'Claro' : 'Light'}</button>
+          </div>
+        </div>
+      </ResponsiveGrid>
       <div style={{ marginBottom: 12 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
       <Btn kind="soft" onClick={() => { if (confirm(lang === 'pt' ? 'Apagar TODOS os dados do app e começar do zero? As conexões (Google, Oura, TickTick, Tuya, LG) permanecem.' : 'Erase all app data and start fresh? Connections stay.')) { setItems([]); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', color: C.rose }}><Trash2 size={15} />{lang === 'pt' ? 'Zerar app (começar do zero)' : 'Reset app'}</Btn>
       <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
