@@ -583,7 +583,7 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v62 · 05ago';
+const APP_VERSION = 'v62 · 05ago' + (process.env.GIT_SHA ? ' · ' + process.env.GIT_SHA.slice(0, 7) : '');
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -2484,9 +2484,8 @@ function DayPlanner({ dayItems, lang, t, onOpen }) {
   const PX = 52; // altura por hora
   return (
     <div>
-      {allDay.length > 0 && <div style={{ marginBottom: 10 }}>{allDay.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={() => {}} onOpen={onOpen} />)}</div>}
       {timed.length > 0 && (
-        <div style={{ ...card, padding: '8px 8px 8px 0', position: 'relative' }}>
+        <div style={{ ...card, padding: '8px 8px 8px 0', position: 'relative', marginBottom: allDay.length > 0 ? 10 : 0 }}>
           <div style={{ position: 'relative', height: (endH - startH + 1) * PX }}>
             {hours.map((h, idx) => (
               <div key={h} style={{ position: 'absolute', top: idx * PX, left: 0, right: 0, height: PX, borderTop: `1px solid ${C.borderSoft}`, display: 'flex' }}>
@@ -2513,6 +2512,7 @@ function DayPlanner({ dayItems, lang, t, onOpen }) {
           </div>
         </div>
       )}
+      {allDay.length > 0 && <div>{allDay.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={() => {}} onOpen={onOpen} />)}</div>}
     </div>
   );
 }
@@ -2851,6 +2851,9 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
   const [sel, setSel] = useState(null);
   const [gfilter, setGfilter] = useState('all'); // all | work | personal
   const [showAll, setShowAll] = useState(false);
+  // toda vez que a tela Gmail abre, já busca sozinha e-mails novos
+  const loadedOnMount = useRef(false);
+  useEffect(() => { if (loadedOnMount.current) return; loadedOnMount.current = true; if (load) load(); }, []);
   const act = async (id, action) => {
     setState((p) => ({ ...p, messages: p.messages.filter((m) => m.id !== id) }));
     try { await authFetch('/api/gmail', { method: 'POST', body: JSON.stringify({ id, action }) }); } catch (e) {}
@@ -2980,6 +2983,7 @@ function Extrato({ tx, accounts, lang, t, onOpen }) {
 function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, gmail }) {
   const [tab, setTab] = useState('all'); // all | events | tasks | emails
   const [adding, setAdding] = useState(false);
+  const [expandAll, setExpandAll] = useState(false);
   const isMouraMsg = (m) => m.work || /^\s*\(m\)/i.test(m.subject || '');
   const workEvents = items.filter((i) => (i.type === 'event' || i.type === 'appointment') && (i.domain === 'work' || (i.meta && i.meta.moura))).sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
   const workTasks = items.filter((i) => i.type === 'task' && i.domain === 'work' && i.status !== 'done').sort((a, b) => (a.date || '').localeCompare(b.date || ''));
@@ -2989,6 +2993,12 @@ function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
     { k: 'tasks', label: lang === 'pt' ? 'Tarefas' : 'Tasks', n: workTasks.length, icon: ListTodo, color: C.blue },
     { k: 'emails', label: lang === 'pt' ? 'E-mails' : 'Emails', n: workEmails.length, icon: Mail, color: C.violet },
   ];
+  // na visão "todos", mostra no máximo 10 itens abertos (reuniões + tarefas) e agrupa o resto
+  const OPEN_LIM = 10;
+  const capOpen = tab === 'all' && !expandAll;
+  const evShown = capOpen ? Math.min(workEvents.length, OPEN_LIM) : workEvents.length;
+  const taskShown = capOpen ? Math.max(0, Math.min(workTasks.length, OPEN_LIM - evShown)) : workTasks.length;
+  const hiddenOpen = capOpen ? (workEvents.length + workTasks.length) - (evShown + taskShown) : 0;
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -3003,10 +3013,15 @@ function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
 
       {(tab === 'all' || tab === 'events') && workEvents.length > 0 && (
-        <><SectionTitle icon={CalIcon} label={lang === 'pt' ? 'Reuniões' : 'Meetings'} color={C.accent} />{workEvents.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
+        <><SectionTitle icon={CalIcon} label={lang === 'pt' ? 'Reuniões' : 'Meetings'} color={C.accent} />{workEvents.slice(0, tab === 'all' ? evShown : workEvents.length).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
       )}
       {(tab === 'all' || tab === 'tasks') && workTasks.length > 0 && (
-        <><SectionTitle icon={ListTodo} label={lang === 'pt' ? 'Tarefas' : 'Tasks'} color={C.blue} />{workTasks.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
+        <><SectionTitle icon={ListTodo} label={lang === 'pt' ? 'Tarefas' : 'Tasks'} color={C.blue} />{workTasks.slice(0, tab === 'all' ? taskShown : workTasks.length).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>
+      )}
+      {hiddenOpen > 0 && (
+        <button onClick={() => setExpandAll(true)} style={{ ...card, width: '100%', padding: '10px', marginBottom: 14, color: C.text2, cursor: 'pointer', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}>
+          {lang === 'pt' ? `+ ${hiddenOpen} itens (ver todos)` : `+ ${hiddenOpen} items (see all)`}<ChevronRight size={13} />
+        </button>
       )}
       {(tab === 'all' || tab === 'emails') && workEmails.length > 0 && (
         <>
@@ -3076,33 +3091,29 @@ function PurchaseCard({ p, lang, onOpen }) {
     </div>
   );
 }
-function PurchasesScreen({ module, items = [], lang, t, back, addItem, updateItem, delItem, onOpen, flash }) {
+function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems, updateItem, delItem, onOpen, flash }) {
   const [adding, setAdding] = useState(false);
   const [days, setDays] = useState(30);
   const [ml, setMl] = useState({ loading: true, connected: false, error: null, syncedAt: null });
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
   const [storeFilter, setStoreFilter] = useState('all');
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
   const loadMl = (d) => {
     setMl((p) => ({ ...p, loading: true }));
     authFetch('/api/mercadolivre?days=' + d).then((r) => r.json()).then((j) => {
       setMl({ loading: false, connected: !!j.connected, error: j.error || null, syncedAt: new Date().toISOString() });
-      // persiste cada pedido buscado como item de verdade — nunca mais some quando o fetch seguinte usar outro período
-      (j.purchases || []).forEach((p) => {
-        const newSubIds = new Set(p.meta.subOrderIds || []);
-        const existing = items.find((i) => i.type === 'purchase' && i.meta && i.meta.orderId === p.meta.orderId);
-        // migra entradas antigas de qualquer geração anterior do agrupamento (por order cru, ou por um
-        // agrupamento parcial de antes) que cubram alguma das sub-ordens deste pedido agrupado
-        items.filter((i) => {
-          if (i.type !== 'purchase' || !i.meta || i.meta.orderId === p.meta.orderId) return false;
-          if (newSubIds.has(String(i.meta.orderId))) return true;
-          return (i.meta.subOrderIds || []).some((id) => newSubIds.has(String(id)));
-        }).forEach((old) => delItem(old.id));
-        if (!existing) addItem(p);
-        else if (existing.meta.stage !== p.meta.stage || existing.meta.tracking !== p.meta.tracking || (existing.meta.items || []).length !== p.meta.items.length) {
-          // atualiza só se algo relevante mudou (ex: pedido que estava "enviado" agora está "entregue")
-          updateItem(existing.id, { meta: { ...existing.meta, stage: p.meta.stage, tracking: p.meta.tracking, shipStatus: p.meta.shipStatus, deliveredDate: p.meta.deliveredDate, etaDate: p.meta.etaDate, items: p.meta.items, subOrderIds: p.meta.subOrderIds } });
-        }
+      if (!j.connected) return;
+      // reset completo a cada sincronização: apaga tudo que veio do Mercado Livre (e os eventos de
+      // chegada automáticos ligados a eles) e recria do zero com o agrupamento mais recente — mais
+      // confiável do que tentar casar incrementalmente com formatos antigos de agrupamento já salvos.
+      const cur = itemsRef.current;
+      cur.filter((i) => i.type === 'purchase' && i.meta && i.meta.external === 'mercadolivre').forEach((old) => {
+        const ev = cur.find((i) => i.meta && i.meta.auto && i.meta.purchaseRef === old.id);
+        if (ev) delItem(ev.id);
+        delItem(old.id);
       });
+      if ((j.purchases || []).length) addItems(j.purchases);
     }).catch(() => setMl((p) => ({ ...p, loading: false })));
   };
   useEffect(() => { loadMl(days); }, []);
@@ -5970,7 +5981,7 @@ function App() {
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
         {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
-        {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={refreshGoogle} onMount={refreshGoogle} />}
+        {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={() => Promise.all([refreshGoogle(), loadGmail()])} onMount={() => { refreshGoogle(); loadGmail(); }} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
         {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} goNews={() => setActive({ screen: 'news', module: null })} order={settings.moduleOrder || []} setOrder={(o) => setSettings((st) => ({ ...st, moduleOrder: o }))} />)}
       </div>

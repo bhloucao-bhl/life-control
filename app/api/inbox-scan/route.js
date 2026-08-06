@@ -143,7 +143,7 @@ Para cada e-mail que REALMENTE contenha uma reserva ou compromisso confirmado, g
  "date":"YYYY-MM-DD"|null,
  "time":"HH:MM"|null,
  "amount":número|null,
- "meta":{"airline":"","flightNumber":"","from":"IATA","to":"IATA","seat":"","locator":"","destination":"","endDate":"YYYY-MM-DD","hotel":""},
+ "meta":{"airline":"","flightNumber":"","from":"IATA","to":"IATA","seat":"","locator":"","destination":"","endDate":"YYYY-MM-DD","hotel":"","durationMin":número|null,"arrivalTime":"HH:MM"|null},
  "sourceId":"id do e-mail",
  "confidence":0..1,
  "why":"por que você concluiu isso, em 1 frase curta"}
@@ -153,6 +153,7 @@ Regras rígidas:
 - Ignore propaganda, newsletter, promoção e sugestão de destino: só reservas/compromissos confirmados.
 - E-mails de companhia aérea ou agência de viagem (ex: LATAM, GOL, Azul, Avianca, Booking, Airbnb, Decolar, Expedia, CVC) sobre compra de passagem, check-in, cartão de embarque ou confirmação de hospedagem SÃO reservas confirmadas — inclua mesmo que o corpo do e-mail seja curto ou majoritariamente em HTML/imagens; extraia o que der do assunto e do texto disponível.
 - Um e-mail de compra de passagem com ida e volta pode gerar dois itens "flight" (um por trecho) se as datas/números de voo de ambos estiverem no e-mail.
+- Para "flight": se a duração do voo estiver escrita no e-mail (ex: "Duração: 2h35"), preencha meta.durationMin em minutos. Se não estiver escrita mas houver horário de partida E de chegada do mesmo trecho (mesmo dia), preencha meta.arrivalTime e calcule meta.durationMin pela diferença entre partida e chegada. Se nada disso estiver disponível, deixe ambos null — não estime.
 - Não repita o mesmo voo/reserva duas vezes.
 - Se nada qualificar, devolva [].`;
 
