@@ -4,6 +4,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 60;
 
 const G = 'https://gmail.googleapis.com/gmail/v1/users/me';
+const LABEL_NAME = '(V) processado';
 
 function header(payload, name) {
   const hs = (payload && payload.headers) || [];
@@ -59,9 +60,10 @@ export async function GET(req) {
     // Busca 1: e-mails recentes em geral (rede ampla, sem depender de palavra-chave bater).
     // Busca 2: label "(V) Viagens" criada pelo usuário, se existir.
     // Busca 3: remetentes conhecidos de companhias aéreas / OTAs (reforço, mesmo já cobertos pela busca 1).
-    const queryBroad = `newer_than:${days}d -in:spam -in:trash`;
-    const queryLabel = `label:"(V) Viagens" newer_than:${days}d`;
-    const querySenders = `newer_than:${days}d from:(latam.com OR voegol.com.br OR voeazul.com.br OR avianca.com OR aa.com OR united.com OR delta.com OR copaair.com OR tap.pt OR tap.fr OR iberia.com OR airfrance.fr OR klm.com OR emirates.com OR booking.com OR airbnb.com OR decolar.com OR despegar.com OR expedia.com OR hoteis.com OR hotels.com OR trivago.com OR agoda.com OR cvc.com.br OR submarinoviagens.com.br OR maxmilhas.com.br OR 123milhas.com OR smiles.com.br OR livelo.com.br)`;
+    // "-label:(V) processado" exclui e-mails cuja sugestão já foi aceita antes (evita voo/reserva duplicado)
+    const queryBroad = `newer_than:${days}d -in:spam -in:trash -label:"${LABEL_NAME}"`;
+    const queryLabel = `label:"(V) Viagens" newer_than:${days}d -label:"${LABEL_NAME}"`;
+    const querySenders = `newer_than:${days}d -label:"${LABEL_NAME}" from:(latam.com OR voegol.com.br OR voeazul.com.br OR avianca.com OR aa.com OR united.com OR delta.com OR copaair.com OR tap.pt OR tap.fr OR iberia.com OR airfrance.fr OR klm.com OR emirates.com OR booking.com OR airbnb.com OR decolar.com OR despegar.com OR expedia.com OR hoteis.com OR hotels.com OR trivago.com OR agoda.com OR cvc.com.br OR submarinoviagens.com.br OR maxmilhas.com.br OR 123milhas.com OR smiles.com.br OR livelo.com.br)`;
     const [rBroad, rLabel, rSenders] = await Promise.all([
       fetch(`${G}/messages?q=${encodeURIComponent(queryBroad)}&maxResults=90`, { headers: h, cache: 'no-store' }),
       fetch(`${G}/messages?q=${encodeURIComponent(queryLabel)}&maxResults=30`, { headers: h, cache: 'no-store' }),
@@ -174,6 +176,7 @@ Regras rígidas:
       const src = byId[x.sourceId] || {};
       return {
         key: 'sug_' + i + '_' + (x.sourceId || ''),
+        messageId: x.sourceId || null,
         type: ['flight', 'trip', 'event', 'appointment', 'bill'].includes(x.type) ? x.type : 'event',
         title: String(x.title || '').slice(0, 140),
         date: x.date || null,
@@ -189,5 +192,61 @@ Regras rígidas:
     return Response.json({ connected: true, suggestions, scanned: mails.length });
   } catch (e) {
     return Response.json({ connected: true, suggestions: [], error: String(e.message || e) });
+  }
+}
+
+async function findLabelId(h) {
+  const r = await fetch(`${G}/labels`, { headers: h, cache: 'no-store' });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const found = (j.labels || []).find((l) => l.name === LABEL_NAME);
+  return found ? found.id : null;
+}
+async function getOrCreateLabelId(h) {
+  const found = await findLabelId(h);
+  if (found) return found;
+  const r = await fetch(`${G}/labels`, {
+    method: 'POST',
+    headers: { ...h, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: LABEL_NAME, labelListVisibility: 'labelShow', messageListVisibility: 'show' }),
+  });
+  if (!r.ok) return null;
+  const j = await r.json();
+  return j.id || null;
+}
+
+/**
+ * POST /api/inbox-scan  { messageId }
+ * Marca o e-mail com a label "(V) processado" pra não sugerir de novo — sem arquivar
+ * (o usuário quer continuar vendo esses e-mails na caixa de entrada).
+ */
+export async function POST(req) {
+  const user = await userFromRequest(req);
+  if (!user) return Response.json({ error: 'Sem sessão.' }, { status: 401 });
+
+  const token = await validToken(user.id, 'google');
+  if (!token) return Response.json({ ok: false, error: 'Google não conectado.' }, { status: 400 });
+
+  let body;
+  try { body = await req.json(); } catch (e) { body = {}; }
+  const messageId = body && body.messageId;
+  if (!messageId) return Response.json({ ok: false, error: 'messageId ausente.' }, { status: 400 });
+
+  const h = { Authorization: `Bearer ${token}` };
+  try {
+    const labelId = await getOrCreateLabelId(h);
+    if (!labelId) return Response.json({ ok: false, error: 'Não foi possível criar/achar a label.' }, { status: 500 });
+    const r = await fetch(`${G}/messages/${messageId}/modify`, {
+      method: 'POST',
+      headers: { ...h, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ addLabelIds: [labelId] }),
+    });
+    if (!r.ok) {
+      const txt = await r.text();
+      throw new Error('HTTP ' + r.status + ' — ' + txt.slice(0, 200));
+    }
+    return Response.json({ ok: true });
+  } catch (e) {
+    return Response.json({ ok: false, error: String(e.message || e) }, { status: 500 });
   }
 }
