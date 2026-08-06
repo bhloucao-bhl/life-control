@@ -2302,44 +2302,51 @@ function DrClaudeBadge({ size = 20 }) {
     </div>
   );
 }
-function IndicatorChart({ indicator, points, lang }) {
-  const [open, setOpen] = useState(false);
-  const sorted = [...points].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-  const latest = sorted[sorted.length - 1];
-  const vals = sorted.map((p) => p.value);
-  const min = Math.min(...vals), max = Math.max(...vals); const span = (max - min) || 1;
-  const W = 280, H = 44;
-  const pts = sorted.map((p, i) => [sorted.length === 1 ? W / 2 : (i / (sorted.length - 1)) * W, H - ((p.value - min) / span) * (H - 10) - 5]);
-  const dPath = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
-  const statusColor = latest && latest.status === 'alto' ? C.rose : latest && latest.status === 'baixo' ? C.blue : C.green;
+// indicadores clinicamente comuns/rotineiros — usados só como desempate na ordenação da tabela
+// (o critério principal é quantidade de leituras: quem é medido com mais frequência tende a ser
+// o que mais importa acompanhar ao longo do tempo)
+const COMMON_INDICATORS = ['Glicemia', 'Hemoglobina Glicada', 'Colesterol Total', 'HDL', 'LDL', 'VLDL', 'Triglicerídeos', 'Creatinina', 'Ureia', 'TSH', 'T4 Livre', 'PCR', 'Hemoglobina', 'Hematócrito', 'Leucócitos', 'Plaquetas', 'Ácido Úrico', 'Vitamina D', 'TGO', 'TGP', 'Ferritina', 'Sódio', 'Potássio'];
+const fmtIndNum = (v) => (v == null || isNaN(v)) ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const shortDate = (iso) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : '';
+// tabela: linhas = indicadores, colunas = data do exame (mais recente à esquerda), ordenada pra
+// caber o histórico inteiro numa visão só, em vez de um gráfico por indicador
+function IndicatorsTable({ byIndicator, lang }) {
+  const entries = Object.entries(byIndicator).filter(([k]) => k !== '__checked__');
+  if (!entries.length) return null;
+  const allDates = [...new Set(entries.flatMap(([, pts]) => pts.map((p) => p.date).filter(Boolean)))].sort((a, b) => b.localeCompare(a));
+  const impIndex = (name) => { const i = COMMON_INDICATORS.findIndex((x) => x.toLowerCase() === name.toLowerCase()); return i === -1 ? 999 : i; };
+  const rows = entries.slice().sort((a, b) => (b[1].length - a[1].length) || (impIndex(a[0]) - impIndex(b[0])) || a[0].localeCompare(b[0], 'pt'));
+  const cellFor = (pts, date) => pts.find((p) => p.date === date);
+  const thBase = { padding: '9px 10px', borderBottom: `1px solid ${C.borderSoft}`, fontWeight: 600 };
+  const nameColBg = (THEMES[_theme] || THEMES.dark).surface;
   return (
-    <div style={{ ...card, padding: 13, marginBottom: 8 }}>
-      <div onClick={() => sorted.length > 1 && setOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: sorted.length > 1 ? 'pointer' : 'default' }}>
-        <div>
-          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{indicator}</div>
-          <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{latest && latest.date ? fmtDate(latest.date, lang) : ''}{latest && latest.refRange ? ` · ref: ${latest.refRange}` : ''}</div>
-        </div>
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontSize: 16, fontWeight: 800, color: statusColor }}>{latest ? latest.value : '—'} <span style={{ fontSize: 10, fontWeight: 400, color: C.text3 }}>{latest && latest.unit}</span></div>
-          {sorted.length > 1 && <ChevronRight size={13} style={{ color: C.text3, transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }} />}
-        </div>
-      </div>
-      {sorted.length > 1 && open && (
-        <div style={{ marginTop: 10 }}>
-          <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 50, display: 'block' }} preserveAspectRatio="none">
-            <path d={dPath} fill="none" stroke={C.blue} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
-            {pts.map((p, i) => <circle key={i} cx={p[0]} cy={p[1]} r="2.5" fill={sorted[i].status === 'alto' ? C.rose : sorted[i].status === 'baixo' ? C.blue : C.green} />)}
-          </svg>
-          <div style={{ marginTop: 6 }}>
-            {sorted.slice().reverse().map((p, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, padding: '4px 0', borderTop: i ? `1px solid ${C.borderSoft}` : 'none', color: C.text2 }}>
-                <span>{fmtDate(p.date, lang)}</span>
-                <span style={{ fontWeight: 600, color: p.status === 'alto' ? C.rose : p.status === 'baixo' ? C.blue : C.text }}>{p.value} {p.unit}</span>
-              </div>
+    <div style={{ ...card, padding: 0, marginBottom: 14, overflow: 'hidden' }}>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 11.5, whiteSpace: 'nowrap', width: '100%' }}>
+          <thead>
+            <tr>
+              <th style={{ ...thBase, position: 'sticky', left: 0, background: nameColBg, textAlign: 'left', color: C.text2, zIndex: 1 }}>{lang === 'pt' ? 'Indicador' : 'Indicator'}</th>
+              {allDates.map((d) => <th key={d} style={{ ...thBase, textAlign: 'right', color: C.text3 }}>{shortDate(d)}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(([name, pts]) => (
+              <tr key={name}>
+                <td style={{ position: 'sticky', left: 0, background: nameColBg, padding: '8px 10px', fontWeight: 600, color: C.text, borderBottom: `1px solid ${C.borderSoft}` }}>{name}</td>
+                {allDates.map((d) => {
+                  const p = cellFor(pts, d);
+                  const color = !p ? C.text3 : p.status === 'alto' ? C.rose : p.status === 'baixo' ? C.blue : C.text2;
+                  return (
+                    <td key={d} title={p && p.refRange ? `ref: ${p.refRange}` : undefined} style={{ textAlign: 'right', padding: '8px 10px', color, fontWeight: p && p.status && p.status !== 'normal' ? 700 : 400, borderBottom: `1px solid ${C.borderSoft}` }}>
+                      {p ? `${fmtIndNum(p.value)}${p.unit ? ' ' + p.unit : ''}` : '—'}
+                    </td>
+                  );
+                })}
+              </tr>
             ))}
-          </div>
-        </div>
-      )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -2379,11 +2386,10 @@ function SleepReadinessHistory({ health, lang }) {
     </div>
   );
 }
-function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash, health, onOpen }) {
+function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash, health, onOpen, openClaude }) {
   const [adding, setAdding] = useState(null); // 'condition' | 'allergy' | 'medication'
   const [analyzing, setAnalyzing] = useState(false); const [analyzeProgress, setAnalyzeProgress] = useState('');
   const [dietOpen, setDietOpen] = useState(false); const [mealLoading, setMealLoading] = useState(false);
-  const [showAllIndicators, setShowAllIndicators] = useState(false);
   const mealFileRef = useRef();
   const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const pickMealPhoto = (e) => {
@@ -2472,6 +2478,11 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
             {analyzing ? <><Loader2 size={15} className="spin" />{analyzeProgress || '...'}</> : <><Stethoscope size={15} />{lang === 'pt' ? 'Analisar com Dr. Claude' : 'Analyze with Dr. Claude'}</>}
           </Btn>
         </div>
+      )}
+      {openClaude && (
+        <Btn kind="soft" onClick={() => openClaude(lang === 'pt' ? 'Quero conversar sobre toda a minha saúde — meu histórico médico completo (condições, alergias, medicações, indicadores de exames, achados de exames de imagem, sono).' : 'I want to talk about my overall health — my full medical history (conditions, allergies, medications, exam indicators, imaging findings, sleep).')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>
+          <DrClaudeBadge size={16} />{lang === 'pt' ? 'Conversar com o Dr. Claude sobre minha saúde' : 'Talk to Dr. Claude about my health'}
+        </Btn>
       )}
 
       <SectionTitle icon={Moon} label={lang === 'pt' ? 'Sono & Rotina (Oura)' : 'Sleep & Routine'} color={C.violet} />
@@ -2562,20 +2573,12 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
       )}
 
       <SectionTitle icon={Activity} label={lang === 'pt' ? 'Indicadores' : 'Indicators'} color={C.blue} />
-      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : (() => {
-        const sorted = visibleIndicators.sort((a, b) => a[0].localeCompare(b[0]));
-        const flagged = sorted.filter(([, pts]) => pts[pts.length - 1] && pts[pts.length - 1].status && pts[pts.length - 1].status !== 'normal');
-        const rest = sorted.filter(([n]) => !flagged.some(([n2]) => n2 === n));
-        return (
-          <>
-            {flagged.length > 0 && flagged.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
-            {flagged.length > 0 && rest.length > 0 && !showAllIndicators && (
-              <button onClick={() => setShowAllIndicators(true)} style={{ background: 'none', border: `1px dashed ${C.border}`, borderRadius: 12, color: C.text2, cursor: 'pointer', width: '100%', padding: '10px', fontSize: 12.5, marginBottom: 8 }}>{lang === 'pt' ? `Ver todos os ${sorted.length} indicadores` : `See all ${sorted.length} indicators`}</button>
-            )}
-            {(flagged.length === 0 || showAllIndicators) && rest.map(([name, pts]) => <IndicatorChart key={name} indicator={name} points={pts} lang={lang} />)}
-          </>
-        );
-      })()}
+      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : (
+        <>
+          <div style={{ fontSize: 10.5, color: C.text3, marginBottom: 8 }}>{lang === 'pt' ? 'Valores em vermelho/azul estão fora da faixa de referência (alto/baixo). Arraste pra ver mais datas.' : 'Red/blue values are out of reference range. Scroll for more dates.'}</div>
+          <IndicatorsTable byIndicator={byIndicator} lang={lang} />
+        </>
+      )}
 
       {adding && (
         <AddModal
@@ -6794,7 +6797,7 @@ function App() {
           onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
           onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
-        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} />}
+        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} openClaude={(q) => setClaudeSeed(q)} />}
         {active.screen === 'diet' && <DietScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} delItem={delItem} onOpen={setDetail} flash={flash} dietSummary={settings.dietSummary} setDietSummary={setDietSummary} openClaude={(q) => setClaudeSeed(q)} />}
         {active.screen === 'healthDocs' && <HealthDocsScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} onOpen={setDetail} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
