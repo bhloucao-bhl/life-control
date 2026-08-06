@@ -1466,7 +1466,7 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
           <div><div style={{ fontSize: 13.5 }}>{lang === 'pt' ? 'Marcar como importante ⭐' : 'Mark as important'}</div><div style={{ fontSize: 11, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Fixa este item em destaque no topo da aba Hoje (seção “Longo prazo”)' : 'Pins to Today highlights'}</div></div>
         </label>
       )}
-      {!['note', 'person', 'account', 'vehicle', 'message'].includes(type) && (
+      {!['note', 'person', 'account', 'vehicle', 'message', 'document'].includes(type) && (
         <Field label={t('person')}>
           <input list="lcc-people" value={f.person || ''} onChange={(e) => up({ person: e.target.value || null })} style={inputStyle} />
           <datalist id="lcc-people">{people.map((p) => <option key={p.id} value={p.title} />)}</datalist>
