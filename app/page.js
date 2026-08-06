@@ -4100,7 +4100,8 @@ function FinanceScreen({ module, items, people, lang, t, back, toggleTask, onOpe
 }
 
 /* ---------------- Health dashboard ---------------- */
-function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, goDiet, healthSummary, setHealthSummary, setPendingCount }) {
+const isExamDoc = (i) => (i.meta && i.meta.isExam) || /exame|hemograma|raio|ultrass|resson|resultado|laudo|sangue|colesterol|glicose/i.test(i.title);
+function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, goDiet, goDocs, healthSummary, setHealthSummary, setPendingCount }) {
   const [adding, setAdding] = useState(null); const [addingEx, setAddingEx] = useState(false); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const [sumLoading, setSumLoading] = useState(false);
   const [hscan, setHscan] = useState({ loading: false, list: null, error: null });
@@ -4150,8 +4151,7 @@ Data de hoje: ${today}`;
   const pharm = hd.filter((i) => i.type === 'expense' && i.amount);
   const pharmTotal = pharm.reduce((a, b) => a + b.amount, 0);
   const hdocs = hd.filter((i) => i.type === 'document');
-  const isExam = (i) => (i.meta && i.meta.isExam) || /exame|hemograma|raio|ultrass|resson|resultado|laudo|sangue|colesterol|glicose/i.test(i.title);
-  const exams = hdocs.filter(isExam); const support = hdocs.filter((i) => !isExam(i));
+  const exams = hdocs.filter(isExamDoc); const support = hdocs.filter((i) => !isExamDoc(i));
   const bmi = profile.weight && profile.height ? (Number(profile.weight) / Math.pow(Number(profile.height) / 100, 2)).toFixed(1) : null;
   const exercises = hd.filter((i) => i.type === 'exercise').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const weekAgo = addDays(today, -7);
@@ -4255,12 +4255,61 @@ Data de hoje: ${today}`;
       <SectionTitle icon={Wallet} label={`${t('pharmacy')} · ${fmtMoney(pharmTotal, lang)}`} color={C.green} />
       {pharm.length === 0 ? <Empty icon={Wallet} text={t('nothingHere')} /> : pharm.slice(0, 5).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       <SectionTitle icon={Activity} label={t('exams')} color={C.blue} />
-      {exams.length === 0 ? <Empty icon={Activity} text={t('nothingHere')} /> : exams.sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
-      {support.length > 0 && <><SectionTitle icon={FileText} label={t('support')} color={C.text2} />{support.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
+      {(() => {
+        const PREVIEW = 4;
+        const examsSorted = [...exams].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const supportSorted = [...support].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+        const more = Math.max(0, examsSorted.length - PREVIEW) + Math.max(0, supportSorted.length - PREVIEW);
+        return (
+          <>
+            {examsSorted.length === 0 ? <Empty icon={Activity} text={t('nothingHere')} /> : examsSorted.slice(0, PREVIEW).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+            {supportSorted.length > 0 && <><SectionTitle icon={FileText} label={t('support')} color={C.text2} />{supportSorted.slice(0, PREVIEW).map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}</>}
+            {more > 0 && goDocs && <Btn kind="soft" onClick={goDocs} style={{ width: '100%', marginTop: 4, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><FileText size={14} />{lang === 'pt' ? `Ver todos os documentos (${hdocs.length})` : `See all documents (${hdocs.length})`}</Btn>}
+          </>
+        );
+      })()}
       <div style={{ marginTop: 18 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
       {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
       {editP && <WeightLog lang={lang} t={t} current={profile.weight} onSave={(kg) => { addWeight(kg); setEditP(false); }} onClose={() => setEditP(false)} />}
       {adding && <AddModal title={t('t_' + adding)} icon={typeIcon(adding)} draft={{ type: adding, domain: 'health', meta: {} }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(null)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(null); }} />}
+    </div>
+  );
+}
+// tela dedicada com todos os documentos de saúde — a lista dentro da aba Saúde mostra só uma
+// prévia (fica grande demais com o tempo); aqui dá pra ver tudo, agrupado por etiqueta ou por tipo
+function HealthDocsScreen({ items, lang, t, back, onOpen }) {
+  const [group, setGroup] = useState('tag'); // 'tag' | 'type'
+  const [q, setQ] = useState('');
+  const docs = items.filter((i) => i.type === 'document' && i.domain === 'health');
+  const matches = (d) => {
+    if (!q.trim()) return true;
+    const s = q.toLowerCase();
+    return [d.title, d.meta && d.meta.tag, d.meta && d.meta.issuer, d.meta && d.meta.holder, d.meta && d.meta.number].filter(Boolean).some((v) => String(v).toLowerCase().includes(s));
+  };
+  const shown = docs.filter(matches);
+  const noTag = lang === 'pt' ? 'Sem etiqueta' : 'No tag';
+  const groupKey = (d) => group === 'type' ? (isExamDoc(d) ? t('exams') : t('support')) : ((d.meta && d.meta.tag) || noTag);
+  const groups = {};
+  shown.forEach((d) => { const k = groupKey(d); (groups[k] = groups[k] || []).push(d); });
+  const groupNames = Object.keys(groups).sort((a, b) => (a === noTag ? 1 : b === noTag ? -1 : a.localeCompare(b, lang === 'pt' ? 'pt' : 'en')));
+  return (
+    <div>
+      <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{t('health')}</button>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 11, marginBottom: 14 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: C.blue + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FileText size={20} style={{ color: C.blue }} /></div>
+        <div style={{ fontSize: 22, fontWeight: 600 }}>{lang === 'pt' ? 'Documentos de saúde' : 'Health documents'}</div>
+      </div>
+      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={lang === 'pt' ? 'Buscar por nome, etiqueta, número...' : 'Search...'} style={{ ...inputStyle, marginBottom: 10 }} />
+      <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
+        <Chip active={group === 'tag'} onClick={() => setGroup('tag')} color={C.blue}>{lang === 'pt' ? 'Por etiqueta' : 'By tag'}</Chip>
+        <Chip active={group === 'type'} onClick={() => setGroup('type')} color={C.blue}>{lang === 'pt' ? 'Por tipo' : 'By type'}</Chip>
+      </div>
+      {shown.length === 0 ? <Empty icon={FileText} text={t('nothingHere')} /> : groupNames.map((name) => (
+        <div key={name}>
+          <SectionTitle icon={FileText} label={`${name} (${groups[name].length})`} color={C.blue} />
+          {groups[name].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((d) => <ItemRow key={d.id} item={d} lang={lang} t={t} onToggle={() => {}} onOpen={onOpen} />)}
+        </div>
+      ))}
     </div>
   );
 }
@@ -6614,7 +6663,7 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
+    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -6705,6 +6754,7 @@ function App() {
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
         {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} />}
         {active.screen === 'diet' && <DietScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} delItem={delItem} onOpen={setDetail} flash={flash} dietSummary={settings.dietSummary} setDietSummary={setDietSummary} openClaude={(q) => setClaudeSeed(q)} />}
+        {active.screen === 'healthDocs' && <HealthDocsScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} onOpen={setDetail} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={() => Promise.all([refreshGoogle(), loadGmail()])} onMount={() => { refreshGoogle(); loadGmail(); }} />}
         {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
