@@ -103,6 +103,22 @@ function houseItemFromClassification(x) {
 async function markHouseEmailProcessed(x) {
   try { await authFetch('/api/house-scan', { method: 'POST', body: JSON.stringify({ messageId: x.id }) }); } catch (e) {}
 }
+// rotina de verificação: junta duplicatas de itens vindos de e-mail "(Z)" que já foram
+// persistidas (ex.: de antes da trava de concorrência existir) — mantém 1 por e-mail de origem
+function dedupeHouseItems(items, delItem) {
+  const byGmailId = new Map();
+  const dupes = [];
+  (items || []).filter((i) => i.meta && i.meta.houseEmail && i.meta.gmailId).forEach((i) => {
+    const key = i.meta.gmailId;
+    const kept = byGmailId.get(key);
+    if (!kept) { byGmailId.set(key, i); return; }
+    // entre duplicatas do mesmo e-mail, mantém a já concluída (se houver) ou a mais antiga
+    const keepCur = (kept.status === 'done' ? 1 : 0) - (i.status === 'done' ? 1 : 0) || (kept.createdAt || 0) - (i.createdAt || 0);
+    if (keepCur <= 0) dupes.push(i); else { dupes.push(kept); byGmailId.set(key, i); }
+  });
+  dupes.forEach((i) => delItem(i.id));
+  return dupes.length;
+}
 function normTitle(s) { return String(s || '').trim().toLowerCase(); }
 // dedupe: um e-mail já virou item (por gmailId) ou já existe item com o mesmo título vindo de e-mail da casa
 function isHouseDuplicate(x, items) {
@@ -3072,10 +3088,15 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, updateIte
       setMl({ loading: false, connected: !!j.connected, error: j.error || null, syncedAt: new Date().toISOString() });
       // persiste cada pedido buscado como item de verdade — nunca mais some quando o fetch seguinte usar outro período
       (j.purchases || []).forEach((p) => {
-        const subIds = new Set(p.meta.subOrderIds || []);
+        const newSubIds = new Set(p.meta.subOrderIds || []);
         const existing = items.find((i) => i.type === 'purchase' && i.meta && i.meta.orderId === p.meta.orderId);
-        // migra entradas antigas (de antes do agrupamento por pack_id) que correspondem a uma sub-ordem deste pedido
-        items.filter((i) => i.type === 'purchase' && i.meta && i.meta.orderId !== p.meta.orderId && subIds.has(String(i.meta.orderId))).forEach((old) => delItem(old.id));
+        // migra entradas antigas de qualquer geração anterior do agrupamento (por order cru, ou por um
+        // agrupamento parcial de antes) que cubram alguma das sub-ordens deste pedido agrupado
+        items.filter((i) => {
+          if (i.type !== 'purchase' || !i.meta || i.meta.orderId === p.meta.orderId) return false;
+          if (newSubIds.has(String(i.meta.orderId))) return true;
+          return (i.meta.subOrderIds || []).some((id) => newSubIds.has(String(id)));
+        }).forEach((old) => delItem(old.id));
         if (!existing) addItem(p);
         else if (existing.meta.stage !== p.meta.stage || existing.meta.tracking !== p.meta.tracking || (existing.meta.items || []).length !== p.meta.items.length) {
           // atualiza só se algo relevante mudou (ex: pedido que estava "enviado" agora está "entregue")
@@ -4605,7 +4626,7 @@ function HouseEmailReviewCard({ x, lang, t, onTask, onEvent, onIgnore }) {
     </div>
   );
 }
-function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs }) {
+function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
   const [zScan, setZScan] = useState({ loading: false, pending: [] });
   const itemsRef = useRef(items);
@@ -4615,7 +4636,13 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
     scanHouseEmails({ addItems, flash, t, lang, items: itemsRef.current }).then((res) => setZScan({ loading: false, pending: res.pending }));
   };
   const scannedOnMount = useRef(false);
-  useEffect(() => { if (scannedOnMount.current) return; scannedOnMount.current = true; runZScan(); }, []);
+  useEffect(() => {
+    if (scannedOnMount.current) return;
+    scannedOnMount.current = true;
+    const removed = dedupeHouseItems(itemsRef.current, delItem);
+    if (removed) flash(lang === 'pt' ? `${removed} item(ns) duplicado(s) da casa removido(s).` : `${removed} duplicate house item(s) removed.`);
+    runZScan();
+  }, []);
   const resolveAsTask = (x) => {
     addItem(houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'task' } }));
     markHouseEmailProcessed(x);
@@ -5090,7 +5117,16 @@ function TripDetail({ trip, items, people, lang, t, back, onOpen, toggleTask, ad
 function TravelScreen({ module, items = [], people = [], lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
   const [view, setView] = useState('flights'); const [period, setPeriod] = useState('year'); const [adding, setAdding] = useState(null); const [selTrip, setSelTrip] = useState(null);
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
-  const [scanDays, setScanDays] = useState(90);
+  const [scanDays, setScanDays] = useState(15);
+  const runScan = (d) => {
+    setScan({ loading: true, list: null, error: null });
+    authFetch('/api/inbox-scan?days=' + (d || scanDays)).then((r) => r.json())
+      .then((j) => setScan({ loading: false, list: j.suggestions || [], error: j.error || null }))
+      .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
+  };
+  // toda vez que a aba Viagens abre, já busca sozinho (últimos 15 dias) pra tentar estar sempre atualizado
+  const scannedOnMount = useRef(false);
+  useEffect(() => { if (scannedOnMount.current) return; scannedOnMount.current = true; runScan(15); }, []);
   const flights = items.filter((i) => i.type === 'flight');
   const trips = items.filter((i) => i.type === 'trip').sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const today = todayISO();
@@ -5105,12 +5141,6 @@ function TravelScreen({ module, items = [], people = [], lang, t, back, toggleTa
   const flog = [...yf].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   const current = selTrip && items.find((i) => i.id === selTrip);
   if (current) return <TripDetail trip={current} items={items} people={people} lang={lang} t={t} back={() => setSelTrip(null)} onOpen={onOpen} toggleTask={toggleTask} addItem={addItem} updateItem={updateItem} delItem={delItem} flash={flash} />;
-  const runScan = () => {
-    setScan({ loading: true, list: null, error: null });
-    authFetch('/api/inbox-scan?days=' + scanDays).then((r) => r.json())
-      .then((j) => setScan({ loading: false, list: j.suggestions || [], error: j.error || null }))
-      .catch((e) => setScan({ loading: false, list: [], error: String(e) }));
-  };
   // tenta achar uma viagem já cadastrada com data/destino próximos, pra correlacionar em vez de duplicar
   const findMatchTrip = (sg) => {
     if (!sg.date) return null;
