@@ -195,10 +195,11 @@ export async function POST(req) {
   try {
     const labelId = await getOrCreateLabelId(h);
     if (!labelId) return Response.json({ ok: false, error: 'Não foi possível criar/achar a label.' }, { status: 500 });
+    // aplica a label "(Z) processado" e arquiva (tira da INBOX) numa única chamada
     const r = await fetch(`${G}/messages/${messageId}/modify`, {
       method: 'POST',
       headers: { ...h, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ addLabelIds: [labelId] }),
+      body: JSON.stringify({ addLabelIds: [labelId], removeLabelIds: ['INBOX'] }),
     });
     if (!r.ok) {
       const txt = await r.text();
