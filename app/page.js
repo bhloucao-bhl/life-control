@@ -86,6 +86,52 @@ async function authFetch(path, opts = {}) {
 }
 
 /* ============================================================
+   Varredura de e-mails "(Z)" da casa
+   ============================================================ */
+function houseItemFromClassification(x) {
+  const c = x.classification || {};
+  const isEvent = c.kind === 'event';
+  return {
+    type: isEvent ? 'event' : 'task',
+    domain: isEvent ? 'personal' : 'home',
+    title: c.title || x.zText,
+    date: isEvent ? (c.date || null) : null,
+    time: isEvent ? (c.time || null) : null,
+    meta: { fromEmail: true, houseEmail: true, gmailId: x.id, gmailLink: x.link, why: c.why || '' },
+  };
+}
+async function markHouseEmailProcessed(x) {
+  try { await authFetch('/api/house-scan', { method: 'POST', body: JSON.stringify({ messageId: x.id }) }); } catch (e) {}
+}
+async function scanHouseEmails({ addItems, flash, t, lang }) {
+  try {
+    const r = await authFetch('/api/house-scan');
+    const j = await r.json();
+    if (!j.connected) { flash(t('gmailNotConnected')); return { added: 0, pending: [] }; }
+    if (j.error) { flash(j.error); return { added: 0, pending: [] }; }
+    const results = j.results || [];
+    const confirmed = results.filter((x) => x.classification && x.classification.kind !== 'ambiguous' && x.classification.confidence >= 0.6);
+    const pending = results.filter((x) => !confirmed.includes(x));
+    const toAdd = confirmed.map(houseItemFromClassification);
+    if (toAdd.length) addItems(toAdd);
+    await Promise.all(confirmed.map(markHouseEmailProcessed));
+    if (toAdd.length) {
+      const nt = toAdd.filter((i) => i.type === 'task').length, ne = toAdd.filter((i) => i.type === 'event').length;
+      const parts = [];
+      if (nt) parts.push(nt + ' ' + (lang === 'pt' ? (nt > 1 ? 'tarefas' : 'tarefa') : (nt > 1 ? 'tasks' : 'task')));
+      if (ne) parts.push(ne + ' ' + (lang === 'pt' ? (ne > 1 ? 'compromissos' : 'compromisso') : (ne > 1 ? 'events' : 'event')));
+      flash((lang === 'pt' ? 'Casa: ' : 'House: ') + parts.join(lang === 'pt' ? ' e ' : ' and ') + (lang === 'pt' ? ' adicionados.' : ' added.'));
+    } else if (!pending.length) {
+      flash(t('noHouseEmails'));
+    }
+    return { added: toAdd.length, pending };
+  } catch (e) {
+    flash(String((e && e.message) || e));
+    return { added: 0, pending: [] };
+  }
+}
+
+/* ============================================================
    Login (e-mail + senha)
    ============================================================ */
 
@@ -333,6 +379,11 @@ const S = {
   houseTasks: L('Tarefas da casa', 'House tasks'), houseCosts: L('Custos da casa', 'House costs'), cameras: L('Câmeras', 'Cameras'),
   camerasHint: L('Snapshots ao vivo (Mibo) na versão hospedada.', 'Live snapshots (Mibo) hosted.'), staff: L('Equipe / mensagens', 'Staff / messages'),
   addDevice: L('Dispositivo', 'Device'), power: L('Ligar', 'Power'), temp: L('Temperatura', 'Temperature'), fan: L('Ventilação', 'Fan'),
+  houseEmails: L('E-mails da casa (Z)', 'House emails (Z)'), checkHouseEmails: L('Verificar e-mails', 'Check emails'),
+  checkingHouseEmails: L('Lendo e-mails…', 'Reading emails…'), noHouseEmails: L('Nenhum e-mail novo com "(Z)".', 'No new "(Z)" emails.'),
+  houseEmailsNeedsReview: L('Precisam da sua decisão', 'Need your decision'), itIsTask: L('É tarefa', "It's a task"),
+  itIsEvent: L('É compromisso', "It's an event"), ignoreEmail: L('Ignorar', 'Ignore'),
+  upcomingHouseEvents: L('Próximos compromissos', 'Upcoming events'), gmailNotConnected: L('Conecte o Gmail em Ajustes pra usar isso.', 'Connect Gmail in Settings to use this.'),
   // kids
   school: L('Escola', 'School'), gifts: L('Presentes', 'Gifts'), agenda: L('Agenda', 'Agenda'),
   markKidHint: L('Cadastre em Pessoas com relação "Filho" ou "Filha" para aparecer aqui.', 'Add in People with relationship "Son"/"Daughter" to show here.'),
@@ -1649,6 +1700,14 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
 function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
+  const [zBusy, setZBusy] = useState(false);
+  const checkHouseEmailsNow = () => {
+    setZBusy(true);
+    scanHouseEmails({ addItems, flash, t, lang }).then((res) => {
+      setZBusy(false);
+      if (res.pending.length) flash((lang === 'pt' ? `${res.pending.length} e-mail(s) da casa precisam da sua decisão na aba Casa.` : `${res.pending.length} house email(s) need your decision in the House tab.`));
+    });
+  };
 
   const [live, setLive] = useState(null); const [liveLoading, setLiveLoading] = useState(true);
   useEffect(() => {
@@ -1728,7 +1787,10 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><AlertTriangle size={14} style={{ color: C.rose }} />{t('attention')}</span>
-        <button onClick={() => setQuickAttn(true)} title={lang === 'pt' ? 'Adicionar algo pra não esquecer' : 'Add a reminder'} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 3 }}><Plus size={16} /></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button onClick={checkHouseEmailsNow} disabled={zBusy} title={t('checkHouseEmails')} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 3 }}>{zBusy ? <Loader2 size={15} className="spin" /> : <Mail size={15} />}</button>
+          <button onClick={() => setQuickAttn(true)} title={lang === 'pt' ? 'Adicionar algo pra não esquecer' : 'Add a reminder'} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', display: 'flex', alignItems: 'center', padding: 3 }}><Plus size={16} /></button>
+        </div>
       </div>
       {attention.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : attention.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {quickAttn && <AddModal title={lang === 'pt' ? 'Pra não esquecer' : "Don't forget"} icon={AlertTriangle} draft={{ type: 'task', domain: 'personal', priority: 1, date: today }} allowedTypes={['task']} lang={lang} t={t} onClose={() => setQuickAttn(false)} onSave={(x) => { addItems([{ ...x, status: 'planned' }]); flash(t('savedOne')); setQuickAttn(false); }} />}
@@ -4476,8 +4538,64 @@ function DeviceCard({ device, onChange }) {
     </div>
   );
 }
-function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs }) {
+function HouseEmailReviewCard({ x, lang, t, onTask, onEvent, onIgnore }) {
+  const c = x.classification || {};
+  const [asEvent, setAsEvent] = useState(false);
+  const [date, setDate] = useState(c.date || todayISO());
+  const [time, setTime] = useState(c.time || '');
+  const inputStyle = { background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '6px 8px', fontSize: 12.5 };
+  return (
+    <div style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <Mail size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 600 }}>{c.title || x.zText}</div>
+          {c.why && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{c.why}</div>}
+          <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {x.subject}</div>
+        </div>
+      </div>
+      {asEvent ? (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={inputStyle} />
+          <Btn kind="solid" onClick={() => onEvent(x, date, time || null)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('save')}</Btn>
+          <Btn kind="soft" onClick={() => setAsEvent(false)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('cancel')}</Btn>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <Btn kind="soft" onClick={() => onTask(x)} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 5, alignItems: 'center' }}><Wrench size={12} />{t('itIsTask')}</Btn>
+          <Btn kind="soft" onClick={() => setAsEvent(true)} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 5, alignItems: 'center' }}><CalendarDays size={12} />{t('itIsEvent')}</Btn>
+          <Btn kind="soft" onClick={() => onIgnore(x)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('ignoreEmail')}</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
+  const [zScan, setZScan] = useState({ loading: false, pending: [] });
+  const runZScan = () => {
+    setZScan((p) => ({ ...p, loading: true }));
+    scanHouseEmails({ addItems, flash, t, lang }).then((res) => setZScan({ loading: false, pending: res.pending }));
+  };
+  useEffect(() => { runZScan(); }, []);
+  const resolveAsTask = (x) => {
+    addItem(houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'task' } }));
+    markHouseEmailProcessed(x);
+    setZScan((p) => ({ ...p, pending: p.pending.filter((y) => y.id !== x.id) }));
+    flash(t('savedOne'));
+  };
+  const resolveAsEvent = (x, date, time) => {
+    addItem(houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'event', date, time } }));
+    markHouseEmailProcessed(x);
+    setZScan((p) => ({ ...p, pending: p.pending.filter((y) => y.id !== x.id) }));
+    flash(t('savedOne'));
+  };
+  const ignoreEmail = (x) => {
+    markHouseEmailProcessed(x);
+    setZScan((p) => ({ ...p, pending: p.pending.filter((y) => y.id !== x.id) }));
+  };
+  const houseEvents = items.filter((i) => i.type === 'event' && i.meta && i.meta.houseEmail && i.status !== 'done' && (!i.date || i.date >= todayISO())).sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.time || '').localeCompare(b.time || ''));
   const [tuya, setTuya] = useState({ loading: true, configured: false, connected: false, devices: [], error: null }); const [cfgDev, setCfgDev] = useState(false);
   const loadTuya = () => {
     setTuya((p) => ({ ...p, loading: true }));
@@ -4585,6 +4703,20 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       <SectionTitle icon={ListTodo} label={t('houseTasks')} color={C.blue} />
       <Btn kind="soft" onClick={() => setAdding(true)} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={16} />{t('quickAdd')}</Btn>
       {tasks.length === 0 ? <Empty icon={Home} text={t('nothingHere')} /> : tasks.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      {houseEvents.length > 0 && <>
+        <SectionTitle icon={CalendarDays} label={t('upcomingHouseEvents')} color={C.violet} />
+        {houseEvents.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
+      </>}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, marginTop: 4 }}>
+        <SectionTitle icon={Mail} label={t('houseEmails')} color={C.accent} />
+        <button onClick={runZScan} disabled={zScan.loading} style={{ ...card, padding: '6px 11px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 11.5 }}>{zScan.loading ? <Loader2 size={12} className="spin" /> : <RefreshCw size={12} />}{zScan.loading ? t('checkingHouseEmails') : t('checkHouseEmails')}</button>
+      </div>
+      {zScan.pending.length > 0 ? (
+        <>
+          <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('houseEmailsNeedsReview')}</div>
+          {zScan.pending.map((x) => <HouseEmailReviewCard key={x.id} x={x} lang={lang} t={t} onTask={resolveAsTask} onEvent={resolveAsEvent} onIgnore={ignoreEmail} />)}
+        </>
+      ) : !zScan.loading && <Empty icon={Mail} text={t('noHouseEmails')} />}
       <SectionTitle icon={Users} label={t('staff')} color={C.sky} />
       {staffMsgs.length === 0 ? <Empty icon={Users} text={t('nothingHere')} /> : staffMsgs.map((i) => <ItemRow key={i.id} item={i} lang={lang} t={t} onToggle={toggleTask} onOpen={onOpen} />)}
       {adding && <AddModal title={`${t('quickAdd')} · ${t('house')}`} icon={Plus} draft={{ type: 'task', domain: 'home' }} allowedTypes={module.types} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'home', ...x }); flash(t('savedOne')); setAdding(false); }} />}
@@ -5684,7 +5816,7 @@ function App() {
   }));
   const allItems = [...items, ...(gEvents || []), ...(gMsgs || []), ...ttItems];
   const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
-  const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, updateItem, delItem, flash };
+  const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, addItems, updateItem, delItem, flash };
   const renderModule = (mo) => {
     const back = () => setActive({ screen: 'dashboard', module: null });
     if (mo.custom === 'travel') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><TravelScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
