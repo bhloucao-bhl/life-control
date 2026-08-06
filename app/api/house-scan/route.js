@@ -1,4 +1,5 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
+import { brDate } from '../../../lib/tz';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -105,7 +106,7 @@ export async function GET(req) {
           from: header(m.payload, 'From'),
           subject,
           zText: subject.replace(SUBJECT_RE, '').trim(),
-          receivedDate: m.internalDate ? new Date(Number(m.internalDate)).toISOString().slice(0, 10) : null,
+          receivedDate: m.internalDate ? brDate(Number(m.internalDate)) : null,
           body: (plainBody(m.payload) || m.snippet || '').slice(0, 3000),
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
@@ -114,7 +115,7 @@ export async function GET(req) {
 
     if (!mails.length) return Response.json({ connected: true, results: [], scanned: metas.length });
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = brDate(Date.now());
     const system = `Você ajuda a organizar tarefas e compromissos da casa a partir de e-mails, para um app pessoal.
 Hoje é ${today}. Cada e-mail tem no assunto o marcador "(Z)" seguido de um pedido, ex: "(Z) compre pilhas" ou "(Z) ir ao mercado segunda dia 05/09".
 Responda SOMENTE com um array JSON, sem texto fora dele, sem cercas de código.

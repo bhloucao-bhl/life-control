@@ -1,4 +1,5 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
+import { brDateTime } from '../../../lib/tz';
 
 export const runtime = 'nodejs';
 
@@ -110,6 +111,10 @@ export async function GET(req) {
           }
         }
         const when = m.internalDate ? Number(m.internalDate) : Date.now();
+        // horário LOCAL (Brasil) embutido como offset -03:00 na própria string ISO — assim
+        // .slice(0,10)/.slice(11,16), já usados na tela, e o sort por string continuam
+        // funcionando, mas mostrando a hora certa em vez da hora UTC do servidor (Vercel).
+        const { date: brD, time: brT } = brDateTime(when);
         return {
           id,
           threadId: m.threadId,
@@ -121,7 +126,7 @@ export async function GET(req) {
           html: (html || '').slice(0, 200000),
           messageId: header(m.payload, 'Message-ID'),
           references: header(m.payload, 'References'),
-          date: new Date(when).toISOString(),
+          date: `${brD}T${brT}:00-03:00`,
           work: isWork,
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };

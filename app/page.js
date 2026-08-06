@@ -838,6 +838,16 @@ function Btn({ children, onClick, kind = 'primary', style, disabled }) {
 function Chip({ children, active, onClick, color }) {
   return <button onClick={onClick ? (e) => { haptic(); onClick(e); } : undefined} style={{ padding: '6px 11px', borderRadius: 999, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap', background: active ? (color ? color + '22' : C.accentSoft) : 'transparent', color: active ? (color || C.accent) : C.text2, border: `1px solid ${active ? (color || C.accent) + '55' : C.border}` }}>{children}</button>;
 }
+// relógio ao vivo, sempre calculado no navegador (hora local real do usuário) — serve de
+// referência visual pra conferir se os horários registrados no app (emails, eventos) batem.
+function LiveClock({ style }) {
+  const [hm, setHm] = useState(() => nowHM());
+  useEffect(() => {
+    const id = setInterval(() => setHm(nowHM()), 1000 * 15);
+    return () => clearInterval(id);
+  }, []);
+  return <span style={{ fontVariantNumeric: 'tabular-nums', ...style }}>{hm}</span>;
+}
 function Field({ label, children }) {
   return <label style={{ display: 'block', marginBottom: 16 }}><div style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 7, fontWeight: 600 }}>{label}</div>{children}</label>;
 }
@@ -2016,7 +2026,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 26, fontWeight: 300, letterSpacing: '-.02em' }}>{greeting()}, <span style={{ fontWeight: 600 }}>{name}</span>.</div>
-          <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2 }}>{fmtLongPretty(today, lang)}</div>
+          <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>{fmtLongPretty(today, lang)}<span style={{ color: C.text3 }}>·</span><LiveClock /></div>
         </div>
         <div title={t('fxHint')} style={{ ...card, padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, minWidth: 104 }}>
           {live && live.fx ? live.fx.map((fx) => (
