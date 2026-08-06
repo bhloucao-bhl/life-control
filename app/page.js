@@ -103,6 +103,14 @@ function houseItemFromClassification(x) {
 async function markHouseEmailProcessed(x) {
   try { await authFetch('/api/house-scan', { method: 'POST', body: JSON.stringify({ messageId: x.id }) }); } catch (e) {}
 }
+// cria um convite de verdade na Google Agenda (com convidado) — o Google manda o e-mail de convite
+async function sendCalendarInvite({ title, date, time, durationMin, notes, personEmail, personName }) {
+  if (!personEmail) return { ok: false, error: 'Pessoa sem e-mail cadastrado.' };
+  try {
+    const r = await authFetch('/api/calendar-invite', { method: 'POST', body: JSON.stringify({ title, date, time, durationMin, notes, personEmail, personName }) });
+    return await r.json();
+  } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+}
 // rotina de verificação: junta duplicatas de itens vindos de e-mail "(Z)" que já foram
 // persistidas (ex.: de antes da trava de concorrência existir) — mantém 1 por e-mail de origem
 function dedupeHouseItems(items, delItem) {
@@ -145,6 +153,55 @@ function dedupeTravelItems(items, delItem) {
   dupes.forEach((i) => delItem(i.id));
   return dupes.length;
 }
+
+/* ============================================================
+   Varredura de e-mails "(Trab)" — lembretes pessoais/de trabalho
+   ============================================================ */
+function workItemFromClassification(x) {
+  const c = x.classification || {};
+  const isEvent = c.kind === 'event';
+  return {
+    type: isEvent ? 'event' : 'task',
+    domain: 'personal', // provisório — sempre precisa de decisão (trabalho ou pessoal)
+    title: c.title || x.trabText,
+    date: isEvent ? (c.date || null) : null,
+    time: isEvent ? (c.time || null) : null,
+    meta: { fromEmail: true, trabEmail: true, needsDomainDecision: true, gmailId: x.id, gmailLink: x.link, why: c.why || '' },
+  };
+}
+async function markWorkEmailProcessed(x) {
+  try { await authFetch('/api/work-scan', { method: 'POST', body: JSON.stringify({ messageId: x.id }) }); } catch (e) {}
+}
+function isWorkDuplicate(x, items) {
+  const wantTitle = normTitle((x.classification && x.classification.title) || x.trabText);
+  return (items || []).some((i) => i.meta && i.meta.trabEmail && (i.meta.gmailId === x.id || normTitle(i.title) === wantTitle));
+}
+let workScanInFlight = false;
+async function scanWorkEmails({ addItems, flash, t, lang, items }) {
+  if (workScanInFlight) return { added: 0 };
+  workScanInFlight = true;
+  try {
+    const r = await authFetch('/api/work-scan');
+    const j = await r.json();
+    if (!j.connected) { flash(t('gmailNotConnected')); return { added: 0 }; }
+    if (j.error) { flash(j.error); return { added: 0 }; }
+    const results = j.results || [];
+    const dupes = results.filter((x) => isWorkDuplicate(x, items));
+    const fresh = results.filter((x) => !dupes.includes(x));
+    const toAdd = fresh.map(workItemFromClassification);
+    if (toAdd.length) addItems(toAdd);
+    // marca todos (inclusive duplicados) como processados, senão o duplicado reaparece na próxima varredura
+    await Promise.all(results.map(markWorkEmailProcessed));
+    if (toAdd.length) flash(lang === 'pt' ? `${toAdd.length} lembrete(s) "(Trab)" adicionados — decida trabalho ou pessoal.` : `${toAdd.length} "(Trab)" reminder(s) added — decide work or personal.`);
+    return { added: toAdd.length };
+  } catch (e) {
+    flash(String((e && e.message) || e));
+    return { added: 0 };
+  } finally {
+    workScanInFlight = false;
+  }
+}
+
 // dedupe: um e-mail já virou item (por gmailId) ou já existe item com o mesmo título vindo de e-mail da casa
 function isHouseDuplicate(x, items) {
   const wantTitle = normTitle((x.classification && x.classification.title) || x.zText);
@@ -855,6 +912,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount }) {
           {item.meta && item.meta.external === 'ticktick' && <span style={{ fontSize: 10, color: C.green, border: `1px solid ${C.green}44`, borderRadius: 999, padding: '1px 7px' }}>TickTick</span>}
         </div>
       </div>
+      {item.meta && item.meta.invitedPersonName && <div title={(lang === 'pt' ? 'Convite enviado: ' : 'Invite sent: ') + item.meta.invitedPersonName}><Avatar photo={item.meta.invitedPersonPhoto} name={item.meta.invitedPersonName} size={22} color={C.sky} /></div>}
       <ChevronRight size={16} style={{ color: C.text3, marginTop: 2 }} />
     </div>
   );
@@ -2825,8 +2883,25 @@ function ModuleHeader({ module, t, back }) {
   </>;
 }
 const TASK_FILTERS = [['fAll', (i) => i.status !== 'done'], ['fWork', (i) => i.domain === 'work' && i.status !== 'done'], ['fPersonal', (i) => !['work', 'home', 'kids'].includes(i.domain) && i.status !== 'done'], ['fHouse', (i) => i.domain === 'home' && i.status !== 'done'], ['fKids', (i) => i.domain === 'kids' && i.status !== 'done'], ['fDone', (i) => i.status === 'done']];
-function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick }) {
+function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, flash, ttConnected, ttProjects, onCreateTick, reloadTick, setPendingCount }) {
   const [adding, setAdding] = useState(false); const [tf, setTf] = useState(0); const [toTick, setToTick] = useState(true);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const [workScan, setWorkScan] = useState({ loading: false });
+  const needsDomain = items.filter((i) => i.meta && i.meta.needsDomainDecision);
+  useEffect(() => { if (module.key === 'tasks' && setPendingCount) setPendingCount('work', needsDomain.length); }, [module.key, needsDomain.length]);
+  const runWorkScan = () => {
+    setWorkScan({ loading: true });
+    scanWorkEmails({ addItems, flash, t, lang, items: itemsRef.current }).then(() => setWorkScan({ loading: false }));
+  };
+  const scannedOnMount = useRef(false);
+  useEffect(() => {
+    if (module.key !== 'tasks') return;
+    if (scannedOnMount.current) return;
+    scannedOnMount.current = true;
+    runWorkScan();
+  }, [module.key]);
+  const decideDomain = (item, domain) => updateItem(item.id, { domain, meta: { ...item.meta, needsDomainDecision: false } });
   const [workFilter, setWorkFilter] = useState('all'); // para aba trabalho: all | events | tasks
   const [docCat, setDocCat] = useState('all'); // para aba documentos: all | work | health | personal | kids
   const [ttProjectFilter, setTtProjectFilter] = useState(null); // filtro por lista do TickTick
@@ -2843,13 +2918,42 @@ function ModuleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
     }
   };
   const base = items.filter(module.filter);
-  const list = (module.key === 'tasks' ? base.filter((i) => (TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) && (!ttProjectFilter || (i.meta && i.meta.project) === ttProjectFilter)) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const list = (module.key === 'tasks' ? base.filter((i) => !(i.meta && i.meta.needsDomainDecision) && (TASK_FILTERS[tf][1](i) || (tf !== 5 && grace[i.id])) && (!ttProjectFilter || (i.meta && i.meta.project) === ttProjectFilter)) : module.key === 'work' ? base.filter((i) => workFilter === 'all' ? true : workFilter === 'events' ? (i.type === 'event' || i.type === 'appointment') : i.type === 'task') : module.key === 'docs' ? base.filter((i) => docCat === 'all' ? true : docCat === 'kids' ? (i.domain === 'kids' || (i.meta && i.meta.kid)) : i.domain === docCat) : base).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   let hi = null;
   if (module.key === 'docs') { const soon = items.filter((i) => i.type === 'document' && i.date && i.date <= addDays(todayISO(), 60)).length; hi = { label: `${t('expiring')} (60d)`, value: String(soon), color: soon ? C.rose : C.text2 }; }
   else if (module.key === 'tasks') hi = { label: t('open'), value: String(list.filter((i) => i.status !== 'done').length), color: C.accent };
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
+      {module.key === 'tasks' && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: 11.5, color: C.text3, display: 'flex', gap: 5, alignItems: 'center' }}><Mail size={12} />{lang === 'pt' ? 'Lembretes "(Trab)"' : '"(Trab)" reminders'}</span>
+          <button onClick={runWorkScan} disabled={workScan.loading} style={{ ...card, padding: '5px 10px', color: C.text2, cursor: 'pointer', fontSize: 11, display: 'flex', gap: 5, alignItems: 'center' }}>{workScan.loading ? <Loader2 size={11} className="spin" /> : <RefreshCw size={11} />}{lang === 'pt' ? 'Verificar' : 'Check'}</button>
+        </div>
+      )}
+      {module.key === 'tasks' && needsDomain.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{lang === 'pt' ? `Precisam de decisão (${needsDomain.length})` : `Need a decision (${needsDomain.length})`}</div>
+          {needsDomain.map((i) => {
+            const Ic = typeIcon(i.type);
+            return (
+              <div key={i.id} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 10 }}>
+                  <Ic size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 600 }}>{i.title}</div>
+                    <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>{t('t_' + i.type)}{i.date ? ' · ' + fmtDate(i.date, lang) : ''}{i.time ? ' ' + i.time : ''}</div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Btn kind="soft" onClick={() => decideDomain(i, 'work')} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Briefcase size={13} />{lang === 'pt' ? 'Trabalho' : 'Work'}</Btn>
+                  <Btn kind="soft" onClick={() => decideDomain(i, 'personal')} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><UserRound size={13} />{lang === 'pt' ? 'Pessoal' : 'Personal'}</Btn>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {module.key === 'tasks' && ttConnected && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
           <button onClick={() => reloadTick && reloadTick()} style={{ ...card, padding: '5px 10px', color: C.text2, cursor: 'pointer', fontSize: 11, display: 'flex', gap: 5, alignItems: 'center' }}><RefreshCw size={11} />{t('refresh')}</button>
@@ -4936,11 +5040,13 @@ function DeviceCard({ device, onChange }) {
     </div>
   );
 }
-function HouseEmailReviewCard({ x, lang, t, onTask, onEvent, onIgnore }) {
+function HouseEmailReviewCard({ x, lang, t, people = [], onTask, onEvent, onIgnore }) {
   const c = x.classification || {};
   const [asEvent, setAsEvent] = useState(false);
   const [date, setDate] = useState(c.date || todayISO());
   const [time, setTime] = useState(c.time || '');
+  const defaultPerson = people.find((p) => /carol/i.test(p.title || '')) || null;
+  const [personId, setPersonId] = useState(defaultPerson ? defaultPerson.id : null);
   const inputStyle = { background: C.bg2, border: `1px solid ${C.border}`, borderRadius: 8, color: C.text, padding: '6px 8px', fontSize: 12.5 };
   return (
     <div style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
@@ -4953,11 +5059,24 @@ function HouseEmailReviewCard({ x, lang, t, onTask, onEvent, onIgnore }) {
         </div>
       </div>
       {asEvent ? (
-        <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={inputStyle} />
-          <Btn kind="solid" onClick={() => onEvent(x, date, time || null)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('save')}</Btn>
-          <Btn kind="soft" onClick={() => setAsEvent(false)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('cancel')}</Btn>
+        <div style={{ marginTop: 10 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={inputStyle} />
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={inputStyle} />
+          </div>
+          {people.length > 0 && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 11, color: C.text3, marginBottom: 6 }}>{lang === 'pt' ? 'Convidar (envia convite de verdade por e-mail)' : 'Invite (sends a real calendar invite by email)'}</div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                <Chip active={!personId} onClick={() => setPersonId(null)}>{lang === 'pt' ? 'Ninguém' : 'Nobody'}</Chip>
+                {people.slice(0, 6).map((p) => <Chip key={p.id} active={personId === p.id} onClick={() => setPersonId(p.id)}>{p.title}</Chip>)}
+              </div>
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <Btn kind="solid" onClick={() => onEvent(x, date, time || null, personId ? people.find((p) => p.id === personId) : null)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('save')}</Btn>
+            <Btn kind="soft" onClick={() => setAsEvent(false)} style={{ padding: '7px 12px', fontSize: 12 }}>{t('cancel')}</Btn>
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
@@ -4969,7 +5088,7 @@ function HouseEmailReviewCard({ x, lang, t, onTask, onEvent, onIgnore }) {
     </div>
   );
 }
-function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs, setPendingCount }) {
+function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs, setPendingCount }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
   const [zScan, setZScan] = useState({ loading: false, pending: [] });
   const itemsRef = useRef(items);
@@ -4993,11 +5112,23 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
     setZScan((p) => ({ ...p, pending: p.pending.filter((y) => y.id !== x.id) }));
     flash(t('savedOne'));
   };
-  const resolveAsEvent = (x, date, time) => {
-    addItem(houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'event', date, time } }));
+  const resolveAsEvent = async (x, date, time, person) => {
+    const id = uid();
+    const item = { ...houseItemFromClassification({ ...x, classification: { ...x.classification, kind: 'event', date, time } }), id };
+    addItem(item);
     markHouseEmailProcessed(x);
     setZScan((p) => ({ ...p, pending: p.pending.filter((y) => y.id !== x.id) }));
     flash(t('savedOne'));
+    if (person) {
+      const personEmail = person.meta && ((person.meta.emails && person.meta.emails[0]) || person.meta.email);
+      const res = await sendCalendarInvite({ title: item.title, date, time, notes: null, personEmail, personName: person.title });
+      if (res.ok) {
+        updateItem(id, { meta: { ...item.meta, invitedPersonId: person.id, invitedPersonName: person.title, invitedPersonPhoto: person.meta && person.meta.photo, googleEventId: res.eventId, googleEventLink: res.link } });
+        flash(lang === 'pt' ? `Convite enviado pra ${person.title} ✓` : `Invite sent to ${person.title} ✓`);
+      } else {
+        flash((lang === 'pt' ? 'Não consegui enviar o convite: ' : 'Could not send invite: ') + (res.error || ''));
+      }
+    }
   };
   const ignoreEmail = (x) => {
     markHouseEmailProcessed(x);
@@ -5122,7 +5253,7 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
       {zScan.pending.length > 0 ? (
         <>
           <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('houseEmailsNeedsReview')}</div>
-          {zScan.pending.map((x) => <HouseEmailReviewCard key={x.id} x={x} lang={lang} t={t} onTask={resolveAsTask} onEvent={resolveAsEvent} onIgnore={ignoreEmail} />)}
+          {zScan.pending.map((x) => <HouseEmailReviewCard key={x.id} x={x} lang={lang} t={t} people={people} onTask={resolveAsTask} onEvent={resolveAsEvent} onIgnore={ignoreEmail} />)}
         </>
       ) : !zScan.loading && <Empty icon={Mail} text={t('noHouseEmails')} />}
       <SectionTitle icon={Users} label={t('staff')} color={C.sky} />
@@ -6235,12 +6366,12 @@ function App() {
 
   // pendências: itens de varreduras de e-mail que esperam uma decisão sua (aceitar/recusar) —
   // cada tela dona da fila (Casa, Viagens, Saúde, Compras) reporta sua contagem aqui, pro sino global
-  const [pendingCounts, setPendingCounts] = useState({ house: 0, travel: 0, health: 0, purchases: 0 });
+  const [pendingCounts, setPendingCounts] = useState({ house: 0, travel: 0, health: 0, purchases: 0, work: 0 });
   const setPendingCount = (key, n) => setPendingCounts((p) => (p[key] === n ? p : { ...p, [key]: n }));
   const pendingTotal = Object.values(pendingCounts).reduce((a, b) => a + b, 0);
   const [bellOpen, setBellOpen] = useState(false);
-  const PENDING_MODULES = { house: 'house', travel: 'travel', health: 'health', purchases: 'shopping' };
-  const PENDING_LABELS = { house: lang === 'pt' ? 'Casa' : 'House', travel: lang === 'pt' ? 'Viagens' : 'Travel', health: lang === 'pt' ? 'Saúde' : 'Health', purchases: lang === 'pt' ? 'Compras' : 'Purchases' };
+  const PENDING_MODULES = { house: 'house', travel: 'travel', health: 'health', purchases: 'shopping', work: 'tasks' };
+  const PENDING_LABELS = { house: lang === 'pt' ? 'Casa' : 'House', travel: lang === 'pt' ? 'Viagens' : 'Travel', health: lang === 'pt' ? 'Saúde' : 'Health', purchases: lang === 'pt' ? 'Compras' : 'Purchases', work: lang === 'pt' ? 'Tarefas (Trab)' : 'Tasks (Work)' };
   const NotifBell = ({ small }) => (
     <div style={{ position: 'relative' }}>
       <button onClick={() => setBellOpen((v) => !v)} style={small ? { ...card, padding: 7, color: C.text2, cursor: 'pointer', position: 'relative' } : { background: 'none', border: 'none', color: C.text2, cursor: 'pointer', position: 'relative', display: 'flex' }}>
