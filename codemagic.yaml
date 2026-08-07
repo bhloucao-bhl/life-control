@@ -10,7 +10,7 @@ workflows:
         - Ios_signing
       vars:
         BUNDLE_ID: "com.bhloucao.lifecontrol"
-        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
+        XCODE_PROJECT: "ios/App/App.xcodeproj"
         XCODE_SCHEME: "App"
       node: latest
       xcode: latest
@@ -40,7 +40,7 @@ workflows:
       - name: Build do .ipa assinado
         script: |
           xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
+            --project "$XCODE_PROJECT" \
             --scheme "$XCODE_SCHEME"
     artifacts:
       - build/ios/ipa/*.ipa
