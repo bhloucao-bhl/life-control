@@ -33,7 +33,7 @@ export async function POST(req) {
       },
       body: JSON.stringify({
         model: body.model || 'claude-sonnet-4-6',
-        max_tokens: body.max_tokens || 1000,
+        max_tokens: body.max_tokens || 4096,
         system: body.system,
         messages: body.messages || [],
       }),
