@@ -764,7 +764,7 @@ function fileToDataUrl(file, maxDim = 1500) {
 async function callClaude(system, messages) {
   const { data: sess } = await supabase.auth.getSession();
   const token = sess && sess.session ? sess.session.access_token : '';
-  const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 1000, system, messages }) });
+  const res = await fetch('/api/claude', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 4096, system, messages }) });
   const data = await res.json();
   return (data.content || []).filter((b) => b.type === 'text').map((b) => b.text).join('\n').trim();
 }
@@ -1002,6 +1002,13 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount, onDelete }) {
           </div>
         );
       })()}
+      {onDelete && item.type === 'task' && (
+        <button
+          onClick={(e) => { e.stopPropagation(); if (confirm(t('deleteConfirmGeneric'))) onDelete(item.id); }}
+          title={lang === 'pt' ? 'Excluir' : 'Delete'}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4, marginTop: -2, color: C.text3, flexShrink: 0 }}
+        ><Trash2 size={15} /></button>
+      )}
       <ChevronRight size={16} style={{ color: C.text3, marginTop: 2 }} />
     </div>
   );
