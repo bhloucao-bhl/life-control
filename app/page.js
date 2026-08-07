@@ -1,6 +1,26 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { Capacitor } from '@capacitor/core';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+import { Share } from '@capacitor/share';
+import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera';
+import { StatusBar, Style as StatusBarStyle } from '@capacitor/status-bar';
+import { Network } from '@capacitor/network';
+import { App as CapApp } from '@capacitor/app';
+import { BiometricAuth, BiometryType } from '@aparajita/capacitor-biometric-auth';
+
+/* ============================================================
+   Recursos nativos (iOS): tudo aqui é seguro de chamar mesmo
+   rodando no navegador comum — no-op fora do app nativo.
+   ============================================================ */
+const isNative = () => typeof window !== 'undefined' && Capacitor.isNativePlatform();
+const hapticSuccess = () => { if (isNative()) Haptics.notification({ type: NotificationType.Success }).catch(() => {}); };
+const hapticWarning = () => { if (isNative()) Haptics.notification({ type: NotificationType.Warning }).catch(() => {}); };
+async function nativeShare(title, text) {
+  if (!isNative()) return false;
+  try { await Share.share({ title, text }); return true; } catch (e) { return false; }
+}
 
 /* ============================================================
    Supabase (cliente)
@@ -439,7 +459,7 @@ import {
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
   MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, Sparkle, GripVertical,
-  Coffee, Sandwich, Soup, Cookie
+  Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -962,6 +982,7 @@ const inputStyle = new Proxy({}, { get: (_, k) => {
 }, ownKeys: () => ['width', 'background', 'border', 'borderRadius', 'color', 'padding', 'fontSize', 'outline', 'boxSizing'], getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
 const inputStyleBig = { ...inputStyle, padding: '14px 15px', fontSize: 16, borderRadius: 12 };
 function haptic(ms = 8) {
+  if (isNative()) { Haptics.impact({ style: ms >= 15 ? ImpactStyle.Medium : ImpactStyle.Light }).catch(() => {}); return; }
   try { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
 }
 function Btn({ children, onClick, kind = 'primary', style, disabled }) {
@@ -1026,7 +1047,8 @@ function typeIcon(type) {
 function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: LI, rightLabel, rightColor, rightIcon: RI }) {
   const [dx, setDx] = useState(0);
   const start = useRef(null);
-  const onStart = (e) => { start.current = e.touches[0].clientX; };
+  const armed = useRef(false); // já passou do limiar nesse arrasto — evita repetir o toque tátil
+  const onStart = (e) => { start.current = e.touches[0].clientX; armed.current = false; };
   const onMove = (e) => {
     if (start.current == null) return;
     const d = e.touches[0].clientX - start.current;
@@ -1034,7 +1056,11 @@ function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: L
     let nd = d;
     if (d > 0 && !onRight) nd = 0;
     if (d < 0 && !onLeft) nd = 0;
-    setDx(Math.max(-96, Math.min(96, nd)));
+    nd = Math.max(-96, Math.min(96, nd));
+    const crossed = nd <= -60 || nd >= 60;
+    if (crossed && !armed.current) { armed.current = true; haptic(8); }
+    else if (!crossed && armed.current) { armed.current = false; }
+    setDx(nd);
   };
   const onEnd = () => {
     if (dx <= -60 && onLeft) onLeft();
@@ -1773,6 +1799,18 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
     };
     reader.readAsDataURL(file);
   };
+  const captureNative = async () => {
+    if (!isNative()) { fileRef.current && fileRef.current.click(); return; }
+    haptic(8);
+    setLoading(true);
+    try {
+      const photo = await CapCamera.getPhoto({ resultType: CameraResultType.Base64, source: CameraSource.Prompt, quality: 80, allowEditing: false });
+      const mime = photo.format === 'png' ? 'image/png' : 'image/jpeg';
+      const res = await classifyPhotoSmart(photo.base64String, mime, lang);
+      if (res.kind === 'meal') setMealDraft(res); else setDrafts(res.items);
+    } catch (err) { /* cancelado pelo usuário ou sem permissão — silencioso */ }
+    setLoading(false);
+  };
   const saveMeal = (m) => {
     addItems([{ type: 'meal', domain: 'health', title: m.title, date: todayISO(), time: nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, source: 'photo' } }]);
     flash(lang === 'pt' ? 'Refeição registrada ✓' : 'Meal logged ✓');
@@ -1786,7 +1824,7 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
         <input ref={fileRef} type="file" accept="image/*" capture="environment" onChange={pickImage} style={{ display: 'none' }} />
         <button onClick={() => setSearching(true)} title={lang === 'pt' ? 'Buscar no app' : 'Search app'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}><Search size={17} /></button>
         <button onClick={toggleVoice} title={lang === 'pt' ? 'Ditar por voz' : 'Voice input'} style={{ background: listening ? C.rose + '22' : 'none', border: 'none', color: listening ? C.rose : C.text3, cursor: 'pointer', padding: '9px 4px', borderRadius: 8 }}><Mic size={17} /></button>
-        <button onClick={() => fileRef.current && fileRef.current.click()} disabled={loading} title={lang === 'pt' ? 'Foto (refeição, recibo, etc.)' : 'Photo (meal, receipt, etc.)'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}>{loading ? <Loader2 size={17} className="spin" /> : <Camera size={17} />}</button>
+        <button onClick={captureNative} disabled={loading} title={lang === 'pt' ? 'Foto (refeição, recibo, etc.)' : 'Photo (meal, receipt, etc.)'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '9px 4px' }}>{loading ? <Loader2 size={17} className="spin" /> : <Camera size={17} />}</button>
         <Btn onClick={run} disabled={loading || !text.trim()} style={{ padding: '9px 13px' }}>{loading ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />}</Btn>
       </div>
       {drafts && <DraftReview drafts={drafts} lang={lang} t={t} onDone={(arr, status) => { if (arr.length) addItems(arr.map((x) => ({ ...x, status }))); flash(arr.length + ' ✓'); setDrafts(null); setText(''); }} onCancel={() => setDrafts(null)} />}
@@ -6435,6 +6473,14 @@ function ExamAnalysis({ item, lang, t, onAct, allItems, addItem }) {
   );
 }
 
+function itemShareText(item, lang, t) {
+  const lines = [item.title, t('t_' + item.type)];
+  if (item.date) lines.push(fmtDate(item.date, lang) + (item.time ? ' · ' + item.time : ''));
+  if (item.amount != null) lines.push(fmtMoney(item.amount, lang));
+  if (item.person) lines.push(item.person);
+  if (item.notes) lines.push('', item.notes);
+  return lines.filter(Boolean).join('\n');
+}
 function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct, allItems, addItem }) {
   const [editing, setEditing] = useState(false);
   return (
@@ -6442,6 +6488,7 @@ function ItemDetail({ item, lang, t, people, onClose, onSave, onDelete, onAct, a
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 600 }}>{t('t_' + item.type)}</div>
         <div style={{ display: 'flex', gap: 6 }}>
+          {isNative() && !editing && <button onClick={() => nativeShare(item.title, itemShareText(item, lang, t))} style={{ ...card, padding: 7, color: C.text2, cursor: 'pointer' }}><Share2 size={15} /></button>}
           {!editing && !(item.meta && item.meta.external) && <button onClick={() => setEditing(true)} style={{ ...card, padding: 7, color: C.accent, cursor: 'pointer' }}><Pencil size={15} /></button>}
           <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer' }}><X size={20} /></button>
         </div>
@@ -6545,6 +6592,26 @@ function Connections({ lang, t }) {
   );
 }
 
+function AppLockSetting({ settings, setSettings, lang }) {
+  const [check, setCheck] = useState(null); // resultado de checkBiometry()
+  useEffect(() => { if (isNative()) BiometricAuth.checkBiometry().then(setCheck).catch(() => setCheck({ isAvailable: false })); }, []);
+  if (!isNative() || !check) return null;
+  const kind = check.biometryType === BiometryType.faceId ? 'Face ID' : check.biometryType === BiometryType.touchId ? 'Touch ID' : (lang === 'pt' ? 'biometria' : 'biometry');
+  if (!check.isAvailable) return null;
+  const on = !!settings.appLock;
+  return (
+    <div style={{ ...card, padding: '12px 14px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+      <Fingerprint size={17} style={{ color: on ? C.accent : C.text3, flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{lang === 'pt' ? `Bloquear com ${kind}` : `Lock with ${kind}`}</div>
+        <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Pede autenticação ao abrir o app' : 'Requires authentication on open'}</div>
+      </div>
+      <button onClick={() => setSettings((s) => ({ ...s, appLock: !on }))} style={{ width: 44, height: 26, borderRadius: 999, background: on ? C.accent : C.surface2, border: `1px solid ${on ? C.accent : C.border}`, position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
+        <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: 999, background: on ? '#171200' : C.text3, transition: 'left .15s' }} />
+      </button>
+    </div>
+  );
+}
 function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme, applyTheme, onClose }) {
   const [name, setName] = useState(settings.name);
   const dock = settings.dock || DEFAULT_DOCK;
@@ -6558,6 +6625,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
         <Field label={t('height') + ' (cm)'}><input type="number" value={settings.profile && settings.profile.height || ''} onChange={(e) => setSettings((s) => ({ ...s, profile: { ...(s.profile || {}), height: e.target.value } }))} style={inputStyleBig} /></Field>
       </ResponsiveGrid>
       <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
+      <AppLockSetting settings={settings} setSettings={setSettings} lang={lang} />
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{t('editDock')}</div>
       <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -6687,6 +6755,27 @@ function SEED() {
 }
 const SEED_SETTINGS = { health: { [todayISO()]: { readiness: 82, sleep: 76 } }, profile: { weight: 78, height: 180 } };
 
+function AppLockScreen({ lang, onUnlock }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const attempt = async () => {
+    setBusy(true); setFailed(false);
+    const ok = await onUnlock();
+    setBusy(false);
+    if (!ok) setFailed(true);
+  };
+  useEffect(() => { attempt(); }, []);
+  return (
+    <div style={{ background: '#0B0B0F', color: '#ECECEF', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, fontFamily: 'system-ui' }}>
+      <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: '#F5C263', fontFamily: "'Outfit', sans-serif" }}>BhL</div>
+      <Fingerprint size={32} style={{ color: failed ? '#F0787C' : '#63636F' }} />
+      <button onClick={attempt} disabled={busy} style={{ background: 'none', border: '1px solid #2A2A33', color: '#ECECEF', borderRadius: 999, padding: '11px 22px', fontSize: 13.5, cursor: 'pointer' }}>
+        {busy ? (lang === 'pt' ? 'Verificando…' : 'Verifying…') : failed ? (lang === 'pt' ? 'Tentar de novo' : 'Try again') : (lang === 'pt' ? 'Desbloquear' : 'Unlock')}
+      </button>
+    </div>
+  );
+}
+
 /* ---------------- App ---------------- */
 function App() {
   const [ready, setReady] = useState(false);
@@ -6721,11 +6810,37 @@ function App() {
     setIsOnline(navigator.onLine);
     const up = () => setIsOnline(true), down = () => setIsOnline(false);
     window.addEventListener('online', up); window.addEventListener('offline', down);
-    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
+    // no app nativo, o plugin de rede é mais confiável que os eventos do WebView
+    let netHandle;
+    if (isNative()) Network.addListener('networkStatusChange', (s) => setIsOnline(!!s.connected)).then((h) => { netHandle = h; }).catch(() => {});
+    return () => {
+      window.removeEventListener('online', up); window.removeEventListener('offline', down);
+      if (netHandle) netHandle.remove();
+    };
+  }, []);
+  useEffect(() => {
+    if (!isNative()) return;
+    StatusBar.setStyle({ style: StatusBarStyle.Dark }).catch(() => {}); // texto claro, pro fundo escuro do app
+    StatusBar.setBackgroundColor({ color: '#0B0B0F' }).catch(() => {}); // Android; iOS ignora (barra é sobreposta)
   }, []);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
   const dock = settings.dock && settings.dock.length ? settings.dock : DEFAULT_DOCK;
+  // Bloqueio por Face ID/Touch ID (opcional, só no app nativo): tranca ao abrir/voltar do
+  // segundo plano; settings.appLock só existe depois que os settings carregam (ready).
+  const appLockOn = ready && isNative() && !!settings.appLock;
+  const [locked, setLocked] = useState(false);
+  useEffect(() => {
+    if (!appLockOn) { setLocked(false); return; }
+    setLocked(true);
+    let handle;
+    CapApp.addListener('appStateChange', ({ isActive }) => { if (isActive) setLocked(true); }).then((h) => { handle = h; }).catch(() => {});
+    return () => { if (handle) handle.remove(); };
+  }, [appLockOn]);
+  const unlockApp = async () => {
+    try { await BiometricAuth.authenticate({ reason: lang === 'pt' ? 'Desbloquear o Life Control' : 'Unlock Life Control', allowDeviceCredential: true }); setLocked(false); return true; }
+    catch (e) { return false; }
+  };
   // mesma ordem usada no Painel (arrastar pra reordenar lá reflete aqui no menu lateral)
   const orderedModules = [...MODULES].sort((a, b) => {
     const ord = settings.moduleOrder || [];
@@ -6854,9 +6969,9 @@ function App() {
     const it = items.find((i) => i.id === id);
     setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, status: i.status === 'done' ? 'planned' : 'done' } : i))));
     clearTimeout(undoRef.current);
-    if (it && it.status !== 'done') { setUndo(id); undoRef.current = setTimeout(() => setUndo(null), 3200); } else setUndo(null);
+    if (it && it.status !== 'done') { hapticSuccess(); setUndo(id); undoRef.current = setTimeout(() => setUndo(null), 3200); } else setUndo(null);
   };
-  const delItem = (id) => setItems((p) => persistNow(p.filter((i) => i.id !== id)));
+  const delItem = (id) => { hapticWarning(); setItems((p) => persistNow(p.filter((i) => i.id !== id))); };
   const setHealth = (fn) => setSettings((s) => ({ ...s, health: typeof fn === 'function' ? fn(s.health || {}) : fn }));
   const setHealthSummary = (v) => setSettings((s) => ({ ...s, healthSummary: v }));
   const setDietSummary = (v) => setSettings((s) => ({ ...s, dietSummary: v }));
@@ -6909,6 +7024,7 @@ function App() {
     <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: C.accent, fontFamily: "'Outfit', sans-serif" }}>BhL</div>
     <div style={{ fontSize: 12, color: C.text3, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: "'Outfit', sans-serif" }}>Life in Control</div>
   </div>;
+  if (appLockOn && locked) return <AppLockScreen lang={lang} onUnlock={unlockApp} />;
 
   const ttItems = (ticktick.tasks || []).map((t) => ({
     id: 'tt_' + t.id, ttId: t.id, ttProject: t.projectId, type: 'task', domain: 'personal',
