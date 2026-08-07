@@ -4,7 +4,12 @@
   "webDir": "mobile/www",
   "server": {
     "url": "https://life-control-phi.vercel.app",
-    "cleartext": false
+    "cleartext": false,
+    "allowNavigation": [
+      "cloud.ouraring.com",
+      "ticktick.com",
+      "auth.mercadolivre.com.br"
+    ]
   },
   "ios": {
     "contentInset": "always"
