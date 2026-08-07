@@ -6,6 +6,8 @@ workflows:
     integrations:
       app_store_connect: life-control-asc
     environment:
+      groups:
+        - ios_signing
       vars:
         BUNDLE_ID: "com.bhloucao.lifecontrol"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
@@ -27,9 +29,13 @@ workflows:
       - name: Preparar o keychain e importar o certificado (enviado manualmente)
         script: |
           keychain initialize
-          keychain add-certificates
-      - name: Aplicar o perfil de provisionamento (enviado manualmente) no projeto Xcode
-        script: xcode-project use-profiles
+          keychain add-certificates --certificate "$IOS_P12_CERT" --certificate-password "$IOS_P12_PASSWORD"
+      - name: Instalar o perfil de provisionamento (enviado manualmente) e aplicar no projeto Xcode
+        script: |
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+          cp "$IOS_PROVISIONING_PROFILE" "$PROFILES_DIR/life-control.mobileprovision"
+          xcode-project use-profiles
       - name: Build do .ipa assinado
         script: |
           xcode-project build-ipa \
