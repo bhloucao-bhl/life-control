@@ -26,15 +26,16 @@ workflows:
         script: npm ci
       - name: Capacitor sync (copia config/assets pro projeto iOS)
         script: npx cap sync ios
-      - name: Preparar o keychain e importar o certificado (enviado manualmente)
+      - name: Preparar o keychain e importar o certificado (enviado manualmente, em base64)
         script: |
+          echo "$IOS_P12_CERT" | base64 --decode > "$CM_BUILD_DIR/ios_distribution.p12"
           keychain initialize
-          keychain add-certificates --certificate "$IOS_P12_CERT" --certificate-password "$IOS_P12_PASSWORD"
-      - name: Instalar o perfil de provisionamento (enviado manualmente) e aplicar no projeto Xcode
+          keychain add-certificates --certificate "$CM_BUILD_DIR/ios_distribution.p12" --certificate-password "$IOS_P12_PASSWORD"
+      - name: Instalar o perfil de provisionamento (enviado manualmente, em base64) e aplicar no projeto Xcode
         script: |
           PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILES_DIR"
-          cp "$IOS_PROVISIONING_PROFILE" "$PROFILES_DIR/life-control.mobileprovision"
+          echo "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILES_DIR/life-control.mobileprovision"
           xcode-project use-profiles
       - name: Build do .ipa assinado
         script: |
