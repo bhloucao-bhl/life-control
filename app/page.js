@@ -12,13 +12,85 @@ const supabase = createClient(
 );
 
 /* ============================================================
-   Armazenamento: window.storage apontando para o Supabase
-   (mantem a interface que o app ja usa)
+   Cache local (IndexedDB): espelha o "kv" do Supabase no navegador,
+   pra leitura funcionar offline e escritas feitas sem rede entrarem
+   numa fila ("outbox") e serem sincronizadas quando a conexão voltar.
+   ============================================================ */
+const IDB_NAME = 'lcc_offline_v1', IDB_VERSION = 1;
+function openIdb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') { reject(new Error('sem indexeddb')); return; }
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains('kv')) db.createObjectStore('kv', { keyPath: 'key' });
+      if (!db.objectStoreNames.contains('outbox')) db.createObjectStore('outbox', { keyPath: 'key' });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function idbGet(store, key) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const rq = db.transaction(store, 'readonly').objectStore(store).get(key);
+    rq.onsuccess = () => resolve(rq.result || null);
+    rq.onerror = () => reject(rq.error);
+  });
+}
+async function idbSet(store, entry) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).put(entry);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbDelete(store, key) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(store, 'readwrite');
+    tx.objectStore(store).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function idbAll(store) {
+  const db = await openIdb();
+  return new Promise((resolve, reject) => {
+    const rq = db.transaction(store, 'readonly').objectStore(store).getAll();
+    rq.onsuccess = () => resolve(rq.result || []);
+    rq.onerror = () => reject(rq.error);
+  });
+}
+function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), ms))]);
+}
+
+/* ============================================================
+   Armazenamento: window.storage apontando para o Supabase, com
+   IndexedDB como camada offline (mantem a interface que o app ja usa)
    ============================================================ */
 const kvCache = new Map();
 async function currentUid() {
-  const { data } = await supabase.auth.getUser();
-  return data && data.user ? data.user.id : null;
+  // getSession() lê a sessão persistida localmente (sem chamada de rede
+  // quando ainda válida) — permite saber quem é o usuário mesmo offline.
+  const { data } = await supabase.auth.getSession();
+  return data && data.session && data.session.user ? data.session.user.id : null;
+}
+async function flushOutbox() {
+  if (typeof window === 'undefined' || !navigator.onLine) return;
+  const user_id = await currentUid(); if (!user_id) return;
+  let pending; try { pending = await idbAll('outbox'); } catch (e) { return; }
+  for (const entry of pending) {
+    try {
+      const { error } = await withTimeout(supabase.from('kv').upsert({ user_id, key: entry.key, value: entry.value, updated_at: new Date().toISOString() }, { onConflict: 'user_id,key' }), 8000);
+      if (error) throw error;
+      await idbDelete('outbox', entry.key);
+    } catch (e) { break; } // ainda sem rede (ou falhando) — tenta de novo na próxima
+  }
+  try { window.__lccOutboxPending = (await idbAll('outbox')).length; } catch (e) {}
 }
 function installStorage() {
   if (typeof window === 'undefined') return;
@@ -26,36 +98,59 @@ function installStorage() {
     async get(key) {
       if (kvCache.has(key)) return { key, value: kvCache.get(key) };
       const user_id = await currentUid(); if (!user_id) return null;
-      const { data, error } = await supabase.from('kv').select('value').eq('user_id', user_id).eq('key', key).maybeSingle();
-      if (error || !data) return null;
-      kvCache.set(key, data.value);
-      return { key, value: data.value };
+      if (navigator.onLine) {
+        try {
+          const { data, error } = await withTimeout(supabase.from('kv').select('value').eq('user_id', user_id).eq('key', key).maybeSingle(), 6000);
+          if (!error && data) {
+            kvCache.set(key, data.value);
+            idbSet('kv', { key, value: data.value }).catch(() => {});
+            return { key, value: data.value };
+          }
+        } catch (e) { /* sem rede/erro — cai pro cache local abaixo */ }
+      }
+      try {
+        const local = await idbGet('kv', key);
+        if (local) { kvCache.set(key, local.value); return { key, value: local.value }; }
+      } catch (e) {}
+      return null;
     },
     async set(key, value) {
       const user_id = await currentUid(); if (!user_id) return null;
       kvCache.set(key, value);
-      const { error } = await supabase.from('kv').upsert({ user_id, key, value, updated_at: new Date().toISOString() }, { onConflict: 'user_id,key' });
-      if (error) {
-        console.error('storage.set', key, error);
-        if (typeof window !== 'undefined') window.__lccSaveError = (error.message || String(error));
-        return null;
+      idbSet('kv', { key, value }).catch(() => {}); // espelha local sempre, mesmo com rede
+      try {
+        const { error } = await withTimeout(supabase.from('kv').upsert({ user_id, key, value, updated_at: new Date().toISOString() }, { onConflict: 'user_id,key' }), 6000);
+        if (error) throw error;
+        idbDelete('outbox', key).catch(() => {});
+        window.__lccSaveError = null;
+        window.__lccOffline = false;
+        return { key, value };
+      } catch (e) {
+        // sem rede: não é um erro de verdade — entra na fila e sincroniza sozinho depois
+        idbSet('outbox', { key, value, ts: Date.now() }).catch(() => {});
+        window.__lccSaveError = null;
+        window.__lccOffline = true;
+        return { key, value, queued: true };
       }
-      if (typeof window !== 'undefined') window.__lccSaveError = null;
-      return { key, value };
     },
     async delete(key) {
       const user_id = await currentUid(); if (!user_id) return null;
       kvCache.delete(key);
-      await supabase.from('kv').delete().eq('user_id', user_id).eq('key', key);
+      idbDelete('kv', key).catch(() => {});
+      try { await supabase.from('kv').delete().eq('user_id', user_id).eq('key', key); } catch (e) {}
       return { key, deleted: true };
     },
     async list(prefix = '') {
       const user_id = await currentUid(); if (!user_id) return { keys: [], prefix };
-      const { data, error } = await supabase.from('kv').select('key').eq('user_id', user_id).like('key', prefix + '%');
-      if (error || !data) return { keys: [], prefix };
-      return { keys: data.map((r) => r.key), prefix };
+      try {
+        const { data, error } = await supabase.from('kv').select('key').eq('user_id', user_id).like('key', prefix + '%');
+        if (!error && data) return { keys: data.map((r) => r.key), prefix };
+      } catch (e) {}
+      return { keys: [], prefix };
     },
   };
+  window.addEventListener('online', () => { flushOutbox(); });
+  flushOutbox();
 }
 async function importExportedJson(text) {
   const parsed = JSON.parse(text);
@@ -6621,6 +6716,13 @@ function App() {
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
   const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
+  const [isOnline, setIsOnline] = useState(true);
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const up = () => setIsOnline(true), down = () => setIsOnline(false);
+    window.addEventListener('online', up); window.addEventListener('offline', down);
+    return () => { window.removeEventListener('online', up); window.removeEventListener('offline', down); };
+  }, []);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
   const dock = settings.dock && settings.dock.length ? settings.dock : DEFAULT_DOCK;
@@ -6955,6 +7057,7 @@ function App() {
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
       {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap' }}>{toast}</div>}
+      {!isOnline && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: '#B8860B', color: '#171200', textAlign: 'center', fontSize: 11.5, fontWeight: 600, padding: '6px 10px', zIndex: 90 }}>{lang === 'pt' ? 'Offline — vendo dados salvos no aparelho; alterações sincronizam ao reconectar' : 'Offline — showing data saved on this device; changes sync once back online'}</div>}
     </div>
   );
 }
@@ -6968,6 +7071,7 @@ export default function Page() {
   const [booted, setBooted] = useState(false);
   useEffect(() => {
     installStorage();
+    if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') navigator.serviceWorker.register('/sw.js').catch(() => {});
     supabase.auth.getSession().then(({ data }) => { setSession(data.session); setBooted(true); });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { kvCache.clear(); setSession(s); });
     return () => sub.subscription.unsubscribe();

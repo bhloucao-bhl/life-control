@@ -1,6 +1,7 @@
 export const metadata = {
   title: 'Life Control',
   description: 'Centro de controle da vida',
+  manifest: '/manifest.json',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Life Control' },
   icons: {
     icon: [{ url: '/icon?v=3', sizes: '192x192', type: 'image/png' }],
