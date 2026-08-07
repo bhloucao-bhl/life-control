@@ -26,6 +26,12 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Usado pra fotografar refeições, recibos e documentos ao capturar itens rapidamente.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Usado pra escolher fotos já existentes ao capturar itens (refeições, recibos, documentos).</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Usado pra desbloquear o app quando o bloqueio por biometria está ativado.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
