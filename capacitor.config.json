@@ -1,0 +1,12 @@
+{
+  "appId": "com.bhloucao.lifecontrol",
+  "appName": "Life Control",
+  "webDir": "mobile/www",
+  "server": {
+    "url": "https://life-control-phi.vercel.app",
+    "cleartext": false
+  },
+  "ios": {
+    "contentInset": "always"
+  }
+}
