@@ -7,7 +7,7 @@ workflows:
       app_store_connect: life-control-asc
     environment:
       groups:
-        - ios_signing
+        - Ios_signing
       vars:
         BUNDLE_ID: "com.bhloucao.lifecontrol"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
