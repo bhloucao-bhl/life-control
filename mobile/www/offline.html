@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Life Control</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #0B0B0F; }
+  body {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    font-family: -apple-system, system-ui, sans-serif; color: #ECECEF; text-align: center; padding: 24px; box-sizing: border-box;
+  }
+  .mark { color: #F5C263; font-size: 44px; font-weight: 800; letter-spacing: -2px; }
+  .msg { font-size: 14.5px; color: #9A9AA5; line-height: 1.5; max-width: 280px; }
+  button {
+    background: none; border: 1px solid #2A2A33; color: #ECECEF; border-radius: 999px;
+    padding: 11px 22px; font-size: 13.5px; cursor: pointer; font-family: inherit;
+  }
+  button:active { opacity: .7; }
+</style>
+</head>
+<body>
+  <div class="mark">BhL</div>
+  <div class="msg" id="msg">Sem conexão no momento. Assim que a internet voltar, é só tentar de novo.</div>
+  <button id="retry">Tentar novamente</button>
+  <script>
+    // Página local, sempre disponível offline — o Capacitor carrega ela automaticamente
+    // quando a navegação pro site remoto (server.url) falha (ex.: modo avião).
+    var PROD_URL = 'https://life-control-phi.vercel.app';
+    function retry() { window.location.href = PROD_URL; }
+    document.getElementById('retry').addEventListener('click', retry);
+    // volta sozinho assim que a conexão for detectada de novo
+    window.addEventListener('online', retry);
+  </script>
+</body>
+</html>

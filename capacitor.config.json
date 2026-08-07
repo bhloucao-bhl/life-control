@@ -4,6 +4,7 @@
   "webDir": "mobile/www",
   "server": {
     "url": "https://life-control-phi.vercel.app",
+    "errorPath": "offline.html",
     "cleartext": false,
     "allowNavigation": [
       "cloud.ouraring.com",
