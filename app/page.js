@@ -343,7 +343,8 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, Sparkle, GripVertical
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, Sparkle, GripVertical,
+  Coffee, Sandwich, Soup, Cookie
 } from 'lucide-react';
 
 /* ---------------- palette ---------------- */
@@ -543,9 +544,33 @@ const META = {
   condition: [['status', 'Status', 'Status'], ['since', 'Desde', 'Since', 'date']],
   allergy: [['severity', 'Gravidade', 'Severity'], ['reaction', 'Reação', 'Reaction']],
   medication: [['dose', 'Dose', 'Dose'], ['frequency', 'Frequência', 'Frequency'], ['prescribedBy', 'Prescrito por', 'Prescribed by'], ['startDate', 'Início', 'Start', 'date'], ['endDate', 'Fim (deixe vazio se em uso)', 'End (blank if ongoing)', 'date']],
-  meal: [['calories', 'Calorias (kcal)', 'Calories (kcal)', 'number'], ['proteinG', 'Proteína (g)', 'Protein (g)', 'number'], ['carbsG', 'Carboidrato (g)', 'Carbs (g)', 'number'], ['fatG', 'Gordura (g)', 'Fat (g)', 'number']],
+  meal: [['mealType', 'Tipo de refeição', 'Meal type'], ['calories', 'Calorias (kcal)', 'Calories (kcal)', 'number'], ['proteinG', 'Proteína (g)', 'Protein (g)', 'number'], ['carbsG', 'Carboidrato (g)', 'Carbs (g)', 'number'], ['fatG', 'Gordura (g)', 'Fat (g)', 'number']],
   exercise: [['activityType', 'Atividade', 'Activity'], ['durationMin', 'Duração (min)', 'Duration (min)', 'number'], ['distanceKm', 'Distância (km)', 'Distance (km)', 'number'], ['calories', 'Calorias (kcal)', 'Calories (kcal)', 'number']],
 };
+
+// categorias de refeição — ícone/cor por tipo, com um palpite automático pelo horário quando o
+// usuário não escolhe manualmente (meta.mealType ausente nos registros já salvos antes disso existir)
+const MEAL_TYPES = [
+  ['cafe', 'Café da Manhã', 'Breakfast', Coffee, '#D9A441'],
+  ['lanche', 'Lanche', 'Snack (meal)', Sandwich, '#5FBF8F'],
+  ['almoco', 'Almoço', 'Lunch', Soup, '#E5544B'],
+  ['jantar', 'Jantar', 'Dinner', Utensils, '#7FBAF5'],
+  ['ceia', 'Ceia', 'Late-night snack', Moon, '#B0A2FF'],
+  ['snack', 'Snack', 'Snack', Cookie, '#F5C263'],
+];
+const mealTypeInfo = (key) => MEAL_TYPES.find((x) => x[0] === key) || MEAL_TYPES[5];
+function guessMealType(hm) {
+  if (!hm || !/^\d{2}:\d{2}/.test(hm)) return 'snack';
+  const [h, m] = hm.split(':').map(Number);
+  const mins = h * 60 + (m || 0);
+  if (mins >= 300 && mins < 600) return 'cafe';
+  if (mins >= 600 && mins < 720) return 'lanche';
+  if (mins >= 720 && mins < 900) return 'almoco';
+  if (mins >= 900 && mins < 1080) return 'lanche';
+  if (mins >= 1080 && mins < 1290) return 'jantar';
+  return 'ceia';
+}
+const mealTypeOf = (m) => (m.meta && m.meta.mealType) || guessMealType(m.time);
 
 const AIRLINES = { LA: 'LATAM', JJ: 'LATAM', G3: 'GOL', AD: 'Azul', AV: 'Avianca', CM: 'Copa', AA: 'American', UA: 'United', DL: 'Delta', B6: 'JetBlue', AC: 'Air Canada', QR: 'Qatar Airways', EK: 'Emirates', EY: 'Etihad', TK: 'Turkish', TP: 'TAP', IB: 'Iberia', UX: 'Air Europa', AF: 'Air France', KL: 'KLM', LH: 'Lufthansa', BA: 'British Airways', AZ: 'ITA Airways', QF: 'Qantas', JL: 'Japan Airlines', NH: 'ANA', SQ: 'Singapore', CX: 'Cathay Pacific', EI: 'Aer Lingus', LX: 'SWISS', AY: 'Finnair' };
 function resolveFlight(code) {
@@ -1340,6 +1365,9 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
                   </select></Field></div>}
                 </React.Fragment>
               );
+            }
+            if (k === 'mealType' && type === 'meal') {
+              return <div key={k} style={{ gridColumn: '1 / -1' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>{MEAL_TYPES.map(([mk, ptn, enn, Ic, col]) => <Chip key={mk} active={(f.meta.mealType || guessMealType(f.time)) === mk} onClick={() => upMeta({ mealType: mk })} color={col}><span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><Ic size={12} />{lang === 'pt' ? ptn : enn}</span></Chip>)}</div></Field></div>;
             }
             if (k === 'status' && type === 'condition') {
               return <div key={k} style={{ gridColumn: 'auto' }}><Field label={lang === 'pt' ? ptL : enL}><div style={{ display: 'flex', gap: 6 }}>{['ativa', 'resolvida'].map((s) => <Chip key={s} active={f.meta.status === s} onClick={() => upMeta({ status: s })} color={s === 'ativa' ? C.rose : C.green}>{lang === 'pt' ? (s === 'ativa' ? 'Ativa' : 'Resolvida') : (s === 'ativa' ? 'Active' : 'Resolved')}</Chip>)}</div></Field></div>;
@@ -4374,16 +4402,63 @@ function CalorieChart({ meals, lang, days = 14 }) {
     </div>
   );
 }
-function MealRow({ m, lang, onOpen }) {
+function MealRow({ m, lang, onOpen, hideDate }) {
   const cal = m.meta && m.meta.calories;
+  const [, ptn, enn, Ic, col] = mealTypeInfo(mealTypeOf(m));
   return (
     <div onClick={() => onOpen(m)} style={{ ...card, padding: '11px 13px', display: 'flex', alignItems: 'center', gap: 11, marginBottom: 8, cursor: 'pointer' }}>
-      <div style={{ width: 30, height: 30, borderRadius: 9, background: '#E5544B1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Utensils size={14} style={{ color: '#E5544B' }} /></div>
+      <div style={{ width: 30, height: 30, borderRadius: 9, background: col + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Ic size={14} style={{ color: col }} /></div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.title}</div>
-        <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{m.date ? fmtDate(m.date, lang) : ''}{m.time ? ' · ' + m.time : ''}</div>
+        <div style={{ fontSize: 11, color: C.text3, marginTop: 2 }}>{lang === 'pt' ? ptn : enn}{!hideDate && m.date ? ' · ' + fmtDate(m.date, lang) : ''}{m.time ? ' · ' + m.time : ''}</div>
       </div>
       {cal != null && <span style={{ fontSize: 12.5, fontWeight: 700, color: '#E5544B', flexShrink: 0 }}>{cal} kcal</span>}
+    </div>
+  );
+}
+// mesmo layout do CalendarScreen (semana por padrão, abre pro mês) — cada dia mostra o total de
+// calorias do dia; clicar num dia abre a lista de refeições daquele dia logo abaixo
+function DietCalendar({ meals, lang, sel, setSel }) {
+  const [mode, setMode] = useState('week');
+  const today = todayISO();
+  const [vm, setVm] = useState((sel || today).slice(0, 7));
+  const byDay = {};
+  meals.forEach((m) => { if (!m.date) return; byDay[m.date] = (byDay[m.date] || 0) + (Number(m.meta && m.meta.calories) || 0); });
+  const [y, m] = vm.split('-').map(Number);
+  const shiftMonth = (d) => { let nm = m + d, ny = y; if (nm < 1) { nm = 12; ny--; } if (nm > 12) { nm = 1; ny++; } setVm(`${ny}-${pad2(nm)}`); };
+  const shiftWeek = (d) => { const ns = addDays(sel, d * 7); setSel(ns); setVm(ns.slice(0, 7)); };
+  let cells = [];
+  if (mode === 'month') { const sw = new Date(y, m - 1, 1).getDay(); const di = new Date(y, m, 0).getDate(); for (let i = 0; i < sw; i++) cells.push(null); for (let d = 1; d <= di; d++) cells.push(`${y}-${pad2(m)}-${pad2(d)}`); }
+  else { const base = new Date(sel + 'T00:00:00'); const ws = new Date(base); ws.setDate(base.getDate() - base.getDay()); for (let i = 0; i < 7; i++) { const d = new Date(ws); d.setDate(ws.getDate() + i); cells.push(`${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`); } }
+  const monthLabel = new Date(y, m - 1, 1).toLocaleDateString(loc(lang), { month: 'long', year: 'numeric' });
+  return (
+    <div style={{ ...card, padding: 12, marginBottom: 14 }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
+        <Chip active={mode === 'week'} onClick={() => setMode('week')}>{lang === 'pt' ? 'Semana' : 'Week'}</Chip>
+        <Chip active={mode === 'month'} onClick={() => setMode('month')} color={C.rose}>{lang === 'pt' ? 'Mês' : 'Month'}</Chip>
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <button onClick={() => (mode === 'month' ? shiftMonth(-1) : shiftWeek(-1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronLeft size={20} /></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14, fontWeight: 600, textTransform: 'capitalize' }}>{mode === 'month' ? monthLabel : `${lang === 'pt' ? 'Semana' : 'Week'} · ${fmtDate(cells[0], lang)}`}</span>
+          {sel !== today && <button onClick={() => { setSel(today); setVm(today.slice(0, 7)); }} style={{ background: C.accentSoft, border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11, fontWeight: 600, borderRadius: 999, padding: '3px 10px' }}>{lang === 'pt' ? 'Hoje' : 'Today'}</button>}
+        </div>
+        <button onClick={() => (mode === 'month' ? shiftMonth(1) : shiftWeek(1))} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer' }}><ChevronRight size={20} /></button>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3, marginBottom: 4 }}>{WD[lang].map((wd) => <div key={wd} style={{ textAlign: 'center', fontSize: 10.5, color: C.text3, padding: '2px 0' }}>{wd}</div>)}</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 3 }}>
+        {cells.map((iso, idx) => {
+          if (!iso) return <div key={idx} />;
+          const cals = Math.round(byDay[iso] || 0);
+          const isToday = iso === today, isSel = iso === sel, isFuture = iso > today;
+          return (
+            <button key={idx} onClick={() => setSel(iso)} style={{ aspectRatio: '1', border: isSel ? `1px solid ${C.rose}` : '1px solid transparent', background: isSel ? C.rose + '1e' : isToday ? C.surface2 : 'transparent', borderRadius: 9, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1, padding: 2 }}>
+              <span style={{ fontSize: 12, color: isToday ? C.rose : C.text, fontWeight: isToday ? 700 : 400 }}>{Number(iso.slice(-2))}</span>
+              {cals > 0 ? <span style={{ fontSize: 8, fontWeight: 700, color: '#E5544B' }}>{cals >= 1000 ? (cals / 1000).toFixed(1).replace('.', ',') + 'k' : cals}</span> : !isFuture && <span style={{ width: 3, height: 3, borderRadius: 999, background: C.borderSoft }} />}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -4392,10 +4467,13 @@ function DietScreen({ items, lang, t, back, addItem, delItem, onOpen, flash, die
   const [mealDraft, setMealDraft] = useState(null);
   const [adding, setAdding] = useState(false);
   const [chartDays, setChartDays] = useState(14);
+  const [selDate, setSelDate] = useState(todayISO());
   const fileRef = useRef();
   const today = todayISO();
   const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health').sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
   const todayMeals = meals.filter((m) => m.date === today);
+  const selMeals = meals.filter((m) => m.date === selDate).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const selCals = selMeals.reduce((a, b) => a + (Number(b.meta && b.meta.calories) || 0), 0);
   const todayCals = todayMeals.reduce((a, b) => a + (Number(b.meta && b.meta.calories) || 0), 0);
   const genDietSummary = async () => {
     setSumLoading(true);
@@ -4466,7 +4544,12 @@ Hoje: ${today}`;
       </div>
       {openClaude && <Btn kind="ghost" onClick={() => openClaude(lang === 'pt' ? 'Quero conversar sobre como melhorar minha dieta e meus hábitos alimentares.' : 'I want to talk about improving my diet and eating habits.')} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><DrClaudeBadge size={16} />{lang === 'pt' ? 'Falar com o Dr. Claude' : 'Talk to Dr. Claude'}</Btn>}
       <SectionTitle icon={Utensils} label={lang === 'pt' ? 'Histórico de refeições' : 'Meal history'} color={C.rose} />
-      {meals.length === 0 ? <Empty icon={Utensils} text={t('nothingHere')} /> : meals.slice(0, 40).map((m) => <MealRow key={m.id} m={m} lang={lang} onOpen={onOpen} />)}
+      <DietCalendar meals={meals} lang={lang} sel={selDate} setSel={setSelDate} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '4px 2px 10px' }}>
+        <span style={{ fontSize: 13.5, fontWeight: 600, textTransform: 'capitalize' }}>{selDate === today ? (lang === 'pt' ? 'Hoje' : 'Today') : fmtLong(selDate, lang)}</span>
+        {selCals > 0 && <span style={{ fontSize: 12.5, fontWeight: 700, color: '#E5544B' }}>{selCals} kcal</span>}
+      </div>
+      {selMeals.length === 0 ? <Empty icon={Utensils} text={lang === 'pt' ? 'Nenhuma refeição registrada nesse dia.' : 'No meals logged this day.'} /> : selMeals.map((m) => <MealRow key={m.id} m={m} lang={lang} onOpen={onOpen} hideDate />)}
       {mealDraft && <MealConfirmModal draft={mealDraft} lang={lang} t={t} onSave={saveMeal} onCancel={() => setMealDraft(null)} />}
       {adding && <AddModal title={t('t_meal')} icon={Utensils} draft={{ type: 'meal', domain: 'health', date: today, time: nowHM(), meta: {} }} allowedTypes={['meal']} lang={lang} t={t} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'health', ...x }); flash(t('savedOne')); setAdding(false); }} />}
     </div>
