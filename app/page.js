@@ -2336,21 +2336,25 @@ function DrClaudeBadge({ size = 20 }) {
 const COMMON_INDICATORS = ['Glicemia', 'Hemoglobina Glicada', 'Colesterol Total', 'HDL', 'LDL', 'VLDL', 'Triglicerídeos', 'Creatinina', 'Ureia', 'TSH', 'T4 Livre', 'PCR', 'Hemoglobina', 'Hematócrito', 'Leucócitos', 'Plaquetas', 'Ácido Úrico', 'Vitamina D', 'TGO', 'TGP', 'Ferritina', 'Sódio', 'Potássio'];
 const fmtIndNum = (v) => (v == null || isNaN(v)) ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const shortDate = (iso) => iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(2, 4)}` : '';
-// tabela: linhas = indicadores, colunas = data do exame (mais recente à esquerda), ordenada pra
-// caber o histórico inteiro numa visão só, em vez de um gráfico por indicador
-function IndicatorsTable({ byIndicator, lang }) {
+function sortedIndicatorRows(byIndicator) {
   const entries = Object.entries(byIndicator).filter(([k]) => k !== '__checked__');
-  if (!entries.length) return null;
-  const allDates = [...new Set(entries.flatMap(([, pts]) => pts.map((p) => p.date).filter(Boolean)))].sort((a, b) => b.localeCompare(a));
   const impIndex = (name) => { const i = COMMON_INDICATORS.findIndex((x) => x.toLowerCase() === name.toLowerCase()); return i === -1 ? 999 : i; };
-  const rows = entries.slice().sort((a, b) => (b[1].length - a[1].length) || (impIndex(a[0]) - impIndex(b[0])) || a[0].localeCompare(b[0], 'pt'));
+  return entries.slice().sort((a, b) => (b[1].length - a[1].length) || (impIndex(a[0]) - impIndex(b[0])) || a[0].localeCompare(b[0], 'pt'));
+}
+// tabela: linhas = indicadores, colunas = data do exame (mais recente à esquerda). A tabela NÃO
+// leva width:100% de propósito — precisa do tamanho natural do conteúdo pra o scroll horizontal
+// funcionar (com width:100% o navegador espreme todas as colunas dentro do espaço visível em vez
+// de deixar rolar, o que fazia dar a impressão de "só uma coluna por vez" em telas maiores).
+function IndicatorsTable({ rows, lang }) {
+  if (!rows.length) return null;
+  const allDates = [...new Set(rows.flatMap(([, pts]) => pts.map((p) => p.date).filter(Boolean)))].sort((a, b) => b.localeCompare(a));
   const cellFor = (pts, date) => pts.find((p) => p.date === date);
   const thBase = { padding: '9px 10px', borderBottom: `1px solid ${C.borderSoft}`, fontWeight: 600 };
   const nameColBg = (THEMES[_theme] || THEMES.dark).surface;
   return (
     <div style={{ ...card, padding: 0, marginBottom: 14, overflow: 'hidden' }}>
       <div style={{ overflowX: 'auto' }}>
-        <table style={{ borderCollapse: 'collapse', fontSize: 11.5, whiteSpace: 'nowrap', width: '100%' }}>
+        <table style={{ borderCollapse: 'collapse', fontSize: 11.5, whiteSpace: 'nowrap' }}>
           <thead>
             <tr>
               <th style={{ ...thBase, position: 'sticky', left: 0, background: nameColBg, textAlign: 'left', color: C.text2, zIndex: 1 }}>{lang === 'pt' ? 'Indicador' : 'Indicator'}</th>
@@ -2375,6 +2379,20 @@ function IndicatorsTable({ byIndicator, lang }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+// tela dedicada com a tabela completa (sem limite de linhas) — a aba de Histórico Médico só
+// mostra uma prévia; aqui não há nenhuma restrição de largura ou de quantidade de indicadores.
+function IndicatorsFullScreen({ items, lang, t, back }) {
+  const byIndicator = {};
+  items.filter((i) => i.type === 'healthMetric').forEach((m) => { const k = m.title; (byIndicator[k] = byIndicator[k] || []).push({ value: m.amount, unit: m.meta && m.meta.unit, refRange: m.meta && m.meta.refRange, status: m.meta && m.meta.status, date: m.date }); });
+  const rows = sortedIndicatorRows(byIndicator);
+  return (
+    <div style={{ paddingBottom: 100 }}>
+      <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{lang === 'pt' ? 'Histórico Médico' : 'Medical History'}</button>
+      <div style={{ fontSize: 22, fontWeight: 600, margin: '4px 2px 14px' }}>{lang === 'pt' ? `Todos os indicadores (${rows.length})` : `All indicators (${rows.length})`}</div>
+      {rows.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda.' : 'No indicators yet.'} /> : <IndicatorsTable rows={rows} lang={lang} />}
     </div>
   );
 }
@@ -2414,7 +2432,7 @@ function SleepReadinessHistory({ health, lang }) {
     </div>
   );
 }
-function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash, health, onOpen, openClaude }) {
+function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateItem, flash, health, onOpen, openClaude, goIndicatorsFull }) {
   const [adding, setAdding] = useState(null); // 'condition' | 'allergy' | 'medication'
   const [analyzing, setAnalyzing] = useState(false); const [analyzeProgress, setAnalyzeProgress] = useState('');
   const [dietOpen, setDietOpen] = useState(false); const [mealLoading, setMealLoading] = useState(false);
@@ -2486,7 +2504,7 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
   const visibleIndicators = Object.entries(byIndicator).filter(([k]) => k !== '__checked__');
 
   return (
-    <div style={{ maxWidth: 480, margin: '0 auto', padding: '0 16px 100px' }}>
+    <div style={{ paddingBottom: 100 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, margin: '18px 0 16px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 6px)' }}>
         <button onClick={back} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex' }}><ChevronLeft size={22} /></button>
         <DrClaudeBadge />
@@ -2601,12 +2619,22 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
       )}
 
       <SectionTitle icon={Activity} label={lang === 'pt' ? 'Indicadores' : 'Indicators'} color={C.blue} />
-      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : (
-        <>
-          <div style={{ fontSize: 10.5, color: C.text3, marginBottom: 8 }}>{lang === 'pt' ? 'Valores em vermelho/azul estão fora da faixa de referência (alto/baixo). Arraste pra ver mais datas.' : 'Red/blue values are out of reference range. Scroll for more dates.'}</div>
-          <IndicatorsTable byIndicator={byIndicator} lang={lang} />
-        </>
-      )}
+      {visibleIndicators.length === 0 ? <Empty icon={Activity} text={lang === 'pt' ? 'Nenhum indicador ainda. Suba exames em Saúde e analise aqui.' : 'No indicators yet.'} /> : (() => {
+        const allRows = sortedIndicatorRows(byIndicator);
+        const PREVIEW = 20;
+        const rows = allRows.slice(0, PREVIEW);
+        return (
+          <>
+            <div style={{ fontSize: 10.5, color: C.text3, marginBottom: 8 }}>{lang === 'pt' ? 'Valores em vermelho/azul estão fora da faixa de referência (alto/baixo). Arraste pra ver mais datas.' : 'Red/blue values are out of reference range. Scroll for more dates.'}</div>
+            <IndicatorsTable rows={rows} lang={lang} />
+            {allRows.length > PREVIEW && goIndicatorsFull && (
+              <Btn kind="soft" onClick={goIndicatorsFull} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>
+                <Activity size={14} />{lang === 'pt' ? `Ver tabela completa (${allRows.length})` : `See full table (${allRows.length})`}
+              </Btn>
+            )}
+          </>
+        );
+      })()}
 
       {adding && (
         <AddModal
@@ -6880,7 +6908,8 @@ function App() {
           onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
           onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
-        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} openClaude={(q) => setClaudeSeed(q)} />}
+        {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} openClaude={(q) => setClaudeSeed(q)} goIndicatorsFull={() => setActive({ screen: 'indicatorsFull', module: null })} />}
+        {active.screen === 'indicatorsFull' && <IndicatorsFullScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'medical', module: null })} />}
         {active.screen === 'diet' && <DietScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} delItem={delItem} onOpen={setDetail} flash={flash} dietSummary={settings.dietSummary} setDietSummary={setDietSummary} openClaude={(q) => setClaudeSeed(q)} />}
         {active.screen === 'healthDocs' && <HealthDocsScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} onOpen={setDetail} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
