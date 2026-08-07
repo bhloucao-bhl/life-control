@@ -1808,7 +1808,12 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
       const mime = photo.format === 'png' ? 'image/png' : 'image/jpeg';
       const res = await classifyPhotoSmart(photo.base64String, mime, lang);
       if (res.kind === 'meal') setMealDraft(res); else setDrafts(res.items);
-    } catch (err) { /* cancelado pelo usuário ou sem permissão — silencioso */ }
+    } catch (err) {
+      const msg = (err && err.message) || '';
+      // cancelar o seletor não é erro — qualquer outra coisa a gente mostra, senão o
+      // botão parece simplesmente não fazer nada quando algo dá errado de verdade.
+      if (!/cancel/i.test(msg)) flash((lang === 'pt' ? 'Câmera: ' : 'Camera: ') + (msg || (lang === 'pt' ? 'erro desconhecido' : 'unknown error')));
+    }
     setLoading(false);
   };
   const saveMeal = (m) => {
@@ -2172,9 +2177,15 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
     if (typeof window !== 'undefined' && window.__lccGeo) {
       load(window.__lccGeo.lat, window.__lccGeo.lon);
     } else if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      // rede de segurança: no WebView nativo do iOS, getCurrentPosition pode nunca
+      // chamar nem sucesso nem erro se faltar a permissão declarada no app — sem isso,
+      // o clima/câmbio (que dependem do mesmo load()) travariam "pensando" pra sempre.
+      let settled = false;
+      const finish = (lat, lon) => { if (settled) return; settled = true; load(lat, lon); };
+      const fallback = setTimeout(() => finish(null, null), 4500);
       navigator.geolocation.getCurrentPosition(
-        (p) => { const lat = p.coords.latitude.toFixed(3), lon = p.coords.longitude.toFixed(3); if (typeof window !== 'undefined') window.__lccGeo = { lat, lon }; load(lat, lon); },
-        () => load(null, null),
+        (p) => { clearTimeout(fallback); const lat = p.coords.latitude.toFixed(3), lon = p.coords.longitude.toFixed(3); if (typeof window !== 'undefined') window.__lccGeo = { lat, lon }; finish(lat, lon); },
+        () => { clearTimeout(fallback); finish(null, null); },
         { timeout: 4000, maximumAge: 1800000 }
       );
     } else load(null, null);

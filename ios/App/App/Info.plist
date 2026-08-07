@@ -32,6 +32,8 @@
 	<string>Usado pra escolher fotos já existentes ao capturar itens (refeições, recibos, documentos).</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Usado pra desbloquear o app quando o bloqueio por biometria está ativado.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Usado pra mostrar a previsão do tempo da sua localização atual.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
