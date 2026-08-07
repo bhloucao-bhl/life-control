@@ -6830,16 +6830,21 @@ function App() {
   // segundo plano; settings.appLock só existe depois que os settings carregam (ready).
   const appLockOn = ready && isNative() && !!settings.appLock;
   const [locked, setLocked] = useState(false);
+  // o próprio prompt do Face ID dispara um "voltou ao primeiro plano" quando aparece/some —
+  // sem essa trava, isso reacionava o bloqueio na hora e criava um loop infinito de Face ID.
+  const authBusyRef = useRef(false);
   useEffect(() => {
     if (!appLockOn) { setLocked(false); return; }
     setLocked(true);
     let handle;
-    CapApp.addListener('appStateChange', ({ isActive }) => { if (isActive) setLocked(true); }).then((h) => { handle = h; }).catch(() => {});
+    CapApp.addListener('appStateChange', ({ isActive }) => { if (isActive && !authBusyRef.current) setLocked(true); }).then((h) => { handle = h; }).catch(() => {});
     return () => { if (handle) handle.remove(); };
   }, [appLockOn]);
   const unlockApp = async () => {
+    authBusyRef.current = true;
     try { await BiometricAuth.authenticate({ reason: lang === 'pt' ? 'Desbloquear o Life Control' : 'Unlock Life Control', allowDeviceCredential: true }); setLocked(false); return true; }
     catch (e) { return false; }
+    finally { setTimeout(() => { authBusyRef.current = false; }, 800); }
   };
   // mesma ordem usada no Painel (arrastar pra reordenar lá reflete aqui no menu lateral)
   const orderedModules = [...MODULES].sort((a, b) => {
