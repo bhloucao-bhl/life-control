@@ -30,6 +30,8 @@
 	<string>Usado pra fotografar refeições, recibos e documentos ao capturar itens rapidamente.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Usado pra escolher fotos já existentes ao capturar itens (refeições, recibos, documentos).</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Usado pra salvar fotos na sua galeria quando aplicável.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Usado pra desbloquear o app quando o bloqueio por biometria está ativado.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
