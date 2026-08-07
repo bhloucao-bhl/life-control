@@ -6,9 +6,6 @@ workflows:
     integrations:
       app_store_connect: life-control-asc
     environment:
-      ios_signing:
-        distribution_type: app_store
-        bundle_identifier: com.bhloucao.lifecontrol
       vars:
         BUNDLE_ID: "com.bhloucao.lifecontrol"
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
@@ -27,16 +24,11 @@ workflows:
         script: npm ci
       - name: Capacitor sync (copia config/assets pro projeto iOS)
         script: npx cap sync ios
-      - name: Buscar (ou criar, se não existir) o certificado e o perfil de provisionamento
-        script: |
-          app-store-connect fetch-signing-files "$BUNDLE_ID" \
-            --type IOS_APP_STORE \
-            --create
-      - name: Preparar o keychain e importar o certificado buscado
+      - name: Preparar o keychain e importar o certificado (enviado manualmente)
         script: |
           keychain initialize
           keychain add-certificates
-      - name: Aplicar o perfil de provisionamento no projeto Xcode
+      - name: Aplicar o perfil de provisionamento (enviado manualmente) no projeto Xcode
         script: xcode-project use-profiles
       - name: Build do .ipa assinado
         script: |
