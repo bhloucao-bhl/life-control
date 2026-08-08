@@ -6904,21 +6904,32 @@ function App() {
   // segundo plano; settings.appLock só existe depois que os settings carregam (ready).
   const appLockOn = ready && isNative() && !!settings.appLock;
   const [locked, setLocked] = useState(false);
-  // o próprio prompt do Face ID dispara um "voltou ao primeiro plano" quando aparece/some —
-  // sem essa trava, isso reacionava o bloqueio na hora e criava um loop infinito de Face ID.
+  // o próprio prompt do Face ID dispara "primeiro plano"/"segundo plano" quando aparece/some —
+  // sem essas travas, isso reacionava o bloqueio na hora e criava um loop infinito de Face ID.
+  // authBusyRef ignora os eventos que acontecem durante e logo após a autenticação; e mesmo que
+  // algum evento escape dessa janela, só trancamos de novo se tivermos visto uma saída real
+  // (isActive:false) depois da autenticação — um "voltou" solto, sem uma "saída" real antes, é
+  // sempre um eco do próprio prompt, nunca o usuário saindo e voltando pro app de verdade.
   const authBusyRef = useRef(false);
+  const wasBackgroundedRef = useRef(false);
   useEffect(() => {
     if (!appLockOn) { setLocked(false); return; }
     setLocked(true);
+    wasBackgroundedRef.current = false;
     let handle;
-    CapApp.addListener('appStateChange', ({ isActive }) => { if (isActive && !authBusyRef.current) setLocked(true); }).then((h) => { handle = h; }).catch(() => {});
+    CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (authBusyRef.current) return;
+      if (!isActive) { wasBackgroundedRef.current = true; return; }
+      if (wasBackgroundedRef.current) { wasBackgroundedRef.current = false; setLocked(true); }
+    }).then((h) => { handle = h; }).catch(() => {});
     return () => { if (handle) handle.remove(); };
   }, [appLockOn]);
   const unlockApp = async () => {
     authBusyRef.current = true;
+    wasBackgroundedRef.current = false;
     try { await BiometricAuth.authenticate({ reason: lang === 'pt' ? 'Desbloquear o Life Control' : 'Unlock Life Control', allowDeviceCredential: true }); setLocked(false); return true; }
     catch (e) { return false; }
-    finally { setTimeout(() => { authBusyRef.current = false; }, 800); }
+    finally { setTimeout(() => { authBusyRef.current = false; wasBackgroundedRef.current = false; }, 1200); }
   };
   // mesma ordem usada no Painel (arrastar pra reordenar lá reflete aqui no menu lateral)
   const orderedModules = [...MODULES].sort((a, b) => {
