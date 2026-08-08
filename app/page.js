@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Capacitor } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 import { Share } from '@capacitor/share';
 import { Camera as CapCamera, CameraResultType, CameraSource } from '@capacitor/camera';
@@ -20,6 +20,30 @@ const hapticWarning = () => { if (isNative()) Haptics.notification({ type: Notif
 async function nativeShare(title, text) {
   if (!isNative()) return false;
   try { await Share.share({ title, text }); return true; } catch (e) { return false; }
+}
+
+/* ============================================================
+   Ponte pros widgets de iOS: espelha a sessão do Supabase pro App
+   Group (via SharedAuthPlugin nativo), pra o WidgetKit conseguir
+   se autenticar sozinho — ele roda num processo separado, sem
+   acesso ao localStorage do WebView. Ver ios/App/LifeControlWidgets.
+   ============================================================ */
+const SharedAuth = registerPlugin('SharedAuth');
+async function syncNativeSession(session) {
+  if (!isNative()) return;
+  try {
+    if (session && session.access_token && session.refresh_token) {
+      await SharedAuth.saveSession({
+        accessToken: session.access_token,
+        refreshToken: session.refresh_token,
+        expiresAt: session.expires_at,
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+        supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      });
+    } else {
+      await SharedAuth.clearSession();
+    }
+  } catch (e) { /* plugin nativo indisponível (web, ou build ainda sem o target de widgets) */ }
 }
 
 /* ============================================================
@@ -3727,6 +3751,15 @@ function PurchaseCard({ p, lang, onOpen, selectMode, selected, onToggleSelect, o
 }
 function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems, updateItem, delItem, onOpen, flash, setPendingCount }) {
   const [adding, setAdding] = useState(false);
+  const [pendingAccountId, setPendingAccountId] = useState(null);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.__lccOpenAddPurchase) {
+      window.__lccOpenAddPurchase = false;
+      setPendingAccountId(window.__lccPurchaseAccountId || null);
+      window.__lccPurchaseAccountId = null;
+      setAdding(true);
+    }
+  }, []);
   const [days, setDays] = useState(30);
   const [ml, setMl] = useState({ loading: true, connected: false, error: null, syncedAt: null });
   const [scan, setScan] = useState({ loading: false, list: null, error: null });
@@ -3890,7 +3923,7 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
         </div>
       )}
       {shown.length === 0 ? <Empty icon={Package} text={t('nothingHere')} /> : shown.map((p) => <PurchaseCard key={p.id} p={p} lang={lang} onOpen={() => onOpen(p)} selectMode={selectMode} selected={selected.includes(p.id)} onToggleSelect={toggleSelect} onMarkReceived={markReceived} />)}
-      {adding && <AddModal title={lang === 'pt' ? 'Compra' : 'Purchase'} icon={Package} draft={{ type: 'purchase', domain: 'shopping', meta: { stage: 'paid' } }} allowedTypes={['purchase']} lang={lang} t={t} onClose={() => setAdding(false)} onSave={(x) => { addItem({ domain: 'shopping', ...x }); flash(t('savedOne')); setAdding(false); }} />}
+      {adding && <AddModal title={lang === 'pt' ? 'Compra' : 'Purchase'} icon={Package} draft={{ type: 'purchase', domain: 'shopping', meta: { stage: 'paid', accountId: pendingAccountId } }} allowedTypes={['purchase']} lang={lang} t={t} onClose={() => { setAdding(false); setPendingAccountId(null); }} onSave={(x) => { addItem({ domain: 'shopping', ...x }); flash(t('savedOne')); setAdding(false); setPendingAccountId(null); }} />}
     </div>
   );
 }
@@ -3934,6 +3967,12 @@ function periodFilter(list, period) {
 }
 function AccountDetail({ acc, items, people, lang, t, back, onOpen, addItem, updateItem, flash, goReport }) {
   const [hidden, setHidden] = useState(false); const [period, setPeriod] = useState('month'); const [adding, setAdding] = useState(null); const [importing, setImporting] = useState(false);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.__lccOpenAddExpense) {
+      window.__lccOpenAddExpense = false;
+      setAdding('expense');
+    }
+  }, []);
   const accounts = items.filter((i) => i.type === 'account');
   const all = items.filter(isTx).filter((i) => acc ? (i.meta && i.meta.accountId === acc.id) : true);
   const orphans = acc ? items.filter(isTx).filter((i) => !i.meta || !i.meta.accountId) : [];
@@ -4655,6 +4694,12 @@ function DietScreen({ items, lang, t, back, addItem, delItem, onOpen, flash, die
   const [adding, setAdding] = useState(false);
   const [chartDays, setChartDays] = useState(14);
   const [selDate, setSelDate] = useState(todayISO());
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.__lccOpenAddMeal) {
+      window.__lccOpenAddMeal = false;
+      setAdding(true);
+    }
+  }, []);
   const fileRef = useRef();
   const today = todayISO();
   const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health').sort((a, b) => (b.date + (b.time || '')).localeCompare(a.date + (a.time || '')));
@@ -6927,6 +6972,37 @@ function App() {
     }).then((h) => { handle = h; }).catch(() => {});
     return () => { if (handle) handle.remove(); };
   }, [appLockOn]);
+  // Toques nos botões dos widgets de iOS chegam aqui como "lifecontrol://open?action=...":
+  // o Capacitor entrega URLs de esquema customizado como o evento "appUrlOpen". Cada ação
+  // navega pra tela certa e larga uma flag global de uma vez só (mesmo padrão que
+  // window.__lccOpenAccount já usa) pra essa tela abrir seu próprio AddModal já preenchido.
+  useEffect(() => {
+    if (!isNative()) return;
+    let handle;
+    CapApp.addListener('appUrlOpen', ({ url }) => {
+      let u; try { u = new URL(url); } catch (e) { return; }
+      if (u.protocol !== 'lifecontrol:') return;
+      const action = u.searchParams.get('action');
+      const accountId = u.searchParams.get('accountId');
+      if (action === 'addMeal') {
+        window.__lccOpenAddMeal = true;
+        setActive({ screen: 'diet', module: null });
+      } else if (action === 'addExpense') {
+        window.__lccOpenAccount = accountId || null;
+        window.__lccOpenAddExpense = true;
+        setActive({ screen: 'dashboard', module: moduleByKey('finance') });
+      } else if (action === 'addPurchase') {
+        window.__lccOpenAddPurchase = true;
+        window.__lccPurchaseAccountId = accountId || null;
+        setActive({ screen: 'dashboard', module: moduleByKey('purchases') });
+      } else if (action === 'purchases') {
+        setActive({ screen: 'dashboard', module: moduleByKey('purchases') });
+      } else {
+        setActive({ screen: 'home', module: null });
+      }
+    }).then((h) => { handle = h; }).catch(() => {});
+    return () => { if (handle) handle.remove(); };
+  }, []);
   const unlockApp = async () => {
     authBusyRef.current = true;
     wasBackgroundedRef.current = false;
@@ -7281,8 +7357,8 @@ export default function Page() {
   useEffect(() => {
     installStorage();
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') navigator.serviceWorker.register('/sw.js').catch(() => {});
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setBooted(true); });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { kvCache.clear(); setSession(s); });
+    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setBooted(true); syncNativeSession(data.session); });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { kvCache.clear(); setSession(s); syncNativeSession(s); });
     return () => sub.subscription.unsubscribe();
   }, []);
   if (!booted) return <div style={{ background: '#0A0E17', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>

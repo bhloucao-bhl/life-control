@@ -7,19 +7,70 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0126C60E70E98089D68C54D5 /* LifeControlWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3A93D921A4CB2517B51E69 /* LifeControlWidgetsBundle.swift */; };
+		1E5FBD58F7BF185D420B8EFB /* SelectAccountIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 225DE21B7DED2B14C1616BA8 /* SelectAccountIntent.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
+		4F3C4D017286F6150C608EED /* DietWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1128A60BDEA2970BCE7EC69E /* DietWidget.swift */; };
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
 		504EC30F1FED79650016851F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30E1FED79650016851F /* Assets.xcassets */; };
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
+		64F37E00E40501F8C87FE59C /* AccountEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A7A5D02655E606266F1F34D /* AccountEntity.swift */; };
+		6B556148F793E96B0E7FEC44 /* SharedSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B333D525357793A75C4270 /* SharedSession.swift */; };
+		78ABEFC10F89F684DC67432B /* WidgetLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B270BF8E27F9C7094915AB /* WidgetLinks.swift */; };
+		7A2488D2D4C11850B235B5A6 /* MarkPurchaseReceivedIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 405F749E544A50570178CD7F /* MarkPurchaseReceivedIntent.swift */; };
+		7C6536DCC94DF921D72FCB53 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 23E667EE9C149C717B10EC72 /* WidgetKit.framework */; };
+		81247BF62ADD51133363279E /* SharedAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */; };
+		8C2AE9FB031C53567CB0B1C6 /* LifeControlWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 963024938E1ABB7878105D92 /* LifeControlWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeaderOnCopy, ); }; };
+		8C3B43938E8BB19B5D357A59 /* WidgetAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */; };
+		94D7CA77056D1622ECEE72B2 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2DFAC8C877B05FD2C03CAFD6 /* Foundation.framework */; };
 		9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9582B6822FE993A50072D4E8 /* SceneDelegate.swift */; };
+		97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B333D525357793A75C4270 /* SharedSession.swift */; };
+		9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
+		9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
+		AB55F4967474308EE4004442 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF897D7A1455C2A99163D0AF /* AppIntents.framework */; };
+		B9512A1BB9DF15FFA5F21EEA /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */; };
+		C3AB1944A3CBA4191DBE75EA /* WidgetUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */; };
+		CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863B924633F127D12E497D8B /* PurchasesWidget.swift */; };
+		E38DAFDB428EEBA73C80694D /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */; };
+		F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A20782818C62B8359506B99 /* FinanceWidget.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		1829C78C0BAE22C63FB901BD /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 504EC2FC1FED79650016851F /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F43C5C773B0933152770E925;
+			remoteInfo = LifeControlWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		6601FAAD2183CC9062E6B9CA /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				8C2AE9FB031C53567CB0B1C6 /* LifeControlWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		1128A60BDEA2970BCE7EC69E /* DietWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DietWidget.swift; sourceTree = "<group>"; };
+		225DE21B7DED2B14C1616BA8 /* SelectAccountIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SelectAccountIntent.swift; sourceTree = "<group>"; };
+		23E667EE9C149C717B10EC72 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
+		2A20782818C62B8359506B99 /* FinanceWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FinanceWidget.swift; sourceTree = "<group>"; };
+		2DFAC8C877B05FD2C03CAFD6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		405F749E544A50570178CD7F /* MarkPurchaseReceivedIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkPurchaseReceivedIntent.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -28,8 +79,24 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		5A7A5D02655E606266F1F34D /* AccountEntity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AccountEntity.swift; sourceTree = "<group>"; };
+		65B333D525357793A75C4270 /* SharedSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedSession.swift; sourceTree = "<group>"; };
+		6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DashboardWidget.swift; sourceTree = "<group>"; };
+		76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedAuthPlugin.swift; sourceTree = "<group>"; };
+		77B270BF8E27F9C7094915AB /* WidgetLinks.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetLinks.swift; sourceTree = "<group>"; };
+		863B924633F127D12E497D8B /* PurchasesWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PurchasesWidget.swift; sourceTree = "<group>"; };
+		89F7B142245FFF8482C3B32A /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
+		9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetUnavailableView.swift; sourceTree = "<group>"; };
 		9582B6822FE993A50072D4E8 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		958DCC722DB07C7200EA8C5F /* debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = debug.xcconfig; path = ../debug.xcconfig; sourceTree = SOURCE_ROOT; };
+		963024938E1ABB7878105D92 /* LifeControlWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = LifeControlWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		9C3A93D921A4CB2517B51E69 /* LifeControlWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LifeControlWidgetsBundle.swift; sourceTree = "<group>"; };
+		9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SwiftUI.framework; sourceTree = DEVELOPER_DIR; };
+		A29BA1B7D92C267E9A5F74E6 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetAPI.swift; sourceTree = "<group>"; };
+		C36D5570D246468E76B5B210 /* AppGroup.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
+		EF897D7A1455C2A99163D0AF /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
+		FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LifeControlWidgets.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -41,15 +108,47 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AED6DC763B9DD8B8D28FCD84 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				94D7CA77056D1622ECEE72B2 /* Foundation.framework in Frameworks */,
+				7C6536DCC94DF921D72FCB53 /* WidgetKit.framework in Frameworks */,
+				B9512A1BB9DF15FFA5F21EEA /* SwiftUI.framework in Frameworks */,
+				AB55F4967474308EE4004442 /* AppIntents.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		03EF24DFE216154CBB3030AF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				0619638381CB638036BDCAAD /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		0619638381CB638036BDCAAD /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				2DFAC8C877B05FD2C03CAFD6 /* Foundation.framework */,
+				23E667EE9C149C717B10EC72 /* WidgetKit.framework */,
+				9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */,
+				EF897D7A1455C2A99163D0AF /* AppIntents.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 		504EC2FB1FED79650016851F = {
 			isa = PBXGroup;
 			children = (
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				504EC3051FED79650016851F /* Products */,
+				D6857AFE8C57958484DD2D01 /* LifeControlWidgets */,
+				03EF24DFE216154CBB3030AF /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -57,6 +156,7 @@
 			isa = PBXGroup;
 			children = (
 				504EC3041FED79650016851F /* App.app */,
+				963024938E1ABB7878105D92 /* LifeControlWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -73,8 +173,78 @@
 				504EC3131FED79650016851F /* Info.plist */,
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
+				89F7B142245FFF8482C3B32A /* App.entitlements */,
+				76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */,
 			);
 			path = App;
+			sourceTree = "<group>";
+		};
+		5112392ED4615EFFC93CC40D /* Dashboard */ = {
+			isa = PBXGroup;
+			children = (
+				6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */,
+			);
+			name = Dashboard;
+			path = Dashboard;
+			sourceTree = "<group>";
+		};
+		53CCA1378AED06D3C9977328 /* Purchases */ = {
+			isa = PBXGroup;
+			children = (
+				405F749E544A50570178CD7F /* MarkPurchaseReceivedIntent.swift */,
+				863B924633F127D12E497D8B /* PurchasesWidget.swift */,
+			);
+			name = Purchases;
+			path = Purchases;
+			sourceTree = "<group>";
+		};
+		8DC26E096C7CF35CCE6148A9 /* Finance */ = {
+			isa = PBXGroup;
+			children = (
+				5A7A5D02655E606266F1F34D /* AccountEntity.swift */,
+				225DE21B7DED2B14C1616BA8 /* SelectAccountIntent.swift */,
+				2A20782818C62B8359506B99 /* FinanceWidget.swift */,
+			);
+			name = Finance;
+			path = Finance;
+			sourceTree = "<group>";
+		};
+		D22ACE2ED84FD12C386F39B9 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				C36D5570D246468E76B5B210 /* AppGroup.swift */,
+				65B333D525357793A75C4270 /* SharedSession.swift */,
+				BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */,
+				77B270BF8E27F9C7094915AB /* WidgetLinks.swift */,
+				9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */,
+			);
+			name = Shared;
+			path = Shared;
+			sourceTree = "<group>";
+		};
+		D6857AFE8C57958484DD2D01 /* LifeControlWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				D22ACE2ED84FD12C386F39B9 /* Shared */,
+				5112392ED4615EFFC93CC40D /* Dashboard */,
+				F39B8857F7627A6FBBCF1811 /* Diet */,
+				8DC26E096C7CF35CCE6148A9 /* Finance */,
+				53CCA1378AED06D3C9977328 /* Purchases */,
+				A29BA1B7D92C267E9A5F74E6 /* Info.plist */,
+				FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */,
+				9C3A93D921A4CB2517B51E69 /* LifeControlWidgetsBundle.swift */,
+			);
+			name = LifeControlWidgets;
+			path = LifeControlWidgets;
+			sourceTree = "<group>";
+		};
+		F39B8857F7627A6FBBCF1811 /* Diet */ = {
+			isa = PBXGroup;
+			children = (
+				1128A60BDEA2970BCE7EC69E /* DietWidget.swift */,
+			);
+			name = Diet;
+			path = Diet;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -87,10 +257,12 @@
 				504EC3001FED79650016851F /* Sources */,
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
+				6601FAAD2183CC9062E6B9CA /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				EF5ED72279FA75C104367A43 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -99,6 +271,23 @@
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		F43C5C773B0933152770E925 /* LifeControlWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 772F92F7AD08B80BCF833656 /* Build configuration list for PBXNativeTarget "LifeControlWidgets" */;
+			buildPhases = (
+				5B3C5A93C5B8245DD9983C9F /* Sources */,
+				AED6DC763B9DD8B8D28FCD84 /* Frameworks */,
+				2A28B703790A69EC2A89419A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LifeControlWidgets;
+			productName = LifeControlWidgets;
+			productReference = 963024938E1ABB7878105D92 /* LifeControlWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -133,11 +322,19 @@
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
+				F43C5C773B0933152770E925 /* LifeControlWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		2A28B703790A69EC2A89419A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		504EC3021FED79650016851F /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -160,10 +357,42 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
+				81247BF62ADD51133363279E /* SharedAuthPlugin.swift in Sources */,
+				9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */,
+				97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5B3C5A93C5B8245DD9983C9F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0126C60E70E98089D68C54D5 /* LifeControlWidgetsBundle.swift in Sources */,
+				8C3B43938E8BB19B5D357A59 /* WidgetAPI.swift in Sources */,
+				78ABEFC10F89F684DC67432B /* WidgetLinks.swift in Sources */,
+				C3AB1944A3CBA4191DBE75EA /* WidgetUnavailableView.swift in Sources */,
+				E38DAFDB428EEBA73C80694D /* DashboardWidget.swift in Sources */,
+				4F3C4D017286F6150C608EED /* DietWidget.swift in Sources */,
+				64F37E00E40501F8C87FE59C /* AccountEntity.swift in Sources */,
+				1E5FBD58F7BF185D420B8EFB /* SelectAccountIntent.swift in Sources */,
+				F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */,
+				7A2488D2D4C11850B235B5A6 /* MarkPurchaseReceivedIntent.swift in Sources */,
+				CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */,
+				9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */,
+				6B556148F793E96B0E7FEC44 /* SharedSession.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		EF5ED72279FA75C104367A43 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = LifeControlWidgets;
+			target = F43C5C773B0933152770E925 /* LifeControlWidgets */;
+			targetProxy = 1829C78C0BAE22C63FB901BD /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		504EC30B1FED79650016851F /* Main.storyboard */ = {
@@ -299,6 +528,7 @@
 			baseConfigurationReference = 958DCC722DB07C7200EA8C5F /* debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -321,6 +551,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				INFOPLIST_FILE = App/Info.plist;
@@ -337,6 +568,57 @@
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
+		};
+		63DDF2A86E5F7B15314F8CAE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = LifeControlWidgets/LifeControlWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LifeControlWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bhloucao.lifecontrol.LifeControlWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		99FA94886BC895F5CDA8371D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = LifeControlWidgets/LifeControlWidgets.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = LifeControlWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.bhloucao.lifecontrol.LifeControlWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 /* End XCBuildConfiguration section */
 
@@ -355,6 +637,15 @@
 			buildConfigurations = (
 				504EC3171FED79650016851F /* Debug */,
 				504EC3181FED79650016851F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		772F92F7AD08B80BCF833656 /* Build configuration list for PBXNativeTarget "LifeControlWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				63DDF2A86E5F7B15314F8CAE /* Release */,
+				99FA94886BC895F5CDA8371D /* Debug */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
