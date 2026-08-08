@@ -386,7 +386,7 @@ async function scanHouseEmails({ addItems, flash, t, lang, items }) {
    Login (e-mail + senha)
    ============================================================ */
 
-const LC = { bg: '#0B0B0F', surface: '#16161E', border: '#282833', text: '#ECECEF', text3: '#63636F', accent: '#E6B450' };
+const LC = { bg: '#0A0E17', surface: '#131B2A', border: 'rgba(255,255,255,0.08)', text: '#FFFFFF', text3: '#94A3B8', accent: '#2563EB' };
 
 function Login() {
   const [email, setEmail] = useState('');
@@ -432,7 +432,7 @@ function Login() {
           onKeyDown={(e) => { if (e.key === 'Enter') go(); }} style={inputStyle} />
 
         <button onClick={go} disabled={busy}
-          style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: 'none', background: LC.accent, color: '#171200', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
+          style={{ width: '100%', padding: '12px 14px', borderRadius: 12, border: 'none', background: LC.accent, color: '#FFFFFF', fontWeight: 600, fontSize: 15, cursor: 'pointer', opacity: busy ? 0.5 : 1 }}>
           {busy ? 'Aguarde…' : mode === 'up' ? 'Criar conta' : 'Entrar'}
         </button>
 
@@ -441,7 +441,7 @@ function Login() {
           {mode === 'up' ? 'Já tenho conta — entrar' : 'Primeira vez — criar conta'}
         </button>
 
-        {err && <div style={{ color: '#F0787C', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>{err}</div>}
+        {err && <div style={{ color: '#EF4444', fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>{err}</div>}
         {msg && <div style={{ color: LC.accent, fontSize: 12.5, marginTop: 12, lineHeight: 1.5 }}>{msg}</div>}
       </div>
     </div>
@@ -464,23 +464,26 @@ import {
   Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint
 } from 'lucide-react';
 
-/* ---------------- palette ---------------- */
+/* ---------------- palette (BHL Core — Deep Space) ---------------- */
+// accent = Primary Accent (Electric Blue); sky = Solar Highlight, reserved for
+// the "work" domain so corporate items read distinctly from every other category;
+// blue = Secondary Accent (Cyan/Starlight), used for the house/gmail/docs categories.
 const THEMES = {
   dark: {
-    bg: '#08080C', bg2: '#12121B', surface: '#1A1A25', surface2: '#24242F',
-    border: '#353543', borderSoft: '#2A2A36',
-    text: '#F7F7FA', text2: '#B8B8C6', text3: '#8A8A99',
-    accent: '#F5C263', accentSoft: 'rgba(245,194,99,0.16)',
-    rose: '#FF8A8E', green: '#6FD9A4', blue: '#7FBAF5', violet: '#B0A2FF',
-    teal: '#6ECDCD', sky: '#8FCFF7',
+    bg: '#0A0E17', bg2: '#0F1522', surface: '#131B2A', surface2: '#1B2536',
+    border: 'rgba(255,255,255,0.08)', borderSoft: 'rgba(255,255,255,0.05)',
+    text: '#FFFFFF', text2: '#C7D2E0', text3: '#94A3B8',
+    accent: '#2563EB', accentSoft: 'rgba(37,99,235,0.16)',
+    rose: '#EF4444', green: '#10B981', blue: '#38BDF8', violet: '#A78BFA',
+    teal: '#14B8A6', sky: '#F59E0B',
   },
   light: {
-    bg: '#EEEFF3', bg2: '#FFFFFF', surface: '#FFFFFF', surface2: '#F2F3F7',
-    border: '#C8CAD4', borderSoft: '#D6D8E0',
-    text: '#1A1A22', text2: '#4A4A5E', text3: '#7C7C8C',
-    accent: '#B87E1E', accentSoft: 'rgba(184,126,30,0.12)',
-    rose: '#D6484D', green: '#1F9D63', blue: '#2C79D6', violet: '#6B57E0',
-    teal: '#1F9D9D', sky: '#2C90D6',
+    bg: '#F8FAFC', bg2: '#FFFFFF', surface: '#FFFFFF', surface2: '#F1F5F9',
+    border: 'rgba(15,23,42,0.10)', borderSoft: 'rgba(15,23,42,0.06)',
+    text: '#0F172A', text2: '#475569', text3: '#64748B',
+    accent: '#2563EB', accentSoft: 'rgba(37,99,235,0.12)',
+    rose: '#DC2626', green: '#059669', blue: '#0284C7', violet: '#7C3AED',
+    teal: '#0D9488', sky: '#B45309',
   },
 };
 let _theme = 'dark';
@@ -674,7 +677,7 @@ const MEAL_TYPES = [
   ['almoco', 'Almoço', 'Lunch', Soup, '#E5544B'],
   ['jantar', 'Jantar', 'Dinner', Utensils, '#7FBAF5'],
   ['ceia', 'Ceia', 'Late-night snack', Moon, '#B0A2FF'],
-  ['snack', 'Snack', 'Snack', Cookie, '#F5C263'],
+  ['snack', 'Snack', 'Snack', Cookie, '#F59E0B'],
 ];
 const mealTypeInfo = (key) => MEAL_TYPES.find((x) => x[0] === key) || MEAL_TYPES[5];
 function guessMealType(hm) {
@@ -739,9 +742,9 @@ const CATEGORIES = {
   alimentacao: { pt: 'Alimentação', en: 'Food', icon: Utensils, color: '#5FBF8F' },
   transporte: { pt: 'Transporte', en: 'Transport', icon: Car, color: '#6BA6E6' },
   casa: { pt: 'Moradia', en: 'Home', icon: Home, color: '#5FB3B3' },
-  saude: { pt: 'Saúde', en: 'Health', icon: Heart, color: '#F0787C' },
+  saude: { pt: 'Saúde', en: 'Health', icon: Heart, color: '#EF4444' },
   educacao: { pt: 'Educação', en: 'Education', icon: GraduationCap, color: '#9B8CF0' },
-  lazer: { pt: 'Lazer', en: 'Leisure', icon: Ticket, color: '#E6B450' },
+  lazer: { pt: 'Lazer', en: 'Leisure', icon: Ticket, color: '#F59E0B' },
   compras: { pt: 'Compras', en: 'Shopping', icon: ShoppingCart, color: '#7CC0E8' },
   servicos: { pt: 'Contas & serviços', en: 'Bills & services', icon: FileText, color: '#9C9CA8' },
   salario: { pt: 'Renda', en: 'Income', icon: TrendingUp, color: '#5FBF8F' },
@@ -969,8 +972,8 @@ function buildContext(items) {
 const card = new Proxy({}, { get: (_, k) => {
   const t = THEMES[_theme] || THEMES.dark;
   if (k === 'background') return t.surface;
-  if (k === 'border') return `1px solid ${t.borderSoft}`;
-  if (k === 'borderRadius') return 16;
+  if (k === 'border') return `1px solid ${t.border}`;
+  if (k === 'borderRadius') return 20;
   if (k === 'boxShadow') return _theme === 'light' ? '0 1px 3px rgba(0,0,0,0.06)' : '0 1px 0 rgba(255,255,255,0.03) inset';
   return undefined;
 }, ownKeys: () => ['background', 'border', 'borderRadius', 'boxShadow'], getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
@@ -989,7 +992,7 @@ function haptic(ms = 8) {
   try { if (typeof navigator !== 'undefined' && navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
 }
 function Btn({ children, onClick, kind = 'primary', style, disabled }) {
-  const kinds = { primary: { background: C.accent, color: '#171200', border: 'none', fontWeight: 600 }, ghost: { background: 'transparent', color: C.text2, border: `1px solid ${C.border}` }, soft: { background: C.surface2, color: C.text, border: `1px solid ${C.border}` }, danger: { background: 'transparent', color: C.rose, border: `1px solid ${C.rose}55` } };
+  const kinds = { primary: { background: C.accent, color: '#FFFFFF', border: 'none', fontWeight: 600 }, ghost: { background: 'transparent', color: C.text2, border: `1px solid ${C.border}` }, soft: { background: C.surface2, color: C.text, border: `1px solid ${C.border}` }, danger: { background: 'transparent', color: C.rose, border: `1px solid ${C.rose}55` } };
   return <button onClick={onClick ? (e) => { haptic(); onClick(e); } : undefined} disabled={disabled} style={{ padding: '10px 14px', borderRadius: 12, fontSize: 14, cursor: disabled ? 'default' : 'pointer', opacity: disabled ? 0.5 : 1, ...kinds[kind], ...style }}>{children}</button>;
 }
 function Chip({ children, active, onClick, color }) {
@@ -1081,10 +1084,10 @@ function SwipeRow({ children, onLeft, onRight, leftLabel, leftColor, leftIcon: L
     </div>
   );
 }
-function MouraBadge({ size = 15 }) {
+function WorkBadge({ size = 15 }) {
   return (
-    <span title="Moura (trabalho)" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: size, height: size }}>
-      <img src="/moura-logo.png" alt="Moura" width={size} height={size} style={{ width: size, height: size, objectFit: 'contain', display: 'block' }} />
+    <span title="Trabalho" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: size, height: size, borderRadius: 999, background: C.sky }}>
+      <Briefcase size={Math.max(8, Math.round(size * 0.6))} color="#1A1200" strokeWidth={2.5} />
     </span>
   );
 }
@@ -1107,7 +1110,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount, onDelete }) {
           {item.meta && item.meta.attachments && item.meta.attachments.length > 0 && <Paperclip size={11} style={{ color: C.text3 }} />}
           {item.notes && item.type !== 'message' && item.type !== 'note' && <FileText size={11} style={{ color: C.text3 }} />}
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
-          {item.meta && item.meta.moura && <MouraBadge />}
+          {item.meta && item.meta.moura && <WorkBadge />}
           {item.meta && item.meta.external === 'google' && !((item.meta && item.meta.moura)) && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
           {item.type === 'document' && item.meta && item.meta.tag && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 8px' }}>{item.meta.tag}</span>}
           {item.type === 'trip' && item.meta && item.meta.purpose && <span style={{ fontSize: 10, color: item.meta.purpose === 'trabalho' ? C.sky : C.green, border: `1px solid currentColor`, borderRadius: 999, padding: '1px 8px' }}>{item.meta.purpose === 'trabalho' ? (lang === 'pt' ? 'Trabalho' : 'Work') : (lang === 'pt' ? 'Lazer' : 'Leisure')}</span>}
@@ -1202,7 +1205,7 @@ function PhotoCropper({ src, onCancel, onSave }) {
     const out = 320; const k = out / BOX;
     const canvas = document.createElement('canvas'); canvas.width = out; canvas.height = out;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#1A1A25'; ctx.fillRect(0, 0, out, out);
+    ctx.fillStyle = '#131B2A'; ctx.fillRect(0, 0, out, out);
     ctx.save();
     ctx.beginPath(); ctx.arc(out / 2, out / 2, out / 2, 0, Math.PI * 2); ctx.closePath(); ctx.clip();
     // replica exatamente a preview: imagem centrada + deslocada por pos, dimensão dispW/dispH
@@ -1426,11 +1429,11 @@ function ItemForm({ draft, allowedTypes, lang, t, people = [], accounts = [], on
       )}
       {type === 'task' && (
         <div onClick={() => up({ domain: f.domain === 'work' ? 'personal' : 'work', meta: { ...f.meta, moura: f.domain !== 'work' } })} style={{ ...card, padding: '11px 13px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-          <div style={{ width: 40, height: 24, borderRadius: 999, background: f.domain === 'work' ? C.accent : C.surface2, position: 'relative', flexShrink: 0 }}>
+          <div style={{ width: 40, height: 24, borderRadius: 999, background: f.domain === 'work' ? C.sky : C.surface2, position: 'relative', flexShrink: 0 }}>
             <span style={{ position: 'absolute', top: 3, left: f.domain === 'work' ? 19 : 3, width: 18, height: 18, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
           </div>
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {f.domain === 'work' && <MouraBadge size={13} />}
+            {f.domain === 'work' && <WorkBadge size={13} />}
             <span style={{ fontSize: 13, color: C.text }}>{lang === 'pt' ? 'É uma tarefa de trabalho?' : 'Work task?'}</span>
           </div>
         </div>
@@ -1886,7 +1889,7 @@ function Chat({ items, lang, t, name, seed, heightStyle }) {
     <div style={{ display: 'flex', flexDirection: 'column', ...heightStyle }}>
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
         {msgs.length === 0 && <div style={{ ...card, padding: 18, marginTop: 8, display: 'flex', gap: 12, alignItems: 'flex-start' }}><Sparkles size={18} style={{ color: C.accent, marginTop: 2 }} /><div style={{ fontSize: 13.5, color: C.text2, lineHeight: 1.55 }}>{t('claudeIntro')}</div></div>}
-        {msgs.map((mm, i) => <div key={i} style={{ display: 'flex', justifyContent: mm.role === 'user' ? 'flex-end' : 'flex-start', margin: '8px 0' }}><div style={{ maxWidth: '82%', padding: '10px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', background: mm.role === 'user' ? C.accent : C.surface, color: mm.role === 'user' ? '#171200' : C.text, border: mm.role === 'user' ? 'none' : `1px solid ${C.borderSoft}` }}>{mm.content}</div></div>)}
+        {msgs.map((mm, i) => <div key={i} style={{ display: 'flex', justifyContent: mm.role === 'user' ? 'flex-end' : 'flex-start', margin: '8px 0' }}><div style={{ maxWidth: '82%', padding: '10px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', background: mm.role === 'user' ? C.accent : C.surface, color: mm.role === 'user' ? '#FFFFFF' : C.text, border: mm.role === 'user' ? 'none' : `1px solid ${C.borderSoft}` }}>{mm.content}</div></div>)}
         {loading && <div style={{ color: C.text3, fontSize: 13, padding: '8px 4px', display: 'flex', gap: 7, alignItems: 'center' }}><Loader2 size={14} className="spin" />{t('thinking')}</div>}
         <div ref={endRef} />
       </div>
@@ -2039,7 +2042,7 @@ function WeatherDetail({ wx: wxHome, lang, t, onClose }) {
           return (
             <button key={i} onClick={() => setDi(i)} style={{ flex: '0 0 auto', minWidth: 58, padding: '9px 6px', borderRadius: 12, border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accentSoft : 'transparent', cursor: 'pointer', textAlign: 'center' }}>
               <div style={{ fontSize: 10.5, color: on ? C.accent : C.text2, fontWeight: 600 }}>{wd}</div>
-              <Ic size={16} style={{ color: kind === 'sun' ? '#F5C263' : kind === 'rain' ? C.sky : C.text2, margin: '5px auto 4px' }} />
+              <Ic size={16} style={{ color: kind === 'sun' ? '#F59E0B' : kind === 'rain' ? C.sky : C.text2, margin: '5px auto 4px' }} />
               <div style={{ fontSize: 10 }}><span style={{ color: C.rose }}>{d.hi}°</span> <span style={{ color: C.sky }}>{d.lo}°</span></div>
             </button>
           );
@@ -2073,7 +2076,7 @@ function WeatherCard({ lang, t, wx, loading }) {
     );
   }
   const now = wmo(wx.code, lang);
-  const NowIcon = wxIcon(now.kind); const nowColor = now.kind === 'sun' ? '#F5C263' : now.kind === 'rain' ? C.sky : now.kind === 'cloud' ? C.text2 : '#F5C263';
+  const NowIcon = wxIcon(now.kind); const nowColor = now.kind === 'sun' ? '#F59E0B' : now.kind === 'rain' ? C.sky : now.kind === 'cloud' ? C.text2 : '#F59E0B';
   return (
     <div onClick={() => setOpen(true)} style={{ ...card, padding: 14, marginBottom: 10, cursor: 'pointer' }}>
       {open && <WeatherDetail wx={wx} lang={lang} t={t} onClose={() => setOpen(false)} />}
@@ -2097,7 +2100,7 @@ function WeatherCard({ lang, t, wx, loading }) {
           return (
             <div key={i} style={{ flex: 1, textAlign: 'center', background: C.bg2, borderRadius: 10, padding: '8px 2px' }}>
               <div style={{ fontSize: 10, color: C.text3 }}>{wd}</div>
-              <I size={16} style={{ color: wmo(d.code, lang).kind === 'sun' ? '#F5C263' : wmo(d.code, lang).kind === 'rain' ? C.sky : C.text2, margin: '5px auto' }} />
+              <I size={16} style={{ color: wmo(d.code, lang).kind === 'sun' ? '#F59E0B' : wmo(d.code, lang).kind === 'rain' ? C.sky : C.text2, margin: '5px auto' }} />
               <div style={{ fontSize: 10.5 }}><span style={{ color: C.rose }}>{d.hi}°</span><span style={{ color: C.sky }}> {d.lo}°</span></div>
             </div>
           );
@@ -2467,7 +2470,7 @@ function DietAssistant({ meals, lang, t, back }) {
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{lang === 'pt' ? 'Dieta' : 'Diet'}</button>
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
         {msgs.length === 0 && <div style={{ ...card, padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start' }}><Sparkles size={17} style={{ color: C.accent, marginTop: 2 }} /><div style={{ fontSize: 13.5, color: C.text2, lineHeight: 1.55 }}>{lang === 'pt' ? 'Pergunte sobre seus hábitos alimentares, peça sugestões de ajuste na dieta, ou um resumo da semana.' : 'Ask about your eating habits or get diet suggestions.'}</div></div>}
-        {msgs.map((m, i) => <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', margin: '8px 0' }}><div style={{ maxWidth: '82%', padding: '10px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', background: m.role === 'user' ? C.accent : C.surface, color: m.role === 'user' ? '#171200' : C.text, border: m.role === 'user' ? 'none' : `1px solid ${C.borderSoft}` }}>{m.content}</div></div>)}
+        {msgs.map((m, i) => <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', margin: '8px 0' }}><div style={{ maxWidth: '82%', padding: '10px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', background: m.role === 'user' ? C.accent : C.surface, color: m.role === 'user' ? '#FFFFFF' : C.text, border: m.role === 'user' ? 'none' : `1px solid ${C.borderSoft}` }}>{m.content}</div></div>)}
         {loading && <div style={{ color: C.text3, fontSize: 13, padding: '8px 4px', display: 'flex', gap: 7, alignItems: 'center' }}><Loader2 size={14} className="spin" />{t('thinking')}</div>}
         <div ref={endRef} />
       </div>
@@ -2934,7 +2937,7 @@ function MiniCalendar({ items, lang, t, toggleTask, onOpen }) {
 }
 function eventColors(i) {
   const work = i.domain === 'work' || (i.meta && i.meta.moura);
-  if (work) return { bg: _theme === 'light' ? '#FBEFD0' : 'rgba(245,194,99,0.16)', border: C.accent, text: _theme === 'light' ? '#5A4410' : C.accent };
+  if (work) return { bg: _theme === 'light' ? '#FEF3C7' : 'rgba(245,158,11,0.16)', border: C.sky, text: C.sky };
   const map = { personal: C.blue, kids: C.violet, health: C.green, home: C.teal };
   const col = map[i.domain] || C.text2;
   return { bg: col + (_theme === 'light' ? '20' : '1e'), border: col, text: col };
@@ -3014,7 +3017,7 @@ function DayPlanner({ dayItems, lang, t, onOpen }) {
               return (
                 <div key={i.id} onClick={() => onOpen(i)} style={{ position: 'absolute', top, height, left, width, background: col.bg, borderLeft: `3px solid ${col.border}`, borderRadius: 8, padding: '5px 8px', cursor: 'pointer', overflow: 'hidden', boxSizing: 'border-box', boxShadow: cols > 1 ? `0 0 0 1px ${C.surface}` : 'none' }}>
                   <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-                    {isWork && <MouraBadge size={12} />}
+                    {isWork && <WorkBadge size={12} />}
                     {badge && <span style={{ color: col.text, display: 'flex', flexShrink: 0 }}>{badge}</span>}
                     <span style={{ fontSize: 11.5, fontWeight: 600, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span>
                     {link && <Video size={11} style={{ color: col.text, flexShrink: 0 }} />}
@@ -3051,7 +3054,7 @@ function MiniPlanner({ items, lang, t, onOpen, today }) {
             <div style={{ width: 3, borderRadius: 999, background: col.border, height: barH, flexShrink: 0, marginTop: 2 }} />
             <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
               <div style={{ fontSize: 13.5, display: 'flex', gap: 6, alignItems: 'center' }}>
-                {isWork && <MouraBadge size={13} />}
+                {isWork && <WorkBadge size={13} />}
                 {i.meta && i.meta.milestone && <Star size={12} style={{ color: C.accent }} />}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span>
               </div>
@@ -3110,7 +3113,7 @@ function CalendarScreen({ items, lang, t, toggleTask, onOpen, onRefresh, onMount
           {cells.map((iso, idx) => {
             if (!iso) return <div key={idx} />;
             const list = onDay(iso); const n = list.length; const isToday = iso === today, isSel = iso === sel;
-            const pinColor = (i) => (i.domain === 'work' || (i.meta && i.meta.moura)) ? C.accent : (i.domain === 'personal' ? C.blue : i.domain === 'kids' ? C.violet : i.domain === 'health' ? C.green : C.text2);
+            const pinColor = (i) => (i.domain === 'work' || (i.meta && i.meta.moura)) ? C.sky : (i.domain === 'personal' ? C.blue : i.domain === 'kids' ? C.violet : i.domain === 'health' ? C.green : C.text2);
             return (
               <button key={idx} onClick={() => setSel(iso)} style={{ aspectRatio: '1', border: isSel ? `1px solid ${C.accent}` : '1px solid transparent', background: isSel ? C.accentSoft : isToday ? C.surface2 : 'transparent', borderRadius: 9, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3, padding: 2 }}>
                 <span style={{ fontSize: 13, color: isToday ? C.accent : C.text, fontWeight: isToday ? 700 : 400 }}>{Number(iso.slice(-2))}</span>
@@ -3519,11 +3522,11 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
                 onLeft={() => { haptic(15); act(m.id, 'read'); flash(lang === 'pt' ? 'Marcado como lido' : 'Marked read'); }}
                 leftLabel={lang === 'pt' ? 'Marcar como lida' : 'Mark read'} leftColor={C.blue} leftIcon={CheckCheck}>
                 <div onClick={() => setSel(m.id)} style={{ ...card, padding: '12px 14px', display: 'flex', gap: 12, alignItems: 'flex-start', cursor: 'pointer' }}>
-                  <div style={{ width: 34, height: 34, borderRadius: 10, background: (isMoura(m) ? C.accent : C.blue) + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: isMoura(m) ? C.accent : C.blue }}>{initials(m.sender)}</div>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: (isMoura(m) ? C.sky : C.blue) + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 13, fontWeight: 700, color: isMoura(m) ? C.sky : C.blue }}>{initials(m.sender)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'center' }}>
                       <span style={{ fontSize: 13.5, fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>{m.sender}</span>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>{isMoura(m) && <MouraBadge size={14} />}<span style={{ fontSize: 10.5, color: C.text3 }}>{m.date.slice(11, 16)}</span></div>
+                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>{isMoura(m) && <WorkBadge size={14} />}<span style={{ fontSize: 10.5, color: C.text3 }}>{m.date.slice(11, 16)}</span></div>
                     </div>
                     <div style={{ fontSize: 13, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isMoura(m) ? (m.subject || '').replace(/^\s*\(m\)\s*/i, '') : m.subject}</div>
                     <div style={{ fontSize: 11.5, color: C.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.snippet}</div>
@@ -3543,7 +3546,7 @@ function GmailScreen({ module, lang, t, back, state, setState, load }) {
               <>
                 {work.length > 0 && (
                   <>
-                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', margin: '4px 2px 8px' }}><MouraBadge size={15} /><span style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>{lang === 'pt' ? 'Corporativo' : 'Work'}</span><span style={{ fontSize: 11, color: C.text3 }}>· {work.length}</span></div>
+                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', margin: '4px 2px 8px' }}><WorkBadge size={15} /><span style={{ fontSize: 12, color: C.text2, textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 600 }}>{lang === 'pt' ? 'Corporativo' : 'Work'}</span><span style={{ fontSize: 11, color: C.text3 }}>· {work.length}</span></div>
                     {work.slice(0, LIM).map(renderMsg)}
                     {work.length > LIM && <button onClick={() => { setGfilter('work'); }} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12.5, padding: '6px 2px 12px', display: 'flex', alignItems: 'center', gap: 4 }}>{lang === 'pt' ? `Ver todos os ${work.length} de trabalho` : `See all ${work.length}`}<ChevronRight size={14} /></button>}
                   </>
@@ -3654,7 +3657,7 @@ function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
           <SectionTitle icon={Mail} label={lang === 'pt' ? 'E-mails' : 'Emails'} color={C.violet} />
           {workEmails.slice(0, tab === 'emails' ? 50 : 5).map((m) => (
             <div key={m.id} style={{ ...card, padding: '11px 13px', marginBottom: 7, display: 'flex', gap: 10, alignItems: 'center' }}>
-              <MouraBadge size={14} />
+              <WorkBadge size={14} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.sender}</div>
                 <div style={{ fontSize: 11.5, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{(m.subject || '').replace(/^\s*\(m\)\s*/i, '')}</div>
@@ -3671,7 +3674,7 @@ function WorkScreen({ module, items, people, lang, t, back, toggleTask, onOpen, 
   );
 }
 const PURCHASE_STAGES = {
-  paid: { pt: 'Pago', en: 'Paid', color: '#E6B450' },
+  paid: { pt: 'Pago', en: 'Paid', color: '#F59E0B' },
   shipped: { pt: 'Enviado', en: 'Shipped', color: '#6BA6E6' },
   delivered: { pt: 'Entregue', en: 'Delivered', color: '#5FBF8F' },
   other: { pt: 'Em análise', en: 'Other', color: '#8A8F98' },
@@ -4091,7 +4094,7 @@ function FinanceAssistant({ items, lang, t, back }) {
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>{insights.map((n, i) => <div key={i} style={{ ...card, padding: '10px 11px', flex: 1, minWidth: 0 }}><div style={{ fontSize: 15, fontWeight: 700, color: n.color, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{n.value}</div><div style={{ fontSize: 9.5, color: C.text3, marginTop: 2 }}>{n.label}</div></div>)}</div>
       <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 8 }}>
         {msgs.length === 0 && <div style={{ ...card, padding: 16, display: 'flex', gap: 12, alignItems: 'flex-start' }}><Sparkles size={17} style={{ color: C.accent, marginTop: 2 }} /><div style={{ fontSize: 13.5, color: C.text2, lineHeight: 1.55 }}>{t('finAssistantIntro')}</div></div>}
-        {msgs.map((m, i) => <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', margin: '8px 0' }}><div style={{ maxWidth: '82%', padding: '10px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', background: m.role === 'user' ? C.accent : C.surface, color: m.role === 'user' ? '#171200' : C.text, border: m.role === 'user' ? 'none' : `1px solid ${C.borderSoft}` }}>{m.content}</div></div>)}
+        {msgs.map((m, i) => <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', margin: '8px 0' }}><div style={{ maxWidth: '82%', padding: '10px 13px', borderRadius: 14, fontSize: 14, lineHeight: 1.5, whiteSpace: 'pre-wrap', background: m.role === 'user' ? C.accent : C.surface, color: m.role === 'user' ? '#FFFFFF' : C.text, border: m.role === 'user' ? 'none' : `1px solid ${C.borderSoft}` }}>{m.content}</div></div>)}
         {loading && <div style={{ color: C.text3, fontSize: 13, padding: '8px 4px', display: 'flex', gap: 7, alignItems: 'center' }}><Loader2 size={14} className="spin" />{t('thinking')}</div>}
         <div ref={endRef} />
       </div>
@@ -4206,7 +4209,7 @@ function StatementImport({ lang, t, existing, accounts, fixedAccountId, onClose,
                 return (
                 <div key={i} onClick={() => setTxs((p) => p.map((x, j) => j === i ? { ...x, _keep: !x._keep } : x))} style={{ ...card, padding: '10px 12px', marginBottom: 6, display: 'flex', flexDirection: 'column', gap: 4, cursor: 'pointer', opacity: tx._keep ? 1 : 0.4 }}>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${tx._keep ? C.accent : C.border}`, background: tx._keep ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{tx._keep && <Check size={13} style={{ color: '#000' }} />}</div>
+                    <div style={{ width: 20, height: 20, borderRadius: 6, border: `2px solid ${tx._keep ? C.accent : C.border}`, background: tx._keep ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{tx._keep && <Check size={13} style={{ color: '#FFFFFF' }} />}</div>
                     <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.description}</div><div style={{ fontSize: 11, color: C.text3 }}>{fmtDate(tx.date, lang)}</div></div>
                     <span style={{ fontSize: 13.5, fontWeight: 700, color: tx.type === 'income' ? C.green : C.rose }}>{tx.type === 'income' ? '+' : '−'}{fmtMoney(tx.amount, lang)}</span>
                   </div>
@@ -5568,7 +5571,7 @@ function DeviceCard({ device, onChange }) {
           <div><div style={{ fontSize: 13.5, fontWeight: 600 }}>{device.name}</div><div style={{ fontSize: 10.5, color: C.text3 }}>{on ? (device.type === 'ac' ? device.temp + '°C' : device.type === 'fan' ? 'Vel ' + device.fan : 'On') : 'Off'}</div></div>
         </div>
         <button onClick={() => onChange({ ...device, on: !on })} style={{ width: 42, height: 24, borderRadius: 999, background: on ? C.accent : C.surface2, border: 'none', cursor: 'pointer', position: 'relative', transition: 'background .15s' }}>
-          <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: 999, background: on ? '#171200' : C.text3, transition: 'left .15s' }} />
+          <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: 999, background: on ? '#FFFFFF' : C.text3, transition: 'left .15s' }} />
         </button>
       </div>
       {on && device.type === 'ac' && (
@@ -6042,12 +6045,12 @@ function FlightMap({ flights, lang, t }) {
         const latlngs = keys.map((k) => [pts[k][1], pts[k][0]]);
         // marcadores (pins) das cidades/aeroportos
         keys.forEach((k) => {
-          const m = L.circleMarker([pts[k][1], pts[k][0]], { radius: 5, color: '#F5C263', weight: 2, fillColor: '#F5C263', fillOpacity: 1 }).addTo(map);
+          const m = L.circleMarker([pts[k][1], pts[k][0]], { radius: 5, color: '#F59E0B', weight: 2, fillColor: '#F59E0B', fillOpacity: 1 }).addTo(map);
           m.bindTooltip(k, { permanent: true, direction: 'top', className: 'lcc-tip', offset: [0, -6] });
         });
         // linhas das rotas
         routes.forEach(([a, b]) => {
-          L.polyline([[pts[a][1], pts[a][0]], [pts[b][1], pts[b][0]]], { color: '#F5C263', weight: 2, opacity: 0.85 }).addTo(map);
+          L.polyline([[pts[a][1], pts[a][0]], [pts[b][1], pts[b][0]]], { color: '#F59E0B', weight: 2, opacity: 0.85 }).addTo(map);
         });
         // enquadrar
         const bounds = L.latLngBounds(latlngs);
@@ -6681,7 +6684,7 @@ function AppLockSetting({ settings, setSettings, lang }) {
         <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{lang === 'pt' ? 'Pede autenticação ao abrir o app' : 'Requires authentication on open'}</div>
       </div>
       <button onClick={() => setSettings((s) => ({ ...s, appLock: !on }))} style={{ width: 44, height: 26, borderRadius: 999, background: on ? C.accent : C.surface2, border: `1px solid ${on ? C.accent : C.border}`, position: 'relative', cursor: 'pointer', flexShrink: 0 }}>
-        <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: 999, background: on ? '#171200' : C.text3, transition: 'left .15s' }} />
+        <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: 999, background: on ? '#FFFFFF' : C.text3, transition: 'left .15s' }} />
       </button>
     </div>
   );
@@ -6840,10 +6843,10 @@ function AppLockScreen({ lang, onUnlock }) {
   };
   useEffect(() => { attempt(); }, []);
   return (
-    <div style={{ background: '#0B0B0F', color: '#ECECEF', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, fontFamily: 'system-ui' }}>
-      <div style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: '#F5C263', fontFamily: "'Outfit', sans-serif" }}>BhL</div>
-      <Fingerprint size={32} style={{ color: failed ? '#F0787C' : '#63636F' }} />
-      <button onClick={attempt} disabled={busy} style={{ background: 'none', border: '1px solid #2A2A33', color: '#ECECEF', borderRadius: 999, padding: '11px 22px', fontSize: 13.5, cursor: 'pointer' }}>
+    <div style={{ background: '#0A0E17', color: '#FFFFFF', height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+      <img src="/logo.svg" width={64} height={64} alt="" style={{ borderRadius: 14 }} />
+      <Fingerprint size={32} style={{ color: failed ? '#EF4444' : '#94A3B8' }} />
+      <button onClick={attempt} disabled={busy} style={{ background: 'none', border: '1px solid rgba(255,255,255,0.08)', color: '#FFFFFF', borderRadius: 999, padding: '11px 22px', fontSize: 13.5, cursor: 'pointer' }}>
         {busy ? (lang === 'pt' ? 'Verificando…' : 'Verifying…') : failed ? (lang === 'pt' ? 'Tentar de novo' : 'Try again') : (lang === 'pt' ? 'Desbloquear' : 'Unlock')}
       </button>
     </div>
@@ -6895,7 +6898,7 @@ function App() {
   useEffect(() => {
     if (!isNative()) return;
     StatusBar.setStyle({ style: StatusBarStyle.Dark }).catch(() => {}); // texto claro, pro fundo escuro do app
-    StatusBar.setBackgroundColor({ color: '#0B0B0F' }).catch(() => {}); // Android; iOS ignora (barra é sobreposta)
+    StatusBar.setBackgroundColor({ color: '#0A0E17' }).catch(() => {}); // Android; iOS ignora (barra é sobreposta)
   }, []);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
@@ -7111,8 +7114,8 @@ function App() {
   );
 
   if (!ready) return <div style={{ background: C.bg, color: C.text, height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
-    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: C.accent, fontFamily: "'Outfit', sans-serif" }}>BhL</div>
-    <div style={{ fontSize: 12, color: C.text3, letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: "'Outfit', sans-serif" }}>Life in Control</div>
+    <img className="lcc-pulse" src="/logo.svg" width={56} height={56} alt="" style={{ borderRadius: 12 }} />
+    <div style={{ fontSize: 12, color: C.text3, letterSpacing: '.08em', textTransform: 'uppercase' }}>Life in Control</div>
   </div>;
   if (appLockOn && locked) return <AppLockScreen lang={lang} onUnlock={unlockApp} />;
 
@@ -7191,7 +7194,7 @@ function App() {
             </button>;
           })}
           <div style={{ flex: 1 }} />
-          <button onClick={() => setShowCapture(true)} style={{ background: C.accent, color: '#171200', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600, width: '100%', marginBottom: 8 }}><Plus size={18} />{lang === 'pt' ? 'Capturar' : 'Capture'}</button>
+          <button onClick={() => setShowCapture(true)} style={{ background: C.accent, color: '#FFFFFF', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600, width: '100%', marginBottom: 8 }}><Plus size={18} />{lang === 'pt' ? 'Capturar' : 'Capture'}</button>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => setSettings((s) => ({ ...s, lang: s.lang === 'pt' ? 'en' : 'pt' }))} style={{ ...card, flex: 1, padding: '8px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><Globe size={13} />{lang.toUpperCase()}</button>
             <button onClick={() => setShowSettings(true)} style={{ ...card, flex: 1, padding: '8px', color: C.text2, cursor: 'pointer', display: 'flex', justifyContent: 'center' }}><Cog size={15} /></button>
@@ -7204,7 +7207,7 @@ function App() {
         {(refreshing || pull > 10) && <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12 }}><RefreshCw size={15} className={refreshing ? 'spin' : ''} style={{ transform: refreshing ? 'none' : `rotate(${pull * 4}deg)` }} />{refreshing ? t('refreshing') : (pull > 55 ? t('releaseRefresh') : t('pullRefresh'))}</div>}
       </div>
       )}
-      <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:${_theme === 'light' ? '#FFFFFF' : '#16161E'};color:${_theme === 'light' ? '#1A1A22' : '#ECECEF'}}`}</style>
+      <style>{`.spin{animation:sp 1s linear infinite}@keyframes sp{to{transform:rotate(360deg)}}@keyframes pop{0%{transform:scale(.5)}55%{transform:scale(1.18)}100%{transform:scale(1)}}@keyframes slideup{from{transform:translate(-50%,14px);opacity:0}to{transform:translate(-50%,0);opacity:1}} *::-webkit-scrollbar{width:0} input,textarea,select{font-family:inherit} select option{background:${_theme === 'light' ? '#FFFFFF' : '#131B2A'};color:${_theme === 'light' ? '#0F172A' : '#FFFFFF'}}`}</style>
       {!wide && (
       <div style={{ padding: '16px 18px 8px', paddingTop: 'calc(env(safe-area-inset-top, 0px) + 14px)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 15, fontWeight: 700, letterSpacing: '-.01em', display: 'flex', alignItems: 'center', gap: 7, padding: 0 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: C.accent }} />Life in Control</button>
@@ -7237,7 +7240,7 @@ function App() {
       {!wide && active.screen !== 'claude' && (
         <div style={{ position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)', left: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
           <div style={{ maxWidth: 480, margin: '0 auto', position: 'relative', height: 0 }}>
-            <button onClick={() => { haptic(12); setShowCapture(true); }} style={{ position: 'absolute', right: 18, bottom: 0, pointerEvents: 'auto', background: C.accent, color: '#171200', border: 'none', width: 52, height: 52, borderRadius: 16, cursor: 'pointer', boxShadow: '0 8px 24px rgba(230,180,80,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} /></button>
+            <button onClick={() => { haptic(12); setShowCapture(true); }} style={{ position: 'absolute', right: 18, bottom: 0, pointerEvents: 'auto', background: C.accent, color: '#FFFFFF', border: 'none', width: 52, height: 52, borderRadius: 16, cursor: 'pointer', boxShadow: '0 8px 24px rgba(37,99,235,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} /></button>
           </div>
         </div>
       )}
@@ -7263,7 +7266,7 @@ function App() {
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
       {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', width: 'max-content', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 16, fontSize: 13, lineHeight: 1.4, textAlign: 'center', zIndex: 60, whiteSpace: 'normal', wordBreak: 'break-word' }}>{toast}</div>}
-      {!isOnline && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: '#B8860B', color: '#171200', textAlign: 'center', fontSize: 11.5, fontWeight: 600, padding: '6px 10px', zIndex: 90 }}>{lang === 'pt' ? 'Offline — vendo dados salvos no aparelho; alterações sincronizam ao reconectar' : 'Offline — showing data saved on this device; changes sync once back online'}</div>}
+      {!isOnline && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: C.sky, color: '#1A1200', textAlign: 'center', fontSize: 11.5, fontWeight: 600, padding: '6px 10px', zIndex: 90 }}>{lang === 'pt' ? 'Offline — vendo dados salvos no aparelho; alterações sincronizam ao reconectar' : 'Offline — showing data saved on this device; changes sync once back online'}</div>}
     </div>
   );
 }
@@ -7282,9 +7285,9 @@ export default function Page() {
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { kvCache.clear(); setSession(s); });
     return () => sub.subscription.unsubscribe();
   }, []);
-  if (!booted) return <div style={{ background: '#0B0B0F', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18, fontFamily: 'system-ui' }}>
-    <div className="lcc-pulse" style={{ fontSize: 44, fontWeight: 800, letterSpacing: '-2px', color: '#F5C263', fontFamily: "'Outfit', sans-serif" }}>BhL</div>
-    <div style={{ fontSize: 12, color: '#63636F', letterSpacing: '.08em', textTransform: 'uppercase', fontFamily: "'Outfit', sans-serif" }}>Life in Control</div>
+  if (!booted) return <div style={{ background: '#0A0E17', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
+    <img className="lcc-pulse" src="/logo.svg" width={56} height={56} alt="" style={{ borderRadius: 12 }} />
+    <div style={{ fontSize: 12, color: '#94A3B8', letterSpacing: '.08em', textTransform: 'uppercase' }}>Life in Control</div>
   </div>;
   if (!session) return <Login />;
   return <App />;

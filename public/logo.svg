@@ -1,0 +1,58 @@
+<svg width="240" height="240" viewBox="0 0 240 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Doppler Shift Gradient -->
+    <linearGradient id="dopplerDisk" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="35%" stop-color="#2563EB" />
+      <stop offset="70%" stop-color="#1D4ED8" />
+      <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.8" />
+    </linearGradient>
+
+    <linearGradient id="photonRing" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+
+    <!-- Gravitational Distortion Glow -->
+    <radialGradient id="gravitationalGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2563EB" stop-opacity="0.35" />
+      <stop offset="60%" stop-color="#0A0E17" stop-opacity="0.8" />
+      <stop offset="100%" stop-color="#0A0E17" stop-opacity="1" />
+    </radialGradient>
+  </defs>
+
+  <rect width="240" height="240" rx="52" fill="#0A0E17"/>
+
+  <!-- Gravitational Aura -->
+  <circle cx="120" cy="120" r="105" fill="url(#gravitationalGlow)" />
+
+  <!-- Gravitational Lensing (Upper Folded Arc) -->
+  <path d="M 32,120 C 32,50 208,50 208,120"
+        stroke="url(#dopplerDisk)"
+        stroke-width="8"
+        stroke-linecap="round"
+        opacity="0.85"
+        fill="none" />
+
+  <!-- Equatorial Accretion Disk -->
+  <ellipse cx="120" cy="120" rx="92" ry="22"
+           stroke="url(#dopplerDisk)"
+           stroke-width="12"
+           fill="none" />
+
+  <!-- Black Hole Shadow (Event Horizon) -->
+  <circle cx="120" cy="120" r="48" fill="#04060A" />
+
+  <!-- Photon Ring -->
+  <circle cx="120" cy="120" r="49.5" stroke="url(#photonRing)" stroke-width="2" opacity="0.9" fill="none" />
+
+  <!-- Gravitational Lensing (Lower Front Arc) -->
+  <path d="M 44,128 C 65,160 175,160 196,128"
+        stroke="url(#dopplerDisk)"
+        stroke-width="7"
+        stroke-linecap="round"
+        fill="none" />
+
+  <!-- Central Singularity -->
+  <circle cx="120" cy="120" r="2.5" fill="#FFFFFF" opacity="0.9" />
+</svg>
