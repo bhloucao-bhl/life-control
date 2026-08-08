@@ -6557,6 +6557,37 @@ function TuyaIrDiag({ t, lang }) {
   );
 }
 
+function OuraWebhookSetup({ lang }) {
+  const [busy, setBusy] = useState(false); const [result, setResult] = useState(null);
+  const run = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const r = await authFetch('/api/oura/subscribe', { method: 'POST' });
+      const j = await r.json();
+      setResult(r.ok ? j : { error: j.error || 'Erro' });
+    } catch (e) { setResult({ error: String(e) }); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ ...card, padding: '12px 14px', marginBottom: 8 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 3 }}>{lang === 'pt' ? 'Sync automático do Oura' : 'Automatic Oura sync'}</div>
+      <div style={{ fontSize: 11, color: C.text3, marginBottom: 8, lineHeight: 1.4 }}>
+        {lang === 'pt' ? 'Assina os webhooks da Oura: assim que o anel sincronizar com o app (mesmo em segundo plano), os dados chegam aqui na hora, sem esperar o cache de 15 min.' : 'Subscribes to Oura webhooks so data lands here as soon as the ring syncs, without waiting for the 15-min cache.'}
+      </div>
+      <Btn kind="soft" onClick={run} disabled={busy} style={{ padding: '6px 12px', fontSize: 12 }}>{busy ? '…' : (lang === 'pt' ? 'Ativar' : 'Enable')}</Btn>
+      {result && (
+        <div style={{ fontSize: 11, marginTop: 8, color: result.error ? C.rose : C.text2, lineHeight: 1.5 }}>
+          {result.error ? result.error : (lang === 'pt'
+            ? `Criadas: ${result.created.length} · já existiam: ${result.skipped.length}${result.failed.length ? ` · falharam: ${result.failed.length}` : ''}`
+            : `Created: ${result.created.length} · already existed: ${result.skipped.length}${result.failed.length ? ` · failed: ${result.failed.length}` : ''}`)}
+          {!!(result.failed && result.failed.length) && (
+            <div style={{ marginTop: 4, color: C.rose }}>{result.failed.map((f) => `${f.key}: ${f.error}`).join(' · ')}</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 function Connections({ lang, t }) {
   const [st, setSt] = useState(null); const [busy, setBusy] = useState('');
   const load = () => authFetch('/api/connect').then((r) => r.json()).then(setSt).catch(() => setSt({}));
@@ -6594,12 +6625,15 @@ function Connections({ lang, t }) {
   };
   if (!st) return <div style={{ ...card, padding: 14, marginBottom: 10, color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center' }}><Loader2 size={13} className="spin" />…</div>;
   return (
-    <ResponsiveGrid min={280}>
-      <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
-      <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
-      <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
-      <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
-    </ResponsiveGrid>
+    <>
+      <ResponsiveGrid min={280}>
+        <Row id="oura" label="Oura Ring" icon={Activity} color={C.green} />
+        <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
+        <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
+        <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
+      </ResponsiveGrid>
+      {st.oura && st.oura.connected && <OuraWebhookSetup lang={lang} />}
+    </>
   );
 }
 
