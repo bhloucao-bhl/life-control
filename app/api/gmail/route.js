@@ -61,9 +61,9 @@ export async function GET(req) {
   } catch (e) {}
 
   try {
-    // Busca 1: não lidos recentes (pessoais). Busca 2: label corporativa "(M) Moura Backup" (lidos/arquivados pela regra do Gmail).
+    // Busca 1: não lidos recentes (pessoais). Busca 2: label corporativa "(M) Moura Backup" (lidos/arquivados pela regra do Gmail), sem limite de tempo — mantém os últimos 25 independente da hora.
     const q = encodeURIComponent('is:unread newer_than:1d');
-    const qWork = encodeURIComponent('label:"(M) Moura Backup" newer_than:2d');
+    const qWork = encodeURIComponent('label:"(M) Moura Backup"');
     const [r, rWork] = await Promise.all([
       fetch(`${G}/messages?q=${q}&maxResults=25`, { headers: h, cache: 'no-store' }),
       fetch(`${G}/messages?q=${qWork}&maxResults=25`, { headers: h, cache: 'no-store' }),
