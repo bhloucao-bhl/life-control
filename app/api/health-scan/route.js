@@ -131,6 +131,7 @@ IGNORE: propaganda de plano de saúde, newsletter de bem-estar genérica, promo�
 Para cada item relevante, gere um objeto:
 {"type":"appointment"|"document"|"task"|"note",
  "title":"texto curto em português",
+ "notes":"detalhes extras relevantes que não cabem no título, ou null",
  "date":"YYYY-MM-DD"|null,
  "time":"HH:MM"|null,
  "meta":{"doctor":"","specialty":"","clinic":"","isExam":true|false,"location":""},
@@ -144,6 +145,7 @@ Regras:
 - "document" = exame (pedido ou resultado), receita, laudo — marque meta.isExam=true quando for exame.
 - "task" = algo que a pessoa precisa fazer (ex: agendar exame, renovar receita) sem data marcada ainda.
 - "note" = informação de saúde relevante que não se encaixa nos tipos acima.
+- "notes": mantenha o título curto e coloque em notes qualquer detalhe extra do e-mail/evento que ajude a pessoa — instruções de preparo, lista de exames pedidos, endereço, telefone, orientações do médico. Se não houver nada além do título, notes fica null.
 - NÃO invente dados ausentes — use null.
 - Não duplique o mesmo compromisso vindo do e-mail E da agenda — se forem claramente o mesmo evento, gere só um item (prefira a fonte com mais detalhe).
 - Se nada for relevante, devolva [].`;
@@ -172,6 +174,7 @@ Regras:
       sourceId: x.sourceId || null,
       type: ['appointment', 'document', 'task', 'note'].includes(x.type) ? x.type : 'note',
       title: String(x.title || '').slice(0, 140),
+      notes: x.notes ? String(x.notes).slice(0, 2000) : '',
       date: x.date || src.date || null,
       time: x.time || src.time || null,
       meta: x.meta || {},

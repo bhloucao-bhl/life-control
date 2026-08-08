@@ -124,6 +124,7 @@ Para cada e-mail, devolva um item:
 {"sourceId":"id do e-mail",
  "kind":"task"|"event"|"ambiguous",
  "title":"texto curto e claro em português, sem o marcador (Z)",
+ "notes":"detalhes extras relevantes que não cabem no título, ou null",
  "date":"YYYY-MM-DD"|null,
  "time":"HH:MM"|null,
  "confidence":0..1,
@@ -133,7 +134,8 @@ Regras:
 - "task": um pedido/demanda da casa para RESOLVER (comprar algo, consertar algo, contratar alguém, etc.), sem data/hora específica marcada. date e time ficam null mesmo que haja um prazo vago tipo "essa semana".
 - "event": tem uma data e/ou horário específico em que algo deve acontecer (ex: "ir ao mercado segunda dia 05/09", "eletricista vem quinta às 14h"). Resolva a data para YYYY-MM-DD usando a data de recebimento do e-mail (campo receivedDate) como referência: se só o dia da semana e o dia/mês forem citados, calcule o ano certo (o mais próximo no futuro a partir de receivedDate). Se não houver horário, time fica null.
 - "ambiguous": você não tem certeza se é tarefa ou compromisso, ou falta informação pra decidir com confiança. Use confidence < 0.6 nesse caso.
-- Nunca invente data/hora que não estejam escritas no assunto ou no corpo do e-mail.
+- "notes": mantenha o título curto e coloque em notes qualquer detalhe adicional do assunto ou corpo do e-mail que ajude a executar a tarefa — por exemplo uma lista de itens de compra, quantidades, marcas específicas, endereço, telefone, instruções. Uma lista de itens vira notes com um item por linha. Se não houver nada além do título, notes fica null.
+- Nunca invente data/hora nem itens que não estejam escritos no assunto ou no corpo do e-mail.
 - Sempre devolva exatamente um item por e-mail da lista (nunca omita nenhum sourceId).`;
 
     const payload = mails.map((m) => ({ sourceId: m.id, subject: m.subject, zText: m.zText, receivedDate: m.receivedDate, body: m.body }));
@@ -162,6 +164,7 @@ Regras:
         classification: {
           kind: ['task', 'event', 'ambiguous'].includes(x.kind) ? x.kind : 'ambiguous',
           title: String(x.title || src.zText || '').slice(0, 140),
+          notes: x.notes ? String(x.notes).slice(0, 2000) : '',
           date: x.date || null,
           time: x.time || null,
           confidence: typeof x.confidence === 'number' ? x.confidence : 0.4,
