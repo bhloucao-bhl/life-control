@@ -1,13 +1,30 @@
 import crypto from 'crypto';
-import { userFromRequest } from '../../../lib/oauth';
+import { userFromRequest, admin } from '../../../lib/oauth';
 
 export const runtime = 'nodejs';
 
 /**
  * Integração Tuya / SmartLife.
- * Usa Client ID + Secret + UID do projeto na nuvem Tuya (iot.tuya.com).
- * A assinatura segue o padrão HMAC-SHA256 exigido pela Tuya Cloud.
+ * Usa Client ID + Secret do projeto na nuvem Tuya (iot.tuya.com) — essas
+ * credenciais continuam compartilhadas, é só a assinatura HMAC-SHA256 do
+ * projeto. O UID (de quem são os dispositivos) agora é por usuário: cada
+ * testador tem sua própria conta Smart Life/Tuya vinculada ao projeto pelo
+ * painel da Tuya (Devices > Link Tuya App Account > Tuya App Account
+ * Authorization, com QR code), e o UID resultante fica salvo em
+ * connections.tuya_uid. Sem UID salvo pro usuário = "não conectado" (sem
+ * fallback pros dispositivos de outra pessoa).
  */
+
+/** UID da Tuya vinculado a este usuário, ou null se ele ainda não conectou. */
+async function resolveUid(userId) {
+  const { data } = await admin()
+    .from('connections')
+    .select('tuya_uid')
+    .eq('user_id', userId)
+    .eq('provider', 'tuya')
+    .maybeSingle();
+  return (data && data.tuya_uid) || null;
+}
 
 const REGION_HOST = {
   us: 'https://openapi.tuyaus.com',
@@ -78,11 +95,10 @@ async function tuya(method, path, body) {
 
 
 /** Descobre controles IR: hubs -> remotes -> keys */
-async function irDiscover() {
+async function irDiscover(uid) {
   const out = { hubs: [], remotes: [], error: null };
   try {
     // aparelhos do usuario; hubs IR tem category 'wnykq' (IR) ou sao infrared parents
-    const uid = process.env.TUYA_UID;
     const dj = await tuya('GET', `/v1.0/users/${uid}/devices`);
     const all = (dj.result || []);
     // hub IR: categoria wnykq (universal remote) ou infrared_id presente
@@ -152,10 +168,12 @@ export async function GET(req) {
   if (!user) return Response.json({ error: 'Sem sessão.' }, { status: 401 });
   if (!process.env.TUYA_CLIENT_ID) return Response.json({ configured: false, devices: [] });
 
-  const uid = process.env.TUYA_UID;
+  const uid = await resolveUid(user.id);
+  if (!uid) return Response.json({ configured: true, connected: false, devices: [], notLinked: true });
+
   const sp = new URL(req.url).searchParams;
   if (sp.get('ir')) {
-    const ir = await irDiscover();
+    const ir = await irDiscover(uid);
     return Response.json({ configured: true, ...ir });
   }
   if (sp.get('status')) {
