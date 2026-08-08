@@ -9,7 +9,8 @@
     "allowNavigation": [
       "cloud.ouraring.com",
       "ticktick.com",
-      "auth.mercadolivre.com.br"
+      "auth.mercadolivre.com.br",
+      "accounts.google.com"
     ]
   },
   "ios": {
