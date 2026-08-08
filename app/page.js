@@ -210,6 +210,7 @@ function houseItemFromClassification(x) {
     type: isEvent ? 'event' : 'task',
     domain: isEvent ? 'personal' : 'home',
     title: c.title || x.zText,
+    notes: c.notes || '',
     date: isEvent ? (c.date || null) : null,
     time: isEvent ? (c.time || null) : null,
     meta: { fromEmail: true, houseEmail: true, gmailId: x.id, gmailLink: x.link, why: c.why || '' },
@@ -299,6 +300,7 @@ function workItemFromClassification(x) {
     type: isEvent ? 'event' : 'task',
     domain: 'personal', // provisório — sempre precisa de decisão (trabalho ou pessoal)
     title: c.title || x.trabText,
+    notes: c.notes || '',
     date: isEvent ? (c.date || null) : null,
     time: isEvent ? (c.time || null) : null,
     meta: { fromEmail: true, trabEmail: true, needsDomainDecision: true, gmailId: x.id, gmailLink: x.link, why: c.why || '' },
@@ -1102,6 +1104,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount, onDelete }) {
           {item.amount != null && <span style={{ fontSize: 11.5, color: C.green }}>{hideAmount ? '••••' : fmtMoney(item.amount, lang)}</span>}
           {item.person && <span style={{ fontSize: 11.5, color: C.text3 }}>· {item.person}</span>}
           {item.meta && item.meta.attachments && item.meta.attachments.length > 0 && <Paperclip size={11} style={{ color: C.text3 }} />}
+          {item.notes && item.type !== 'message' && item.type !== 'note' && <FileText size={11} style={{ color: C.text3 }} />}
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
           {item.meta && item.meta.moura && <MouraBadge />}
           {item.meta && item.meta.external === 'google' && !((item.meta && item.meta.moura)) && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
@@ -4338,7 +4341,7 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   };
   useEffect(() => { if (setPendingCount) setPendingCount('health', (hscan.list || []).length); }, [hscan.list]);
   const acceptHsug = (sg) => {
-    addItem({ type: sg.type, domain: 'health', title: sg.title, date: sg.date, time: sg.time, meta: { ...(sg.meta || {}), fromEmail: sg.sourceType === 'email', fromCalendar: sg.sourceType === 'calendar', sourceLink: sg.source && sg.source.link } });
+    addItem({ type: sg.type, domain: 'health', title: sg.title, notes: sg.notes || '', date: sg.date, time: sg.time, meta: { ...(sg.meta || {}), fromEmail: sg.sourceType === 'email', fromCalendar: sg.sourceType === 'calendar', sourceLink: sg.source && sg.source.link } });
     setHscan((p) => ({ ...p, list: (p.list || []).filter((x) => x.key !== sg.key) }));
     flash(t('savedOne'));
   };
@@ -4412,6 +4415,7 @@ Data de hoje: ${today}`;
                   {sg.meta && sg.meta.doctor ? ` · ${sg.meta.doctor}` : ''}{sg.meta && sg.meta.clinic ? ` · ${sg.meta.clinic}` : ''}
                 </div>
                 <div style={{ fontSize: 10, color: C.text3, marginTop: 3 }}>{sg.sourceType === 'calendar' ? (lang === 'pt' ? '📅 da agenda' : '📅 from calendar') : '✉ ' + (sg.source && sg.source.subject || '')}</div>
+                {sg.notes && <div style={{ fontSize: 12, color: C.text2, marginTop: 4, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{sg.notes}</div>}
                 {sg.why && <div style={{ fontSize: 11, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{sg.why}</div>}
               </div>
             </div>
@@ -5573,6 +5577,7 @@ function HouseEmailReviewCard({ x, lang, t, people = [], onTask, onEvent, onIgno
         <Mail size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 14, fontWeight: 600 }}>{c.title || x.zText}</div>
+          {c.notes && <div style={{ fontSize: 12, color: C.text2, marginTop: 4, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{c.notes}</div>}
           {c.why && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{c.why}</div>}
           <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>✉ {x.subject}</div>
         </div>

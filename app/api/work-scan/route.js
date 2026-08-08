@@ -125,6 +125,7 @@ Para cada e-mail, devolva um item:
 {"sourceId":"id do e-mail",
  "kind":"task"|"event",
  "title":"texto curto e claro em português, sem o marcador (Trab)",
+ "notes":"detalhes extras relevantes que não cabem no título, ou null",
  "date":"YYYY-MM-DD"|null,
  "time":"HH:MM"|null,
  "confidence":0..1,
@@ -133,9 +134,10 @@ Para cada e-mail, devolva um item:
 Regras:
 - "task": um lembrete de algo a FAZER, sem data/hora específica marcada. date e time ficam null mesmo que haja um prazo vago tipo "essa semana".
 - "event": tem uma data e/ou horário específico em que algo deve acontecer (ex: "reunião quinta às 15h", "call dia 10/09"). Resolva a data pra YYYY-MM-DD usando a data de recebimento do e-mail (campo receivedDate) como referência: se só o dia da semana e o dia/mês forem citados, calcule o ano certo (o mais próximo no futuro a partir de receivedDate). Se não houver horário, time fica null.
+- "notes": mantenha o título curto e coloque em notes qualquer detalhe adicional do assunto ou corpo do e-mail que ajude a executar a tarefa — por exemplo uma lista de itens, pauta, link, endereço, telefone, instruções. Uma lista vira notes com um item por linha. Se não houver nada além do título, notes fica null.
 - Se estiver em dúvida entre os dois, use "task" (mais seguro — o usuário revisa e corrige se precisar).
 - NÃO tente decidir se é trabalho ou pessoal — isso não é sua tarefa aqui.
-- Nunca invente data/hora que não estejam escritas no assunto ou no corpo do e-mail.
+- Nunca invente data/hora nem itens que não estejam escritos no assunto ou no corpo do e-mail.
 - Sempre devolva exatamente um item por e-mail da lista (nunca omita nenhum sourceId).`;
 
     const payload = mails.map((m) => ({ sourceId: m.id, subject: m.subject, trabText: m.trabText, receivedDate: m.receivedDate, body: m.body }));
@@ -164,6 +166,7 @@ Regras:
         classification: {
           kind: x.kind === 'event' ? 'event' : 'task',
           title: String(x.title || src.trabText || '').slice(0, 140),
+          notes: x.notes ? String(x.notes).slice(0, 2000) : '',
           date: x.date || null,
           time: x.time || null,
           confidence: typeof x.confidence === 'number' ? x.confidence : 0.6,
