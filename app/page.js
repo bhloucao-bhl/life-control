@@ -549,6 +549,7 @@ const S = {
   power: L('Liga/Desliga', 'Power'), volume: L('Volume', 'Volume'), input: L('Entrada', 'Input'), changeInput: L('Trocar', 'Switch'), back: L('Voltar', 'Back'),
   noKeys: L('Não encontrei as teclas deste controle. Me diga a marca e eu configuro.', 'No keys found for this remote.'),
   irNote: L('Comandos por infravermelho. Se algum botão não responder, me diga qual — ajusto o código dele.', 'IR commands. If a button does not respond, tell me which one.'),
+  lastKnown: L('Último estado salvo', 'Last saved state'),
   screenError: L('Algo deu errado nesta tela', 'Something went wrong on this screen'),
   screenErrorHint: L('O resto do app continua funcionando. Tente voltar e abrir de novo.', 'The rest of the app still works. Go back and reopen.'),
   composeNew: L('Escrever e-mail', 'Compose'), toField: L('Para', 'To'), subjectField: L('Assunto', 'Subject'),
@@ -4850,9 +4851,10 @@ function tuyaLabel(device, prefs) {
   return (p && p.alias) ? p.alias : device.name;
 }
 
-function LgCard({ device, host, t, lang, flash, label }) {
+function LgCard({ device, host, t, lang, flash, label, lastState, onStateChange }) {
   const [remote, setRemote] = useState(false); const [wash, setWash] = useState(false);
-  const [quick, setQuick] = useState(null); // {on, temp, mode}
+  // sem leitura ainda (ou aparelho offline/fetch falhou): parte do último estado salvo, marcado como "stale"
+  const [quick, setQuick] = useState(() => lastState ? { on: lastState.on, temp: lastState.temp, cur: lastState.cur, stale: true } : null);
   const [busy, setBusy] = useState(false);
   const isAc = device.type === 'DEVICE_AIR_CONDITIONER';
   const isWasher = device.type === 'DEVICE_WASHER' || device.type === 'DEVICE_DRYER';
@@ -4861,7 +4863,10 @@ function LgCard({ device, host, t, lang, flash, label }) {
     if (!isAc || !device.online) return;
     authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: device.id, host, op: 'status' }) })
       .then((r) => r.json()).then((j) => { if (!j.state) return; const st = j.state;
-        setQuick({ on: st.operation && st.operation.airConOperationMode === 'POWER_ON', temp: st.temperature && st.temperature.targetTemperature, cur: st.temperature && st.temperature.currentTemperature }); })
+        const next = { on: st.operation && st.operation.airConOperationMode === 'POWER_ON', temp: st.temperature && st.temperature.targetTemperature, cur: st.temperature && st.temperature.currentTemperature };
+        setQuick(next);
+        onStateChange && onStateChange(next);
+      })
       .catch(() => {});
   };
   useEffect(() => { let alive = true; if (isAc && device.online) loadQuick(); return () => { alive = false; }; }, [device.id]);
@@ -4876,7 +4881,10 @@ function LgCard({ device, host, t, lang, flash, label }) {
       <>
         <div style={{ ...card, padding: 13, opacity: device.online ? 1 : 0.55 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: (quick && quick.on) ? '#A50034' + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Ic size={17} style={{ color: (quick && quick.on) ? '#FF3B6B' : '#A50034' }} /></div>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: (quick && quick.on) ? '#A50034' + '22' : C.surface2, display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
+              <Ic size={17} style={{ color: (quick && quick.on) ? '#FF3B6B' : '#A50034' }} />
+              {quick && quick.stale && <span title={t('lastKnown')} style={{ position: 'absolute', top: -2, right: -2, width: 7, height: 7, borderRadius: 999, background: C.amber || '#f5a623', border: `1.5px solid ${C.bg}` }} />}
+            </div>
             <button onClick={() => device.online && cmd('power', !(quick && quick.on))} disabled={!device.online || busy} style={{ width: 42, height: 25, borderRadius: 999, border: 'none', background: (quick && quick.on) ? C.green : C.surface2, position: 'relative', cursor: device.online ? 'pointer' : 'not-allowed' }}>
               <span style={{ position: 'absolute', top: 3, left: (quick && quick.on) ? 20 : 3, width: 19, height: 19, borderRadius: 999, background: '#fff', transition: 'left .2s' }} />
             </button>
@@ -5053,7 +5061,8 @@ function isBlockedTuya(d) {
   const n = ((d && (d.name || d.alias)) || '').toLowerCase();
   return /port[aã]o|mod[-_ ]?port|garagem|gate/.test(n);
 }
-function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
+function TuyaDeviceGrid({ devices, prefs, setPrefs, t, lang, onCmd, onConfig }) {
+  const saveLastState = (id, next) => setPrefs && setPrefs((prev) => ({ ...prev, [id]: { ...(prev[id] || {}), lastState: { ...next, ts: Date.now() } } }));
   // decide quais mostrar: se ha alguma preferencia salva, respeita "show";
   // se nao ha NENHUMA pref ainda, mostra todos (primeiro uso).
   const hasPrefs = prefs && Object.keys(prefs).length > 0;
@@ -5088,7 +5097,7 @@ function TuyaDeviceGrid({ devices, prefs, t, lang, onCmd, onConfig }) {
       {roomNames.map((room) => (
         <RoomGroup key={room || 'sem'} room={room} defaultOpen={alwaysOpen.includes(room)} lang={lang}>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} irId={(prefs && prefs[d.id] && prefs[d.id].ir) || null} t={t} lang={lang} onCmd={onCmd} />)}
+            {groups[room].map((d) => <TuyaCard key={d.id} device={d} kind={tuyaKind(d, prefs)} label={tuyaLabel(d, prefs)} irId={(prefs && prefs[d.id] && prefs[d.id].ir) || null} t={t} lang={lang} onCmd={onCmd} lastState={(prefs && prefs[d.id] && prefs[d.id].lastState) || null} onStateChange={(next) => saveLastState(d.id, next)} />)}
           </div>
         </RoomGroup>
       ))}
@@ -5207,9 +5216,13 @@ function IRBtn({ children, onClick, wide, accent }) {
 // Para controles IR "universais" da Tuya, os comandos vao pelo code padrao.
 // Como cada remoto aprendido pode variar, usamos os codes comuns e deixamos claro
 // que ajustamos caso algum botao nao responda.
-function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
+function TuyaRemote({ device, kind, label, irId, t, lang, onClose, acState, onAcChange }) {
   const [keys, setKeys] = useState(null); const [meta, setMeta] = useState({}); const [err, setErr] = useState(null); const [sending, setSending] = useState(''); const [showAll, setShowAll] = useState(false);
-  const [temp, setTemp] = useState(23); const [mode, setMode] = useState('cold'); const [wind, setWind] = useState('auto'); const [power, setPower] = useState(true);
+  const acSaved = acState || {};
+  const [temp, setTemp] = useState(acSaved.temp != null ? acSaved.temp : 23);
+  const [mode, setMode] = useState(acSaved.mode || 'cold');
+  const [wind, setWind] = useState(acSaved.wind || 'auto');
+  const [power, setPower] = useState(acSaved.power != null ? acSaved.power : true);
 
   // Busca as teclas reais para TV/STB/receiver
   useEffect(() => {
@@ -5235,6 +5248,7 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose }) {
   const sendAc = async (patch) => {
     const next = { power, mode, temp, wind, ...patch };
     setPower(next.power); setMode(next.mode); setTemp(next.temp); setWind(next.wind);
+    onAcChange && onAcChange(next);
     try {
       const r = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'ac', infrared_id: irId, remote_id: device.id, acCode: 'all', acValue: { power: next.power ? 1 : 0, mode: next.mode, temp: next.temp, wind: next.wind } }) });
       const j = await r.json();
@@ -5447,16 +5461,24 @@ function tuyaSwitchCode(status) {
   // prioridade: switch_led (lâmpadas), switch_1 (tomadas), switch, qualquer switch*
   return keys.find((k) => k === 'switch_led') || keys.find((k) => k === 'switch_1') || keys.find((k) => k === 'switch') || keys.find((k) => k.startsWith('switch')) || null;
 }
-function TuyaACCard({ device, nome, irId, t, lang, onOpen, remote, onCloseRemote, Ic }) {
-  const [temp, setTemp] = useState(23); const [power, setPower] = useState(false); const [busy, setBusy] = useState(false);
+function TuyaACCard({ device, nome, irId, t, lang, onOpen, remote, onCloseRemote, Ic, lastState, onStateChange }) {
+  const saved = lastState || {};
+  const [temp, setTemp] = useState(saved.temp != null ? saved.temp : 23);
+  const [power, setPower] = useState(!!saved.power);
+  const [mode, setMode] = useState(saved.mode || 'cold');
+  const [wind, setWind] = useState(saved.wind || 'auto');
+  const [busy, setBusy] = useState(false);
   const sendAc = async (patch) => {
-    const next = { power, temp, mode: 'cold', wind: 'auto', ...patch };
-    setPower(next.power); setTemp(next.temp); setBusy(true);
+    const next = { power, temp, mode, wind, ...patch };
+    setPower(next.power); setTemp(next.temp); setMode(next.mode); setWind(next.wind);
+    onStateChange && onStateChange(next);
+    setBusy(true);
     try {
       await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'ac', infrared_id: irId, remote_id: device.id, acCode: 'all', acValue: { power: next.power ? 1 : 0, mode: next.mode, temp: next.temp, wind: next.wind } }) });
     } catch (e) {}
     setBusy(false);
   };
+  const onAcChange = (next) => { setPower(next.power); setTemp(next.temp); setMode(next.mode); setWind(next.wind); onStateChange && onStateChange(next); };
   const online = device.online;
   return (
     <>
@@ -5478,11 +5500,11 @@ function TuyaACCard({ device, nome, irId, t, lang, onOpen, remote, onCloseRemote
           <div onClick={onOpen} style={{ fontSize: 10.5, color: online ? C.text3 : C.rose, marginTop: 2, cursor: 'pointer' }}>{online ? t('openRemote') : t('offline')}</div>
         )}
       </div>
-      {remote && <TuyaRemote device={device} kind="ac" label={nome} irId={irId} t={t} lang={lang} onClose={onCloseRemote} />}
+      {remote && <TuyaRemote device={device} kind="ac" label={nome} irId={irId} t={t} lang={lang} onClose={onCloseRemote} acState={{ power, temp, mode, wind }} onAcChange={onAcChange} />}
     </>
   );
 }
-function TuyaCard({ device, t, lang, onCmd, kind, label, irId }) {
+function TuyaCard({ device, t, lang, onCmd, kind, label, irId, lastState, onStateChange }) {
   const [remote, setRemote] = useState(false); const [light, setLight] = useState(false);
   const irKind = kind === 'tv' || kind === 'stb' || kind === 'ac' || kind === 'receiver';
   const st = device.status || {};
@@ -5494,7 +5516,7 @@ function TuyaCard({ device, t, lang, onCmd, kind, label, irId }) {
   const Ic = kindIcon[kind] || Power;
   const nome = label || device.name;
   if (kind === 'ac') {
-    return <TuyaACCard device={device} nome={nome} irId={irId} t={t} lang={lang} onOpen={() => setRemote(true)} remote={remote} onCloseRemote={() => setRemote(false)} Ic={Ic} />;
+    return <TuyaACCard device={device} nome={nome} irId={irId} t={t} lang={lang} onOpen={() => setRemote(true)} remote={remote} onCloseRemote={() => setRemote(false)} Ic={Ic} lastState={lastState} onStateChange={onStateChange} />;
   }
   if (irKind) {
     return (
@@ -5719,7 +5741,9 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
           {(() => {
             const vis = lg.devices.filter((d) => { const p = tuyaPrefs['lg_' + d.id]; return p ? p.show !== false : true; });
             if (!vis.length) return lg.loading ? <div style={{ ...card, padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />…</div> : <div style={{ ...card, padding: 14, textAlign: 'center', color: C.text3, fontSize: 12 }}>{lang === 'pt' ? 'Nenhum aparelho LG selecionado.' : 'No LG devices selected.'}</div>;
-            return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{vis.map((d) => <LgCard key={d.id} device={d} host={lg.host} label={(tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].alias) || d.name} t={t} lang={lang} flash={flash} />)}</div>;
+            return <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{vis.map((d) => <LgCard key={d.id} device={d} host={lg.host} label={(tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].alias) || d.name} t={t} lang={lang} flash={flash}
+              lastState={(tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].lastState) || null}
+              onStateChange={(next) => setTuyaPrefs((prev) => ({ ...prev, ['lg_' + d.id]: { ...(prev['lg_' + d.id] || {}), lastState: { ...next, ts: Date.now() } } }))} />)}</div>;
           })()}
         </div>
       )}
@@ -5735,7 +5759,7 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
           {tuya.loading && !tuya.devices.length ? (
             <div style={{ ...card, padding: 20, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, alignItems: 'center', justifyContent: 'center' }}><Loader2 size={14} className="spin" />SmartLife…</div>
           ) : tuya.connected && tuya.devices.length ? (
-            <TuyaDeviceGrid devices={tuya.devices} prefs={tuyaPrefs} t={t} lang={lang} onCmd={sendCmd} onConfig={() => setCfgDev(true)} />
+            <TuyaDeviceGrid devices={tuya.devices} prefs={tuyaPrefs} setPrefs={setTuyaPrefs} t={t} lang={lang} onCmd={sendCmd} onConfig={() => setCfgDev(true)} />
           ) : (
             <HintCard icon={Power} text={lang === 'pt' ? 'Nenhum aparelho SmartLife encontrado.' : 'No SmartLife devices found.'} />
           )}
