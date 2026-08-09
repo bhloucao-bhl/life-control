@@ -23,6 +23,7 @@
 		78ABEFC10F89F684DC67432B /* WidgetLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B270BF8E27F9C7094915AB /* WidgetLinks.swift */; };
 		7A2488D2D4C11850B235B5A6 /* MarkPurchaseReceivedIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 405F749E544A50570178CD7F /* MarkPurchaseReceivedIntent.swift */; };
 		7C6536DCC94DF921D72FCB53 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 23E667EE9C149C717B10EC72 /* WidgetKit.framework */; };
+		807485E720C9343B5E32A672 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 23E667EE9C149C717B10EC72 /* WidgetKit.framework */; };
 		81247BF62ADD51133363279E /* SharedAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */; };
 		8C2AE9FB031C53567CB0B1C6 /* LifeControlWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 963024938E1ABB7878105D92 /* LifeControlWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeaderOnCopy, ); }; };
 		8C3B43938E8BB19B5D357A59 /* WidgetAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */; };
@@ -105,6 +106,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				807485E720C9343B5E32A672 /* WidgetKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,5 +1,6 @@
 import Foundation
 import Capacitor
+import WidgetKit
 
 /// Ponte nativa mínima entre o WebView (onde vive a sessão do Supabase, via
 /// supabase-js) e o App Group (onde os widgets de WidgetKit leem essa mesma
@@ -38,11 +39,17 @@ public class SharedAuthPlugin: CAPPlugin, CAPBridgedPlugin {
             supabaseAnonKey: supabaseAnonKey
         )
         session.save()
+        // Sem isso, um widget que já tentou buscar dados sem sessão (ex.: logo depois de
+        // instalado, antes do primeiro login) fica preso na tela "Abra o app para conectar"
+        // até o próximo reload agendado por ele mesmo — até 45 min depois, pela política de
+        // timeline de cada widget. Avisar o WidgetKit aqui faz ele tentar de novo na hora.
+        WidgetCenter.shared.reloadAllTimelines()
         call.resolve()
     }
 
     @objc func clearSession(_ call: CAPPluginCall) {
         SharedSession.clear()
+        WidgetCenter.shared.reloadAllTimelines()
         call.resolve()
     }
 }
