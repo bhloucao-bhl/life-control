@@ -3,10 +3,16 @@ import { fetchOuraData } from '../../../lib/oura';
 
 export const runtime = 'nodejs';
 
+// Se o cache (normalmente mantido fresco pelo webhook) ficar mais velho que
+// isso, busca ao vivo mesmo sem ninguem ter pedido — rede de seguranca caso
+// o webhook pare de chegar (assinatura expirada, evento perdido, etc).
+const STALE_MS = 3 * 60 * 60 * 1000; // 3h
+
 /**
  * GET /api/oura -> { byDate: { 'YYYY-MM-DD': { readiness, sleep } } }
  * Le do cache (populado pelo webhook assim que o anel sincroniza com o app).
- * Se ainda nao houver cache, ou se ?refresh=1, busca ao vivo na Oura.
+ * Se ainda nao houver cache, se o cache estiver velho, ou se ?refresh=1,
+ * busca ao vivo na Oura.
  */
 export async function GET(req) {
   const user = await userFromRequest(req);
@@ -20,7 +26,8 @@ export async function GET(req) {
 
   if (!force) {
     const { data: cached } = await db.from('oura_cache').select('*').eq('user_id', user.id).maybeSingle();
-    if (cached) {
+    const fresh = cached && (Date.now() - new Date(cached.updated_at).getTime()) < STALE_MS;
+    if (fresh) {
       return Response.json({
         connected: true,
         byDate: cached.by_date || {},
