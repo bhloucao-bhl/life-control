@@ -5,26 +5,30 @@ struct DietEntry: TimelineEntry {
     let date: Date
     let summary: WidgetSummary?
     let isPlaceholder: Bool
+    let errorDetail: String?
 }
 
 struct DietProvider: TimelineProvider {
     func placeholder(in context: Context) -> DietEntry {
-        DietEntry(date: Date(), summary: nil, isPlaceholder: true)
+        DietEntry(date: Date(), summary: nil, isPlaceholder: true, errorDetail: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (DietEntry) -> Void) {
         if context.isPreview {
-            completion(DietEntry(date: Date(), summary: nil, isPlaceholder: true))
+            completion(DietEntry(date: Date(), summary: nil, isPlaceholder: true, errorDetail: nil))
             return
         }
-        Task { completion(DietEntry(date: Date(), summary: try? await WidgetAPI.fetchSummary(), isPlaceholder: false)) }
+        Task {
+            let (summary, err) = await WidgetAPI.fetchSummaryResult()
+            completion(DietEntry(date: Date(), summary: summary, isPlaceholder: false, errorDetail: err))
+        }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<DietEntry>) -> Void) {
         Task {
-            let summary = try? await WidgetAPI.fetchSummary()
+            let (summary, err) = await WidgetAPI.fetchSummaryResult()
             let next = Calendar.current.date(byAdding: .minute, value: 20, to: Date())!
-            completion(Timeline(entries: [DietEntry(date: Date(), summary: summary, isPlaceholder: false)], policy: .after(next)))
+            completion(Timeline(entries: [DietEntry(date: Date(), summary: summary, isPlaceholder: false, errorDetail: err)], policy: .after(next)))
         }
     }
 }
@@ -60,7 +64,7 @@ struct DietWidgetView: View {
             }
             .widgetURL(WidgetLinks.open(.today))
         } else {
-            WidgetUnavailableView(placeholder: entry.isPlaceholder)
+            WidgetUnavailableView(placeholder: entry.isPlaceholder, detail: entry.errorDetail)
         }
     }
 }

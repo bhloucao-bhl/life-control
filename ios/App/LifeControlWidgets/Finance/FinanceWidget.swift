@@ -7,15 +7,16 @@ struct FinanceEntry: TimelineEntry {
     let account: WidgetSummary.Account?
     let hasAnyAccount: Bool
     let isPlaceholder: Bool
+    let errorDetail: String?
 }
 
 struct FinanceProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> FinanceEntry {
-        FinanceEntry(date: Date(), account: nil, hasAnyAccount: true, isPlaceholder: true)
+        FinanceEntry(date: Date(), account: nil, hasAnyAccount: true, isPlaceholder: true, errorDetail: nil)
     }
 
     func snapshot(for configuration: SelectAccountIntent, in context: Context) async -> FinanceEntry {
-        if context.isPreview { return FinanceEntry(date: Date(), account: nil, hasAnyAccount: true, isPlaceholder: true) }
+        if context.isPreview { return FinanceEntry(date: Date(), account: nil, hasAnyAccount: true, isPlaceholder: true, errorDetail: nil) }
         return await makeEntry(configuration: configuration)
     }
 
@@ -26,13 +27,14 @@ struct FinanceProvider: AppIntentTimelineProvider {
     }
 
     private func makeEntry(configuration: SelectAccountIntent) async -> FinanceEntry {
-        guard let summary = try? await WidgetAPI.fetchSummary() else {
-            return FinanceEntry(date: Date(), account: nil, hasAnyAccount: true, isPlaceholder: false)
+        let (summary, err) = await WidgetAPI.fetchSummaryResult()
+        guard let summary else {
+            return FinanceEntry(date: Date(), account: nil, hasAnyAccount: true, isPlaceholder: false, errorDetail: err)
         }
         let accounts = summary.finance.accounts
         // usa a conta escolhida em "Editar Widget" se ainda existir; senão cai pra primeira disponível
         let picked = configuration.account.flatMap { sel in accounts.first { $0.id == sel.id } } ?? accounts.first
-        return FinanceEntry(date: Date(), account: picked, hasAnyAccount: !accounts.isEmpty, isPlaceholder: false)
+        return FinanceEntry(date: Date(), account: picked, hasAnyAccount: !accounts.isEmpty, isPlaceholder: false, errorDetail: nil)
     }
 }
 
@@ -63,7 +65,7 @@ struct FinanceWidgetView: View {
             }
             .widgetURL(WidgetLinks.open(.today))
         } else if entry.hasAnyAccount {
-            WidgetUnavailableView(placeholder: entry.isPlaceholder)
+            WidgetUnavailableView(placeholder: entry.isPlaceholder, detail: entry.errorDetail)
         } else {
             VStack(spacing: 6) {
                 Image(systemName: "creditcard").font(.title3).foregroundStyle(.secondary)
