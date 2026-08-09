@@ -2251,10 +2251,11 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           const acc = (todayAccountId && items.find((i) => i.id === todayAccountId && i.type === 'account')) || items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
           const val = acc ? accountBalance(acc, items) : null;
           const nome = acc ? acc.title.replace(/\s*-.*$/, '').slice(0, 10) : 'Alelo';
+          const balCol = val != null && val < 0 ? C.rose : C.accent;
           return (
             <button onClick={() => acc ? openAccount(acc.id) : goModule('finance')} style={{ ...card, flex: 1, padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 999, background: C.accent + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={16} style={{ color: C.accent }} /></div>
-              <div style={{ textAlign: 'left', minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: val != null ? C.accent : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val != null ? fmtMoney(val, lang) : '—'}</div><div style={{ fontSize: 10.5, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div></div>
+              <div style={{ width: 34, height: 34, borderRadius: 999, background: balCol + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={16} style={{ color: balCol }} /></div>
+              <div style={{ textAlign: 'left', minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: val != null ? balCol : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val != null ? fmtMoney(val, lang) : '—'}</div><div style={{ fontSize: 10.5, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div></div>
             </button>
           );
         })()}
