@@ -2071,14 +2071,14 @@ function WeatherDetail({ wx: wxHome, lang, t, onClose }) {
             <button key={i} onClick={() => setDi(i)} style={{ flex: '0 0 auto', minWidth: 58, padding: '9px 6px', borderRadius: 12, border: `1px solid ${on ? C.accent : C.border}`, background: on ? C.accentSoft : 'transparent', cursor: 'pointer', textAlign: 'center' }}>
               <div style={{ fontSize: 10.5, color: on ? C.accent : C.text2, fontWeight: 600 }}>{wd}</div>
               <Ic size={16} style={{ color: kind === 'sun' ? '#F59E0B' : kind === 'rain' ? C.sky : C.text2, margin: '5px auto 4px' }} />
-              <div style={{ fontSize: 10 }}><span style={{ color: C.rose }}>{d.hi}°</span> <span style={{ color: C.sky }}>{d.lo}°</span></div>
+              <div style={{ fontSize: 10 }}><span style={{ color: C.rose }}>{d.hi}°</span> <span style={{ color: C.blue }}>{d.lo}°</span></div>
             </button>
           );
         })}
       </div>
       <div style={{ ...card, padding: 16, marginBottom: 12, textAlign: 'center' }}>
         <div style={{ fontSize: 13.5 }}>{wmo(d0.code, lang).label}</div>
-        <div style={{ fontSize: 12, color: C.text2, marginTop: 3 }}><span style={{ color: C.rose, fontWeight: 700 }}>↑{d0.hi}°</span> <span style={{ color: C.sky, fontWeight: 700 }}>↓{d0.lo}°</span></div>
+        <div style={{ fontSize: 12, color: C.text2, marginTop: 3 }}><span style={{ color: C.rose, fontWeight: 700 }}>↑{d0.hi}°</span> <span style={{ color: C.blue, fontWeight: 700 }}>↓{d0.lo}°</span></div>
       </div>
       {chart}
       <div style={{ ...card, padding: 4 }}>
@@ -2118,7 +2118,7 @@ function WeatherCard({ lang, t, wx, loading }) {
         </div>
         <div style={{ textAlign: 'right', fontSize: 11.5, color: C.text3, lineHeight: 1.6 }}>
           {wx.feels != null && <div>{t('feels')} {wx.feels}°</div>}
-          <div><span style={{ color: C.rose, fontWeight: 700 }}>↑{wx.hi}°</span> <span style={{ color: C.sky, fontWeight: 700 }}>↓{wx.lo}°</span> <ChevronRight size={11} style={{ verticalAlign: 'middle', color: C.text3 }} /></div>
+          <div><span style={{ color: C.rose, fontWeight: 700 }}>↑{wx.hi}°</span> <span style={{ color: C.blue, fontWeight: 700 }}>↓{wx.lo}°</span> <ChevronRight size={11} style={{ verticalAlign: 'middle', color: C.text3 }} /></div>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
@@ -2129,7 +2129,7 @@ function WeatherCard({ lang, t, wx, loading }) {
             <div key={i} style={{ flex: 1, textAlign: 'center', background: C.bg2, borderRadius: 10, padding: '8px 2px' }}>
               <div style={{ fontSize: 10, color: C.text3 }}>{wd}</div>
               <I size={16} style={{ color: wmo(d.code, lang).kind === 'sun' ? '#F59E0B' : wmo(d.code, lang).kind === 'rain' ? C.sky : C.text2, margin: '5px auto' }} />
-              <div style={{ fontSize: 10.5 }}><span style={{ color: C.rose }}>{d.hi}°</span><span style={{ color: C.sky }}> {d.lo}°</span></div>
+              <div style={{ fontSize: 10.5 }}><span style={{ color: C.rose }}>{d.hi}°</span><span style={{ color: C.blue }}> {d.lo}°</span></div>
             </div>
           );
         })}
@@ -2279,10 +2279,11 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           const acc = (todayAccountId && items.find((i) => i.id === todayAccountId && i.type === 'account')) || items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
           const val = acc ? accountBalance(acc, items) : null;
           const nome = acc ? acc.title.replace(/\s*-.*$/, '').slice(0, 10) : 'Alelo';
+          const balCol = val != null && val < 0 ? C.rose : C.accent;
           return (
             <button onClick={() => acc ? openAccount(acc.id) : goModule('finance')} style={{ ...card, flex: 1, padding: '10px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 9 }}>
-              <div style={{ width: 34, height: 34, borderRadius: 999, background: C.accent + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={16} style={{ color: C.accent }} /></div>
-              <div style={{ textAlign: 'left', minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: val != null ? C.accent : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val != null ? fmtMoney(val, lang) : '—'}</div><div style={{ fontSize: 10.5, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div></div>
+              <div style={{ width: 34, height: 34, borderRadius: 999, background: balCol + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><CreditCard size={16} style={{ color: balCol }} /></div>
+              <div style={{ textAlign: 'left', minWidth: 0 }}><div style={{ fontSize: 12.5, fontWeight: 700, color: val != null ? balCol : C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{val != null ? fmtMoney(val, lang) : '—'}</div><div style={{ fontSize: 10.5, color: C.text3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nome}</div></div>
             </button>
           );
         })()}
