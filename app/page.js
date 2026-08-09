@@ -6645,6 +6645,9 @@ function TuyaIrDiag({ t, lang }) {
 
 function OuraWebhookSetup({ lang }) {
   const [busy, setBusy] = useState(false); const [result, setResult] = useState(null);
+  const [refreshing, setRefreshing] = useState(false); const [cachedAt, setCachedAt] = useState(undefined);
+  const loadStatus = () => authFetch('/api/oura').then((r) => r.json()).then((j) => setCachedAt(j && j.cachedAt ? j.cachedAt : null)).catch(() => {});
+  useEffect(() => { loadStatus(); }, []);
   const run = async () => {
     setBusy(true); setResult(null);
     try {
@@ -6654,13 +6657,25 @@ function OuraWebhookSetup({ lang }) {
     } catch (e) { setResult({ error: String(e) }); }
     setBusy(false);
   };
+  const refreshNow = async () => {
+    setRefreshing(true);
+    try { await authFetch('/api/oura?refresh=1'); await loadStatus(); } catch (e) {}
+    setRefreshing(false);
+  };
   return (
     <div style={{ ...card, padding: '12px 14px', marginBottom: 8 }}>
       <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 3 }}>{lang === 'pt' ? 'Sync automático do Oura' : 'Automatic Oura sync'}</div>
       <div style={{ fontSize: 11, color: C.text3, marginBottom: 8, lineHeight: 1.4 }}>
-        {lang === 'pt' ? 'Assina os webhooks da Oura: assim que o anel sincronizar com o app (mesmo em segundo plano), os dados chegam aqui na hora, sem esperar o cache de 15 min.' : 'Subscribes to Oura webhooks so data lands here as soon as the ring syncs, without waiting for the 15-min cache.'}
+        {lang === 'pt' ? 'Assina os webhooks da Oura: assim que o anel sincronizar com o app (mesmo em segundo plano), os dados chegam aqui na hora. Se ficar mais de 3h sem novidade, o app busca ao vivo sozinho.' : 'Subscribes to Oura webhooks so data lands here as soon as the ring syncs. If nothing arrives for 3h, the app fetches live on its own.'}
       </div>
-      <Btn kind="soft" onClick={run} disabled={busy} style={{ padding: '6px 12px', fontSize: 12 }}>{busy ? '…' : (lang === 'pt' ? 'Ativar' : 'Enable')}</Btn>
+      <div style={{ fontSize: 11, color: C.text3, marginBottom: 8 }}>
+        {lang === 'pt' ? 'Última atualização: ' : 'Last update: '}
+        {cachedAt === undefined ? '…' : (cachedAt ? new Date(cachedAt).toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US') : (lang === 'pt' ? 'nunca' : 'never'))}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Btn kind="soft" onClick={run} disabled={busy} style={{ padding: '6px 12px', fontSize: 12 }}>{busy ? '…' : (lang === 'pt' ? 'Ativar' : 'Enable')}</Btn>
+        <Btn kind="ghost" onClick={refreshNow} disabled={refreshing} style={{ padding: '6px 12px', fontSize: 12 }}>{refreshing ? '…' : (lang === 'pt' ? 'Atualizar agora' : 'Refresh now')}</Btn>
+      </div>
       {result && (
         <div style={{ fontSize: 11, marginTop: 8, color: result.error ? C.rose : C.text2, lineHeight: 1.5 }}>
           {result.error ? result.error : (lang === 'pt'
