@@ -39,6 +39,15 @@ public class SharedAuthPlugin: CAPPlugin, CAPBridgedPlugin {
             supabaseAnonKey: supabaseAnonKey
         )
         session.save()
+        // Confere se o que acabou de ser gravado realmente volta na leitura — se o App Group
+        // não estiver de fato compartilhado (entitlement ausente na assinatura, por exemplo),
+        // UserDefaults(suiteName:) não lança erro nenhum, só silenciosamente não persiste. Sem
+        // essa checagem, saveSession() "funciona" do ponto de vista do app mesmo quando o widget
+        // nunca vai conseguir ler nada.
+        guard SharedSession.load()?.accessToken == accessToken else {
+            call.reject("A sessão não foi lida de volta do App Group — provavelmente o entitlement de App Groups não está na assinatura deste build.")
+            return
+        }
         // Sem isso, um widget que já tentou buscar dados sem sessão (ex.: logo depois de
         // instalado, antes do primeiro login) fica preso na tela "Abra o app para conectar"
         // até o próximo reload agendado por ele mesmo — até 45 min depois, pela política de
