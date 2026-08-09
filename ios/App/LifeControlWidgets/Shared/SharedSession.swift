@@ -3,7 +3,8 @@ import Foundation
 enum WidgetAPIError: Error {
     case noSession
     case authFailed
-    case badResponse
+    case badStatus(Int)
+    case badURL
 }
 
 /// Sessão do Supabase (a mesma que o WebView usa), guardada no App Group pelo

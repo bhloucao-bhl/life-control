@@ -6,29 +6,30 @@ struct PurchasesEntry: TimelineEntry {
     let purchases: [WidgetSummary.Purchase]
     let loaded: Bool
     let isPlaceholder: Bool
+    let errorDetail: String?
 }
 
 struct PurchasesProvider: TimelineProvider {
     func placeholder(in context: Context) -> PurchasesEntry {
-        PurchasesEntry(date: Date(), purchases: [], loaded: true, isPlaceholder: true)
+        PurchasesEntry(date: Date(), purchases: [], loaded: true, isPlaceholder: true, errorDetail: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (PurchasesEntry) -> Void) {
         if context.isPreview {
-            completion(PurchasesEntry(date: Date(), purchases: [], loaded: true, isPlaceholder: true))
+            completion(PurchasesEntry(date: Date(), purchases: [], loaded: true, isPlaceholder: true, errorDetail: nil))
             return
         }
         Task {
-            let summary = try? await WidgetAPI.fetchSummary()
-            completion(PurchasesEntry(date: Date(), purchases: summary?.purchases ?? [], loaded: summary != nil, isPlaceholder: false))
+            let (summary, err) = await WidgetAPI.fetchSummaryResult()
+            completion(PurchasesEntry(date: Date(), purchases: summary?.purchases ?? [], loaded: summary != nil, isPlaceholder: false, errorDetail: err))
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<PurchasesEntry>) -> Void) {
         Task {
-            let summary = try? await WidgetAPI.fetchSummary()
+            let (summary, err) = await WidgetAPI.fetchSummaryResult()
             let next = Calendar.current.date(byAdding: .minute, value: 45, to: Date())!
-            let entry = PurchasesEntry(date: Date(), purchases: summary?.purchases ?? [], loaded: summary != nil, isPlaceholder: false)
+            let entry = PurchasesEntry(date: Date(), purchases: summary?.purchases ?? [], loaded: summary != nil, isPlaceholder: false, errorDetail: err)
             completion(Timeline(entries: [entry], policy: .after(next)))
         }
     }
@@ -42,7 +43,7 @@ struct PurchasesWidgetView: View {
 
     var body: some View {
         if !entry.loaded {
-            WidgetUnavailableView(placeholder: entry.isPlaceholder)
+            WidgetUnavailableView(placeholder: entry.isPlaceholder, detail: entry.errorDetail)
         } else if entry.purchases.isEmpty {
             VStack(spacing: 6) {
                 Image(systemName: "shippingbox").font(.title3).foregroundStyle(.secondary)

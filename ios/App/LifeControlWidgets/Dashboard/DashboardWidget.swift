@@ -5,28 +5,29 @@ struct DashboardEntry: TimelineEntry {
     let date: Date
     let summary: WidgetSummary?
     let isPlaceholder: Bool
+    let errorDetail: String?
 }
 
 struct DashboardProvider: TimelineProvider {
     func placeholder(in context: Context) -> DashboardEntry {
-        DashboardEntry(date: Date(), summary: nil, isPlaceholder: true)
+        DashboardEntry(date: Date(), summary: nil, isPlaceholder: true, errorDetail: nil)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (DashboardEntry) -> Void) {
         if context.isPreview {
-            completion(DashboardEntry(date: Date(), summary: nil, isPlaceholder: true))
+            completion(DashboardEntry(date: Date(), summary: nil, isPlaceholder: true, errorDetail: nil))
             return
         }
         Task {
-            let summary = try? await WidgetAPI.fetchSummary()
-            completion(DashboardEntry(date: Date(), summary: summary, isPlaceholder: false))
+            let (summary, err) = await WidgetAPI.fetchSummaryResult()
+            completion(DashboardEntry(date: Date(), summary: summary, isPlaceholder: false, errorDetail: err))
         }
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<DashboardEntry>) -> Void) {
         Task {
-            let summary = try? await WidgetAPI.fetchSummary()
-            let entry = DashboardEntry(date: Date(), summary: summary, isPlaceholder: false)
+            let (summary, err) = await WidgetAPI.fetchSummaryResult()
+            let entry = DashboardEntry(date: Date(), summary: summary, isPlaceholder: false, errorDetail: err)
             // Os dados (Oura, tarefas, agenda) não mudam segundo a segundo — 30 min
             // fica bem dentro do orçamento de refresh que o WidgetKit dá por widget.
             let next = Calendar.current.date(byAdding: .minute, value: 30, to: Date())!
@@ -66,7 +67,7 @@ struct DashboardWidgetView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .widgetURL(WidgetLinks.open(.today))
         } else {
-            WidgetUnavailableView(placeholder: entry.isPlaceholder)
+            WidgetUnavailableView(placeholder: entry.isPlaceholder, detail: entry.errorDetail)
         }
     }
 }
