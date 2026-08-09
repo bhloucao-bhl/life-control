@@ -4375,6 +4375,7 @@ function buildExamHistory(items) {
 function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, goDiet, goDocs, healthSummary, setHealthSummary, setPendingCount }) {
   const [adding, setAdding] = useState(null); const [addingEx, setAddingEx] = useState(false); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const [sumLoading, setSumLoading] = useState(false);
+  const [sumOpen, setSumOpen] = useState(false);
   const [hscan, setHscan] = useState({ loading: false, list: null, error: null });
   const [hscanDays, setHscanDays] = useState(30);
   const runHealthScan = () => {
@@ -4471,12 +4472,15 @@ Data de hoje: ${today}`;
         );
       })}
       <div style={{ ...card, padding: 15, marginBottom: 12, border: '1px solid #5B8DEF33', background: 'linear-gradient(135deg, #5B8DEF14, ' + C.surface + ')' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <div onClick={() => setSumOpen((v) => !v)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, cursor: 'pointer' }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}><DrClaudeBadge size={22} /><span style={{ fontSize: 12, fontWeight: 700, color: '#5B8DEF' }}>{lang === 'pt' ? 'Resumo de hoje' : "Today's summary"}</span></div>
-          <button onClick={genSummary} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3 }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <button onClick={(e) => { e.stopPropagation(); genSummary(); }} disabled={sumLoading} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 3, display: 'flex' }}>{sumLoading ? <Loader2 size={14} className="spin" /> : <RefreshCw size={14} />}</button>
+            <ChevronRight size={16} style={{ color: C.text3, transform: sumOpen ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
+          </div>
         </div>
         {sumLoading && !healthSummary ? <div style={{ fontSize: 13, color: C.text3 }}>{lang === 'pt' ? 'Gerando...' : 'Generating...'}</div> : (
-          <div style={{ fontSize: 13.5, lineHeight: 1.55, color: C.text }}>{healthSummary ? healthSummary.text : (lang === 'pt' ? 'Toque em atualizar pra gerar seu resumo do dia.' : 'Tap refresh to generate today\'s summary.')}</div>
+          <div onClick={() => setSumOpen((v) => !v)} style={{ fontSize: 13.5, lineHeight: 1.55, color: C.text, cursor: 'pointer', ...(sumOpen ? {} : { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }) }}>{healthSummary ? healthSummary.text : (lang === 'pt' ? 'Toque em atualizar pra gerar seu resumo do dia.' : 'Tap refresh to generate today\'s summary.')}</div>
         )}
       </div>
       <button onClick={goMedical} style={{ ...card, width: '100%', padding: 14, marginBottom: 10, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', border: 'none', textAlign: 'left', color: C.text, background: 'linear-gradient(135deg, #5B8DEF1c, ' + C.surface + ')', borderColor: '#5B8DEF33' }}>
