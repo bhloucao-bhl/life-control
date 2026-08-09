@@ -228,6 +228,16 @@ async function authFetch(path, opts = {}) {
   return res;
 }
 
+// Nome pra saudação antes do usuário preencher "Como se chama" nos Ajustes:
+// tira a parte antes do @ do e-mail de login e capitaliza cada palavra
+// (joao.silva@x.com -> "Joao Silva"). Sem e-mail, devolve null.
+function nameFromEmail(email) {
+  if (!email || typeof email !== 'string') return null;
+  const local = email.split('@')[0];
+  if (!local) return null;
+  return local.split(/[._+-]+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
+}
+
 /* ============================================================
    Varredura de e-mails "(Z)" da casa
    ============================================================ */
@@ -2253,7 +2263,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 26, fontWeight: 300, letterSpacing: '-.02em' }}>{greeting()}, <span style={{ fontWeight: 600 }}>{name}</span>.</div>
+          <div style={{ fontSize: 26, fontWeight: 300, letterSpacing: '-.02em' }}>{name ? <>{greeting()}, <span style={{ fontWeight: 600 }}>{name}</span>.</> : <>{greeting()}.</>}</div>
           <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>{fmtLongPretty(today, lang)}<span style={{ color: C.text3 }}>·</span><LiveClock /></div>
         </div>
         <div title={t('fxHint')} style={{ ...card, padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, minWidth: 104 }}>
@@ -6940,7 +6950,7 @@ function App() {
     return () => window.removeEventListener('resize', check);
   }, []);
   const [items, setItems] = useState([]);
-  const [settings, setSettings] = useState({ lang: 'pt', name: 'Bruno', health: {}, profile: {}, dock: DEFAULT_DOCK, devices: DEFAULT_DEVICES });
+  const [settings, setSettings] = useState({ lang: 'pt', name: '', health: {}, profile: {}, dock: DEFAULT_DOCK, devices: DEFAULT_DEVICES });
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
   const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null);
@@ -7045,7 +7055,18 @@ function App() {
     const s = await loadState();
     if (s.items && s.items.length) setItems(s.items);
     else setItems([]); // comeca vazio: sem dados de exemplo
+    // sem nome salvo ainda (usuário novo): usa o e-mail de login como saudação
+    // inicial, em vez de um nome fixo — cada um vê o próprio nome, não o de outra pessoa.
+    const savedName = s.settings && s.settings.name;
     if (s.settings) setSettings((p) => ({ ...p, ...s.settings, health: s.settings.health || {}, profile: s.settings.profile || {}, dock: s.settings.dock || DEFAULT_DOCK, devices: s.settings.devices || DEFAULT_DEVICES }));
+    if (!savedName) {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const email = data && data.session && data.session.user && data.session.user.email;
+        const derived = nameFromEmail(email);
+        if (derived) setSettings((p) => (p.name ? p : { ...p, name: derived }));
+      } catch (e) {}
+    }
     setReady(true);
   })(); }, []);
   useEffect(() => {
