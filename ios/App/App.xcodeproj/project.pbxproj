@@ -32,6 +32,7 @@
 		97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B333D525357793A75C4270 /* SharedSession.swift */; };
 		9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
 		9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
+		AB4A2BBE075B811B822A8B79 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */; };
 		AB55F4967474308EE4004442 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF897D7A1455C2A99163D0AF /* AppIntents.framework */; };
 		B9512A1BB9DF15FFA5F21EEA /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */; };
 		C3AB1944A3CBA4191DBE75EA /* WidgetUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */; };
@@ -96,6 +97,7 @@
 		A29BA1B7D92C267E9A5F74E6 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetAPI.swift; sourceTree = "<group>"; };
 		C36D5570D246468E76B5B210 /* AppGroup.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
+		E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		EF897D7A1455C2A99163D0AF /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
 		FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LifeControlWidgets.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -177,6 +179,7 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				89F7B142245FFF8482C3B32A /* App.entitlements */,
 				76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */,
+				E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -362,6 +365,7 @@
 				81247BF62ADD51133363279E /* SharedAuthPlugin.swift in Sources */,
 				9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */,
 				97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */,
+				AB4A2BBE075B811B822A8B79 /* MainViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

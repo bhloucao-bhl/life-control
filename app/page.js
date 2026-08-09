@@ -43,7 +43,11 @@ async function syncNativeSession(session) {
     } else {
       await SharedAuth.clearSession();
     }
-  } catch (e) { /* plugin nativo indisponível (web, ou build ainda sem o target de widgets) */ }
+  } catch (e) {
+    // guarda pra App() mostrar um toast — sem isso, uma falha aqui é 100% invisível
+    // (esta função roda antes de qualquer UI existir, em Page()).
+    window.__lccNativeSyncError = (e && e.message) || String(e);
+  }
 }
 
 /* ============================================================
@@ -7080,6 +7084,14 @@ function App() {
     if (Array.isArray(j.messages)) setGMsgs(j.messages);
   }).catch(() => {});
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2000); };
+  // Avisa se a sincronização de sessão com os widgets falhou (ver syncNativeSession, no topo do
+  // arquivo) — sem isso a falha é totalmente silenciosa e só aparece muito depois, no widget.
+  useEffect(() => {
+    if (isNative() && window.__lccNativeSyncError) {
+      const msg = window.__lccNativeSyncError; window.__lccNativeSyncError = null;
+      flash((lang === 'pt' ? 'Widgets: ' : 'Widgets: ') + msg);
+    }
+  }, []);
 
   // ---- Pull-to-refresh (puxar pra baixo no topo) ----
   const [pull, setPull] = useState(0); const [refreshing, setRefreshing] = useState(false);
