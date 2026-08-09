@@ -31,11 +31,18 @@ workflows:
           echo "$IOS_P12_CERT" | base64 --decode > "$CM_BUILD_DIR/ios_distribution.p12"
           keychain initialize
           keychain add-certificates --certificate "$CM_BUILD_DIR/ios_distribution.p12" --certificate-password "$IOS_P12_PASSWORD"
-      - name: Instalar o perfil de provisionamento (enviado manualmente, em base64) e aplicar no projeto Xcode
+      - name: Instalar os perfis de provisionamento (enviados manualmente, em base64) e aplicar no projeto Xcode
         script: |
           PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILES_DIR"
           echo "$IOS_PROVISIONING_PROFILE" | base64 --decode > "$PROFILES_DIR/life-control.mobileprovision"
+          # Perfil do target de widgets (com.bhloucao.lifecontrol.LifeControlWidgets), com o App
+          # Group habilitado. Só existe depois que o App ID + o App Group forem criados no Apple
+          # Developer Portal e o perfil gerado — até lá, este passo é pulado sem quebrar o build do
+          # app principal (o target de widgets simplesmente não fica assinado/embutido).
+          if [ -n "$IOS_WIDGET_PROVISIONING_PROFILE" ]; then
+            echo "$IOS_WIDGET_PROVISIONING_PROFILE" | base64 --decode > "$PROFILES_DIR/life-control-widgets.mobileprovision"
+          fi
           xcode-project use-profiles
       - name: Build do .ipa assinado
         script: |
