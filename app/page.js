@@ -2515,73 +2515,71 @@ function WeatherBarWide({ lang, t }) {
   const nowColor = now ? (now.kind === 'sun' ? '#F59E0B' : now.kind === 'rain' ? C.sky : C.text2) : C.text3;
   const pts = wx ? (wx.hours || []).filter((_, i) => i % 2 === 0).slice(0, 8) : [];
   const peakRain = pts.reduce((best, h) => ((h.rain || 0) > (best && best.rain || 0) ? h : best), null);
+  // tudo numa linha só, sem quebrar — se faltar espaço de verdade (telas bem estreitas)
+  // rola na horizontal só essa barra, em vez de empilhar chuva/previsão/câmbio embaixo do gráfico.
   return (
-    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 10, gap: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: card.boxShadow, padding: '14px 20px', flex: 1, minWidth: 560 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 340 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 'none' }}>
-          <NowIcon size={24} style={{ color: nowColor }} />
-          <div>
-            {wx ? (
-              <>
-                <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', whiteSpace: 'nowrap' }}>{wx.temp}°C</div>
-                <div style={{ fontSize: 10.5, color: C.text3, whiteSpace: 'nowrap' }}>{now.label}</div>
-              </>
-            ) : (
-              <div style={{ fontSize: 11.5, color: C.text3, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
-                {t('weatherOff')}
-                <button onClick={() => load(coordsRef.current.lat, coordsRef.current.lon)} title={lang === 'pt' ? 'Tentar de novo' : 'Retry'} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', display: 'flex', padding: 0 }}><RefreshCw size={11} className={liveLoading ? 'spin' : ''} /></button>
-              </div>
-            )}
-            <CityPicker />
-          </div>
-        </div>
-        <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
-        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          {pts.length > 1 ? <HourlyWxChart points={pts} /> : <div style={{ fontSize: 11, color: C.text3 }}>{lang === 'pt' ? 'Sem previsão agora.' : 'No forecast right now.'}</div>}
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'nowrap', gap: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: card.boxShadow, padding: '12px 20px', flex: 1, minWidth: 0, overflowX: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 'none' }}>
+        <NowIcon size={22} style={{ color: nowColor }} />
+        <div style={{ flex: 'none' }}>
+          {wx ? (
+            <>
+              <div style={{ fontSize: 17, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', whiteSpace: 'nowrap' }}>{wx.temp}°C</div>
+              <div style={{ fontSize: 10, color: C.text3, whiteSpace: 'nowrap' }}>{now.label}</div>
+            </>
+          ) : (
+            <div style={{ fontSize: 11, color: C.text3, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {t('weatherOff')}
+              <button onClick={() => load(coordsRef.current.lat, coordsRef.current.lon)} title={lang === 'pt' ? 'Tentar de novo' : 'Retry'} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', display: 'flex', padding: 0 }}><RefreshCw size={11} className={liveLoading ? 'spin' : ''} /></button>
+            </div>
+          )}
+          <CityPicker />
         </div>
       </div>
       <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', rowGap: 8, flex: 'none' }}>
-        {peakRain && peakRain.rain > 0 && (
-          <>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
-              <CloudRain size={13} style={{ color: C.sky }} />
-              <div style={{ fontSize: 10, color: C.text3, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'chuva até' : 'rain up to'} <span style={{ color: C.text, fontWeight: 700 }}>{peakRain.rain}%</span> {lang === 'pt' ? 'às' : 'at'} {peakRain.h}</div>
-            </div>
-            <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
-          </>
-        )}
-        {wx && (wx.days || []).length > 1 && (
-          <>
-            <div style={{ display: 'flex', gap: 12, flex: 'none' }}>
-              {wx.days.slice(1, 3).map((d, i) => {
-                const kind = wmo(d.code, lang).kind; const I = wxIcon(kind);
-                const wd = WD[lang][new Date(d.date + 'T00:00:00').getDay()];
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{ fontSize: 10.5, color: C.text2 }}>{wd}</span>
-                    <I size={13} style={{ color: kind === 'sun' ? '#F59E0B' : kind === 'rain' ? C.sky : C.text3 }} />
-                    <span style={{ fontSize: 10.5, fontFamily: 'ui-monospace,Menlo,monospace', whiteSpace: 'nowrap' }}>{d.hi}°/{d.lo}°</span>
-                  </div>
-                );
-              })}
-            </div>
-            <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
-          </>
-        )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
-          <TrendingUp size={14} style={{ color: C.text3 }} />
-          {fx && fx.length > 0 ? (
-            <div style={{ fontSize: 10, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', lineHeight: 1.4 }}>
-              {fx.map((x) => (
-                <div key={x.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: x.code === 'USD' ? 700 : 400, color: x.code === 'USD' ? C.text : C.text3 }}>
-                  {x.code} {Number(x.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                  {x.pct != null && <span style={{ color: x.pct < 0 ? C.rose : C.green, fontWeight: 700 }}>{x.pct < 0 ? '▼' : '▲'}{Math.abs(x.pct).toFixed(1)}%</span>}
+      <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 220px', minWidth: 200, maxWidth: 340 }}>
+        {pts.length > 1 ? <HourlyWxChart points={pts} /> : <div style={{ fontSize: 11, color: C.text3, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Sem previsão agora.' : 'No forecast right now.'}</div>}
+      </div>
+      {peakRain && peakRain.rain > 0 && (
+        <>
+          <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, flex: 'none' }}>
+            <CloudRain size={12} style={{ color: C.sky }} />
+            <div style={{ fontSize: 9.5, color: C.text3, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'chuva até' : 'rain up to'} <span style={{ color: C.text, fontWeight: 700 }}>{peakRain.rain}%</span> {lang === 'pt' ? 'às' : 'at'} {peakRain.h}</div>
+          </div>
+        </>
+      )}
+      {wx && (wx.days || []).length > 1 && (
+        <>
+          <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
+          <div style={{ display: 'flex', gap: 10, flex: 'none' }}>
+            {wx.days.slice(1, 3).map((d, i) => {
+              const kind = wmo(d.code, lang).kind; const I = wxIcon(kind);
+              const wd = WD[lang][new Date(d.date + 'T00:00:00').getDay()];
+              return (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ fontSize: 10, color: C.text2, whiteSpace: 'nowrap' }}>{wd}</span>
+                  <I size={12} style={{ color: kind === 'sun' ? '#F59E0B' : kind === 'rain' ? C.sky : C.text3, flexShrink: 0 }} />
+                  <span style={{ fontSize: 10, fontFamily: 'ui-monospace,Menlo,monospace', whiteSpace: 'nowrap' }}>{d.hi}°/{d.lo}°</span>
                 </div>
-              ))}
-            </div>
-          ) : <span style={{ fontSize: 10, color: C.text3 }}>{t('fxOff')}</span>}
-        </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+        <TrendingUp size={13} style={{ color: C.text3, flexShrink: 0 }} />
+        {fx && fx.length > 0 ? (
+          <div style={{ fontSize: 9.5, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', lineHeight: 1.35 }}>
+            {fx.map((x) => (
+              <div key={x.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: x.code === 'USD' ? 700 : 400, color: x.code === 'USD' ? C.text : C.text3, whiteSpace: 'nowrap' }}>
+                {x.code} {Number(x.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                {x.pct != null && <span style={{ color: x.pct < 0 ? C.rose : C.green, fontWeight: 700 }}>{x.pct < 0 ? '▼' : '▲'}{Math.abs(x.pct).toFixed(1)}%</span>}
+              </div>
+            ))}
+          </div>
+        ) : <span style={{ fontSize: 9.5, color: C.text3, whiteSpace: 'nowrap' }}>{t('fxOff')}</span>}
       </div>
     </div>
   );
@@ -2623,9 +2621,12 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
   const [addingGrocery, setAddingGrocery] = useState(false); const [groceryText, setGroceryText] = useState('');
+  const [agendaDate, setAgendaDate] = useState(today); // navegação de dia só no card "Compromissos do dia" — o resto da tela continua em "hoje" de verdade
 
-  // só o que ainda vai rolar hoje — o que já passou não é mais "hoje", já é histórico
-  const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task' && (!i.time || i.time >= hm)).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 6);
+  const isAgendaToday = agendaDate === today;
+  // no dia de hoje só o que ainda vai rolar (o que já passou não é mais "hoje"); em outro
+  // dia mostra o dia inteiro, já que "passado"/"futuro" só faz sentido em relação a agora
+  const agendaItems = items.filter((i) => i.date === agendaDate && i.status !== 'done' && i.type !== 'task' && (!isAgendaToday || !i.time || i.time >= hm)).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 8);
   const savedNewsLinks = new Set(items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news').map((i) => i.meta.link).filter(Boolean));
   const openTasksSrc = [...items.filter((i) => i.status !== 'done' && i.type === 'task' && !String(i.id).startsWith('tt_')), ...ttItems.filter((i) => i.status !== 'done')];
   const filteredTasks = openTasksSrc.filter(WIDE_TASK_FILTERS.find((f) => f[0] === taskFilter)[2]).slice(0, 6);
@@ -2656,10 +2657,23 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
-          <WideCard title={lang === 'pt' ? 'Compromissos de hoje' : "Today's schedule"} action={lang === 'pt' ? 'Ver calendário' : 'See calendar'} onAction={() => goScreen('calendar')}>
-            {todayItems.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : (
+          <div style={{ ...card, padding: 18, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13, flexWrap: 'wrap', rowGap: 8 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Compromissos do dia' : "Day's schedule"}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: C.bg2, borderRadius: 9, padding: 2 }}>
+                  <button onClick={() => setAgendaDate((d) => addDays(d, -1))} title={lang === 'pt' ? 'Dia anterior' : 'Previous day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronLeft size={14} /></button>
+                  <button onClick={() => setAgendaDate(today)} disabled={isAgendaToday} style={{ background: isAgendaToday ? 'transparent' : C.surface, border: 'none', color: isAgendaToday ? C.text3 : C.accent, cursor: isAgendaToday ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 600, padding: '5px 9px', borderRadius: 7, whiteSpace: 'nowrap' }}>
+                    {isAgendaToday ? (lang === 'pt' ? 'Hoje' : 'Today') : `${WD[lang][new Date(agendaDate + 'T00:00:00').getDay()]} ${Number(agendaDate.slice(8, 10))}`}
+                  </button>
+                  <button onClick={() => setAgendaDate((d) => addDays(d, 1))} title={lang === 'pt' ? 'Próximo dia' : 'Next day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronRight size={14} /></button>
+                </div>
+                <button onClick={() => goScreen('calendar')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Ver calendário' : 'See calendar'}</button>
+              </div>
+            </div>
+            {agendaItems.length === 0 ? <Empty icon={Sun} text={isAgendaToday ? t('nothingToday') : (lang === 'pt' ? 'Nada marcado nesse dia.' : 'Nothing planned that day.')} /> : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {todayItems.map((i) => (
+                {agendaItems.map((i) => (
                   <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
                     <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
@@ -2674,7 +2688,7 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
                 ))}
               </div>
             )}
-          </WideCard>
+          </div>
 
           <WideCard title={lang === 'pt' ? 'Principais tarefas' : 'Top tasks'} action={t('seeAll')} onAction={() => goModule('tasks')}>
             <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
@@ -2706,11 +2720,11 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
                   const isKid = i.domain === 'kids';
                   const initial = isKid && i.person ? i.person.trim()[0].toUpperCase() : null;
                   return (
-                    <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>
+                    <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginTop: 1 }}>
                         {initial || <Home size={13} />}
                       </div>
-                      <div style={{ flex: 1, fontSize: 12.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div>
+                      <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.4, minWidth: 0, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}>{i.title}</div>
                     </div>
                   );
                 })}
@@ -2798,11 +2812,12 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             <div style={{ padding: 8, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Sem notícias agora.' : 'No news.'}</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {news.slice(0, 4).map((n, i) => {
+              {news.slice(0, 10).map((n, i, arr) => {
                 const src = (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
                 const saved = savedNewsLinks.has(n.link);
+                const last = i === arr.length - 1;
                 return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: i < 3 ? `1px solid ${C.borderSoft}` : 'none', paddingBottom: i < 3 ? 12 : 0 }}>
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: last ? 'none' : `1px solid ${C.borderSoft}`, paddingBottom: last ? 0 : 12 }}>
                     <div onClick={goNews} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                       <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{n.title}</div>
                       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div>
@@ -7826,7 +7841,7 @@ function App() {
   };
 
   return (
-    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: wide ? (xwide ? 1440 : 1080) : 480, margin: '0 auto', position: 'relative', paddingBottom: wide ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)', display: wide ? 'flex' : 'block', gap: wide ? 0 : undefined, alignItems: 'flex-start' }}>
+    <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: wide ? (xwide ? 1920 : 1180) : 480, margin: '0 auto', position: 'relative', paddingBottom: wide ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)', display: wide ? 'flex' : 'block', gap: wide ? 0 : undefined, alignItems: 'flex-start' }}>
       {wide && (
         <div style={{ width: xwide ? 250 : 226, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: `1px solid ${C.borderSoft}`, padding: '18px 12px', display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '2px 8px 0' }}>
@@ -7894,7 +7909,7 @@ function App() {
           </div>
         </div>
       )}
-      <div style={{ flex: 1, minWidth: 0, maxWidth: wide ? (xwide ? 1020 : 720) : undefined, margin: wide ? '0 auto' : undefined, width: '100%' }}>
+      <div style={{ flex: 1, minWidth: 0, maxWidth: wide ? (xwide ? 1660 : 940) : undefined, margin: wide ? '0 auto' : undefined, width: '100%' }}>
       {!wide && (
       <div style={{ height: refreshing ? 44 : pull, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: pullRef.current.active ? 'none' : 'height .2s', color: C.text3 }}>
         {(refreshing || pull > 10) && <div style={{ display: 'flex', gap: 7, alignItems: 'center', fontSize: 12 }}><RefreshCw size={15} className={refreshing ? 'spin' : ''} style={{ transform: refreshing ? 'none' : `rotate(${pull * 4}deg)` }} />{refreshing ? t('refreshing') : (pull > 55 ? t('releaseRefresh') : t('pullRefresh'))}</div>}
