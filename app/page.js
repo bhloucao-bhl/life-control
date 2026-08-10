@@ -9,6 +9,7 @@ import { StatusBar, Style as StatusBarStyle } from '@capacitor/status-bar';
 import { Network } from '@capacitor/network';
 import { App as CapApp } from '@capacitor/app';
 import { BiometricAuth, BiometryType } from '@aparajita/capacitor-biometric-auth';
+import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 
 /* ============================================================
    Recursos nativos (iOS): tudo aqui é seguro de chamar mesmo
@@ -6768,6 +6769,72 @@ function AppLockSetting({ settings, setSettings, lang }) {
     </div>
   );
 }
+/** Registra o token do device no backend (chamado ao ligar e no refresh do token do Firebase). */
+async function registerPushToken() {
+  const { token } = await FirebaseMessaging.getToken();
+  if (token) await authFetch('/api/push/register', { method: 'POST', body: JSON.stringify({ token, platform: Capacitor.getPlatform() }) });
+  return token;
+}
+
+function PushNotificationsSetting({ lang }) {
+  const [status, setStatus] = useState(null); // 'granted' | 'denied' | 'prompt' | null (carregando)
+  const [busy, setBusy] = useState(false);
+  const [testMsg, setTestMsg] = useState('');
+
+  useEffect(() => {
+    if (!isNative()) return;
+    FirebaseMessaging.checkPermissions().then((r) => setStatus(r.receive)).catch(() => setStatus('prompt'));
+    const sub = FirebaseMessaging.addListener('tokenReceived', () => { registerPushToken().catch(() => {}); });
+    return () => { sub.then((h) => h.remove()).catch(() => {}); };
+  }, []);
+
+  if (!isNative() || !status) return null;
+
+  const enable = async () => {
+    setBusy(true); setTestMsg('');
+    try {
+      const perm = await FirebaseMessaging.requestPermissions();
+      setStatus(perm.receive);
+      if (perm.receive === 'granted') await registerPushToken();
+    } catch (e) { setTestMsg(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  const sendTest = async () => {
+    setBusy(true); setTestMsg('');
+    try {
+      const r = await authFetch('/api/push/test', { method: 'POST' });
+      const j = await r.json();
+      setTestMsg(j.error ? j.error : (lang === 'pt' ? 'Enviada — deve chegar em instantes.' : 'Sent — should arrive shortly.'));
+    } catch (e) { setTestMsg(String(e.message || e)); }
+    setBusy(false);
+  };
+
+  const on = status === 'granted';
+  return (
+    <div style={{ ...card, padding: '12px 14px', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Bell size={17} style={{ color: on ? C.accent : C.text3, flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{lang === 'pt' ? 'Notificações' : 'Notifications'}</div>
+          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>
+            {status === 'granted' ? (lang === 'pt' ? 'Ativadas neste aparelho' : 'Enabled on this device')
+              : status === 'denied' ? (lang === 'pt' ? 'Bloqueadas — ative em Ajustes do iOS' : 'Blocked — enable in iOS Settings')
+              : (lang === 'pt' ? 'Avise sobre compromissos, tarefas e mais' : 'Get notified about events, tasks and more')}
+          </div>
+        </div>
+        {!on && status !== 'denied' && <Btn kind="soft" onClick={enable} disabled={busy} style={{ padding: '6px 12px', fontSize: 12 }}>{busy ? '…' : (lang === 'pt' ? 'Ativar' : 'Enable')}</Btn>}
+      </div>
+      {on && (
+        <button onClick={sendTest} disabled={busy} style={{ marginTop: 10, width: '100%', padding: '8px', borderRadius: 10, background: 'transparent', border: `1px solid ${C.border}`, color: C.text2, fontSize: 12, cursor: 'pointer' }}>
+          {busy ? '…' : (lang === 'pt' ? 'Mandar notificação de teste' : 'Send test notification')}
+        </button>
+      )}
+      {testMsg && <div style={{ fontSize: 11, color: C.text3, marginTop: 6 }}>{testMsg}</div>}
+    </div>
+  );
+}
+
 function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme, applyTheme, onClose }) {
   const [name, setName] = useState(settings.name);
   const dock = settings.dock || DEFAULT_DOCK;
@@ -6782,6 +6849,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
       </ResponsiveGrid>
       <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
       <AppLockSetting settings={settings} setSettings={setSettings} lang={lang} />
+      <PushNotificationsSetting lang={lang} />
       <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{t('editDock')}</div>
       <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
       <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 16 }}>
@@ -6823,7 +6891,10 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
         catch (err) { alert('Erro: ' + err.message); }
         e.target.value = '';
       }} />
-      <Btn kind="ghost" onClick={async () => { await supabase.auth.signOut(); window.location.reload(); }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{lang === 'pt' ? 'Sair da conta' : 'Sign out'}</Btn>
+      <Btn kind="ghost" onClick={async () => {
+        if (isNative()) { try { const { token } = await FirebaseMessaging.getToken(); if (token) await authFetch('/api/push/register', { method: 'DELETE', body: JSON.stringify({ token }) }); } catch (e) {} }
+        await supabase.auth.signOut(); window.location.reload();
+      }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{lang === 'pt' ? 'Sair da conta' : 'Sign out'}</Btn>
       <Btn kind="danger" onClick={() => { if (confirm(t('clearConfirm'))) { setItems([]); persistSeeded(); onClose(); } }} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Trash2 size={15} />{t('clearData')}</Btn>
       {!hasStore() && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 14, textAlign: 'center' }}>{t('noPersist')}</div>}
       <div style={{ fontSize: 10.5, color: C.text3, marginTop: 16, textAlign: 'center', opacity: 0.7 }}>{APP_VERSION}</div>
