@@ -500,7 +500,7 @@ import {
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
   MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, Sparkle, GripVertical,
-  Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint
+  Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint, Footprints
 } from 'lucide-react';
 
 /* ---------------- palette (BHL Core — Deep Space) ---------------- */
@@ -2434,10 +2434,12 @@ function WeatherBarWide({ lang, t }) {
   const [cityLabel, setCityLabel] = useState(null); // null = localização automática
   const [pickerOpen, setPickerOpen] = useState(false);
   const [cq, setCq] = useState(''); const [copts, setCopts] = useState([]); const [csearching, setCsearching] = useState(false);
+  const coordsRef = useRef({ lat: null, lon: null }); // última localização usada (auto ou escolhida) — reusada no auto-refresh
   const load = (lat, lon) => {
+    coordsRef.current = { lat, lon };
     setLiveLoading(true);
     const q = lat != null ? `?lat=${lat}&lon=${lon}` : '';
-    fetch('/api/live' + q).then((r) => r.json()).then((j) => { setLive(j); setLiveLoading(false); }).catch(() => setLiveLoading(false));
+    fetch('/api/live' + q).then((r) => r.json()).then((j) => { setLive(j); setLiveLoading(false); }).catch(() => { setLive((p) => p || { weather: null, fx: null }); setLiveLoading(false); });
   };
   useEffect(() => {
     if (typeof window !== 'undefined' && window.__lccGeo) { load(window.__lccGeo.lat, window.__lccGeo.lon); return; }
@@ -2451,6 +2453,11 @@ function WeatherBarWide({ lang, t }) {
         { timeout: 4000, maximumAge: 1800000 }
       );
     } else load(null, null);
+  }, []);
+  // atualiza clima/câmbio sozinho a cada 10min, na mesma localização em uso (auto ou escolhida)
+  useEffect(() => {
+    const id = setInterval(() => load(coordsRef.current.lat, coordsRef.current.lon), 10 * 60 * 1000);
+    return () => clearInterval(id);
   }, []);
   const searchCity = (text) => {
     setCq(text);
@@ -2468,20 +2475,45 @@ function WeatherBarWide({ lang, t }) {
     setCityLabel(null); setPickerOpen(false); setCq(''); setCopts([]);
     if (typeof window !== 'undefined' && window.__lccGeo) load(window.__lccGeo.lat, window.__lccGeo.lon); else load(null, null);
   };
+  const CityPicker = () => (
+    <div style={{ position: 'relative' }}>
+      <button onClick={() => setPickerOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 3, border: 'none', background: 'transparent', padding: 0, marginTop: 2, cursor: 'pointer', color: C.accent }}>
+        <MapPin size={10} style={{ color: C.accent }} />
+        <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{cityLabel || (lang === 'pt' ? 'Minha localização' : 'My location')}</span>
+        <ChevronRight size={9} style={{ color: C.accent, transform: pickerOpen ? 'rotate(90deg)' : 'none' }} />
+      </button>
+      {pickerOpen && (
+        <>
+          <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
+          <div style={{ position: 'absolute', top: 24, left: 0, width: 240, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.3)', padding: 10, zIndex: 30 }}>
+            <input autoFocus value={cq} onChange={(e) => searchCity(e.target.value)} placeholder={lang === 'pt' ? 'Buscar cidade…' : 'Search city…'} style={{ ...inputStyle, marginBottom: 8, fontSize: 12, padding: '7px 10px' }} />
+            {cityLabel && <button onClick={useMyLocation} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, padding: '4px 2px 8px', display: 'flex', gap: 5, alignItems: 'center' }}><MapPin size={11} />{lang === 'pt' ? 'Usar minha localização' : 'Use my location'}</button>}
+            {csearching && <div style={{ fontSize: 11.5, color: C.text3, padding: '4px 2px' }}>{t('thinking')}</div>}
+            <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 180, overflowY: 'auto' }}>
+              {copts.map((c, i) => (
+                <div key={i} onMouseDown={() => pickCity(c)} style={{ fontSize: 12, color: C.text2, padding: '7px 8px', borderRadius: 7, cursor: 'pointer' }}>{[c.name, c.admin1, c.country].filter(Boolean).join(', ')}</div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
   const wx = live && live.weather;
   const fx = live && live.fx;
-  if (!wx) {
+  // ainda não terminou a 1ª carga: barra compacta de "carregando", sem esconder nada permanente
+  if (!live && liveLoading) {
     return (
       <div style={{ ...card, flex: 1, minWidth: 340, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10, color: C.text3 }}>
-        {liveLoading ? <Loader2 size={16} className="spin" /> : <CloudSun size={16} />}
-        <span style={{ fontSize: 12.5 }}>{liveLoading ? t('thinking') : t('weatherOff')}</span>
+        <Loader2 size={16} className="spin" />
+        <span style={{ fontSize: 12.5 }}>{t('thinking')}</span>
       </div>
     );
   }
-  const now = wmo(wx.code, lang);
-  const NowIcon = wxIcon(now.kind);
-  const nowColor = now.kind === 'sun' ? '#F59E0B' : now.kind === 'rain' ? C.sky : C.text2;
-  const pts = (wx.hours || []).filter((_, i) => i % 2 === 0).slice(0, 8);
+  const now = wx && wmo(wx.code, lang);
+  const NowIcon = now ? wxIcon(now.kind) : CloudSun;
+  const nowColor = now ? (now.kind === 'sun' ? '#F59E0B' : now.kind === 'rain' ? C.sky : C.text2) : C.text3;
+  const pts = wx ? (wx.hours || []).filter((_, i) => i % 2 === 0).slice(0, 8) : [];
   const peakRain = pts.reduce((best, h) => ((h.rain || 0) > (best && best.rain || 0) ? h : best), null);
   return (
     <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 10, gap: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: card.boxShadow, padding: '14px 20px', flex: 1, minWidth: 560 }}>
@@ -2489,35 +2521,23 @@ function WeatherBarWide({ lang, t }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 'none' }}>
           <NowIcon size={24} style={{ color: nowColor }} />
           <div>
-            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', whiteSpace: 'nowrap' }}>{wx.temp}°C</div>
-            <div style={{ fontSize: 10.5, color: C.text3, whiteSpace: 'nowrap' }}>{now.label}</div>
-            <div style={{ position: 'relative' }}>
-              <button onClick={() => setPickerOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 3, border: 'none', background: 'transparent', padding: 0, marginTop: 2, cursor: 'pointer', color: C.accent }}>
-                <MapPin size={10} style={{ color: C.accent }} />
-                <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{cityLabel || (lang === 'pt' ? 'Minha localização' : 'My location')}</span>
-                <ChevronRight size={9} style={{ color: C.accent, transform: pickerOpen ? 'rotate(90deg)' : 'none' }} />
-              </button>
-              {pickerOpen && (
-                <>
-                  <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
-                  <div style={{ position: 'absolute', top: 24, left: 0, width: 240, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.3)', padding: 10, zIndex: 30 }}>
-                    <input autoFocus value={cq} onChange={(e) => searchCity(e.target.value)} placeholder={lang === 'pt' ? 'Buscar cidade…' : 'Search city…'} style={{ ...inputStyle, marginBottom: 8, fontSize: 12, padding: '7px 10px' }} />
-                    {cityLabel && <button onClick={useMyLocation} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, padding: '4px 2px 8px', display: 'flex', gap: 5, alignItems: 'center' }}><MapPin size={11} />{lang === 'pt' ? 'Usar minha localização' : 'Use my location'}</button>}
-                    {csearching && <div style={{ fontSize: 11.5, color: C.text3, padding: '4px 2px' }}>{t('thinking')}</div>}
-                    <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 180, overflowY: 'auto' }}>
-                      {copts.map((c, i) => (
-                        <div key={i} onMouseDown={() => pickCity(c)} style={{ fontSize: 12, color: C.text2, padding: '7px 8px', borderRadius: 7, cursor: 'pointer' }}>{[c.name, c.admin1, c.country].filter(Boolean).join(', ')}</div>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            {wx ? (
+              <>
+                <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', whiteSpace: 'nowrap' }}>{wx.temp}°C</div>
+                <div style={{ fontSize: 10.5, color: C.text3, whiteSpace: 'nowrap' }}>{now.label}</div>
+              </>
+            ) : (
+              <div style={{ fontSize: 11.5, color: C.text3, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+                {t('weatherOff')}
+                <button onClick={() => load(coordsRef.current.lat, coordsRef.current.lon)} title={lang === 'pt' ? 'Tentar de novo' : 'Retry'} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', display: 'flex', padding: 0 }}><RefreshCw size={11} className={liveLoading ? 'spin' : ''} /></button>
+              </div>
+            )}
+            <CityPicker />
           </div>
         </div>
         <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
         <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
-          {pts.length > 1 ? <HourlyWxChart points={pts} /> : <div style={{ fontSize: 11, color: C.text3 }}>{t('weatherOff')}</div>}
+          {pts.length > 1 ? <HourlyWxChart points={pts} /> : <div style={{ fontSize: 11, color: C.text3 }}>{lang === 'pt' ? 'Sem previsão agora.' : 'No forecast right now.'}</div>}
         </div>
       </div>
       <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
@@ -2531,62 +2551,82 @@ function WeatherBarWide({ lang, t }) {
             <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
           </>
         )}
-        <div style={{ display: 'flex', gap: 12, flex: 'none' }}>
-          {(wx.days || []).slice(1, 3).map((d, i) => {
-            const kind = wmo(d.code, lang).kind; const I = wxIcon(kind);
-            const wd = WD[lang][new Date(d.date + 'T00:00:00').getDay()];
-            return (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                <span style={{ fontSize: 10.5, color: C.text2 }}>{wd}</span>
-                <I size={13} style={{ color: kind === 'sun' ? '#F59E0B' : kind === 'rain' ? C.sky : C.text3 }} />
-                <span style={{ fontSize: 10.5, fontFamily: 'ui-monospace,Menlo,monospace', whiteSpace: 'nowrap' }}>{d.hi}°/{d.lo}°</span>
-              </div>
-            );
-          })}
-        </div>
-        {fx && fx.length > 0 && (
+        {wx && (wx.days || []).length > 1 && (
           <>
-            <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
-              <TrendingUp size={14} style={{ color: C.text3 }} />
-              <div style={{ fontSize: 10, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', lineHeight: 1.4 }}>
-                {fx.map((x) => (
-                  <div key={x.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: x.code === 'USD' ? 700 : 400, color: x.code === 'USD' ? C.text : C.text3 }}>
-                    {x.code} {Number(x.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    {x.pct != null && <span style={{ color: x.pct < 0 ? C.rose : C.green, fontWeight: 700 }}>{x.pct < 0 ? '▼' : '▲'}{Math.abs(x.pct).toFixed(1)}%</span>}
+            <div style={{ display: 'flex', gap: 12, flex: 'none' }}>
+              {wx.days.slice(1, 3).map((d, i) => {
+                const kind = wmo(d.code, lang).kind; const I = wxIcon(kind);
+                const wd = WD[lang][new Date(d.date + 'T00:00:00').getDay()];
+                return (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ fontSize: 10.5, color: C.text2 }}>{wd}</span>
+                    <I size={13} style={{ color: kind === 'sun' ? '#F59E0B' : kind === 'rain' ? C.sky : C.text3 }} />
+                    <span style={{ fontSize: 10.5, fontFamily: 'ui-monospace,Menlo,monospace', whiteSpace: 'nowrap' }}>{d.hi}°/{d.lo}°</span>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
+            <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
           </>
         )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+          <TrendingUp size={14} style={{ color: C.text3 }} />
+          {fx && fx.length > 0 ? (
+            <div style={{ fontSize: 10, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', lineHeight: 1.4 }}>
+              {fx.map((x) => (
+                <div key={x.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: x.code === 'USD' ? 700 : 400, color: x.code === 'USD' ? C.text : C.text3 }}>
+                  {x.code} {Number(x.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {x.pct != null && <span style={{ color: x.pct < 0 ? C.rose : C.green, fontWeight: 700 }}>{x.pct < 0 ? '▼' : '▲'}{Math.abs(x.pct).toFixed(1)}%</span>}
+                </div>
+              ))}
+            </div>
+          ) : <span style={{ fontSize: 10, color: C.text3 }}>{t('fxOff')}</span>}
+        </div>
       </div>
     </div>
   );
 }
-function HealthRingWide({ score, sleep, steps, lang, t, onClick }) {
-  const v = score == null ? 0 : Math.max(0, Math.min(100, score));
+function MiniRing({ label, value, color }) {
+  const v = value == null ? 0 : Math.max(0, Math.min(100, value));
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', padding: 0, cursor: onClick ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left', fontFamily: 'inherit' }}>
-      <div style={{ width: 56, height: 56, borderRadius: '50%', background: score == null ? C.surface2 : `conic-gradient(${C.rose} ${v * 3.6}deg, ${C.surface2} 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
-        <div style={{ width: 42, height: 42, borderRadius: '50%', background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: score == null ? C.text3 : C.text }}>{score == null ? '–' : score}</div>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+      <div style={{ width: 52, height: 52, borderRadius: '50%', background: value == null ? C.surface2 : `conic-gradient(${color} ${v * 3.6}deg, ${C.surface2} 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+        <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: value == null ? C.text3 : C.text }}>{value == null ? '–' : value}</div>
         </div>
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.text3, marginBottom: 4 }}><span>{t('sleepScore')}</span><span style={{ color: C.text, fontFamily: 'ui-monospace,Menlo,monospace' }}>{sleep == null ? '–' : sleep}</span></div>
-        {steps != null && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.text3 }}><span>{t('steps')}</span><span style={{ color: C.text, fontFamily: 'ui-monospace,Menlo,monospace' }}>{steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span></div>}
+      <span style={{ fontSize: 11, color: C.text2, textAlign: 'center', whiteSpace: 'nowrap' }}>{label}</span>
+    </div>
+  );
+}
+// Saúde da Hoje wide: dois anéis (prontidão + sono, igual ao par que o app do celular já
+// mostra) mais passos — que a Oura já manda no daily_activity, só não estava sendo lido.
+function HealthRingWide({ readiness, sleep, steps, lang, t, onClick }) {
+  return (
+    <button onClick={onClick} style={{ background: 'none', border: 'none', padding: 0, cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', textAlign: 'left', fontFamily: 'inherit' }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <MiniRing label={t('readiness')} value={readiness} color={C.rose} />
+        <MiniRing label={t('sleepScore')} value={sleep} color={C.violet} />
       </div>
+      {steps != null && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 10 }}>
+          <Footprints size={14} style={{ color: C.text3 }} />
+          <span style={{ fontSize: 12.5, color: C.text2 }}>{t('steps')}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text }}>{steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span>
+        </div>
+      )}
     </button>
   );
 }
-function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem }) {
-  const today = todayISO(); const w = health[today] || {};
+function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews }) {
+  const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
   const [addingGrocery, setAddingGrocery] = useState(false); const [groceryText, setGroceryText] = useState('');
 
-  const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 6);
+  // só o que ainda vai rolar hoje — o que já passou não é mais "hoje", já é histórico
+  const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task' && (!i.time || i.time >= hm)).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 6);
+  const savedNewsLinks = new Set(items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news').map((i) => i.meta.link).filter(Boolean));
   const openTasksSrc = [...items.filter((i) => i.status !== 'done' && i.type === 'task' && !String(i.id).startsWith('tt_')), ...ttItems.filter((i) => i.status !== 'done')];
   const filteredTasks = openTasksSrc.filter(WIDE_TASK_FILTERS.find((f) => f[0] === taskFilter)[2]).slice(0, 6);
   const houseTasks = items.filter((i) => i.domain === 'home' && i.type === 'task' && i.status !== 'done');
@@ -2656,7 +2696,7 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
           <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
-            <HealthRingWide score={w.readiness} sleep={w.sleep} steps={w.steps} lang={lang} t={t} onClick={() => goModule('health')} />
+            <HealthRingWide readiness={w.readiness} sleep={w.sleep} steps={w.steps} lang={lang} t={t} onClick={() => goModule('health')} />
           </WideCard>
 
           <WideCard title={lang === 'pt' ? 'Casa & Família' : 'Home & Family'} action={t('seeAll')} onAction={() => goModule('house')}>
@@ -2760,10 +2800,16 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {news.slice(0, 4).map((n, i) => {
                 const src = (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
+                const saved = savedNewsLinks.has(n.link);
                 return (
-                  <div key={i} onClick={goNews} style={{ borderBottom: i < 3 ? `1px solid ${C.borderSoft}` : 'none', paddingBottom: i < 3 ? 12 : 0, cursor: 'pointer' }}>
-                    <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{n.title}</div>
-                    <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div>
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: i < 3 ? `1px solid ${C.borderSoft}` : 'none', paddingBottom: i < 3 ? 12 : 0 }}>
+                    <div onClick={goNews} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{n.title}</div>
+                      <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div>
+                    </div>
+                    <button onClick={(e) => { e.stopPropagation(); if (!saved) onSaveNews && onSaveNews(n); }} title={saved ? (lang === 'pt' ? 'Salvo pra ler depois' : 'Saved for later') : (lang === 'pt' ? 'Salvar pra ler depois' : 'Save for later')} style={{ background: 'none', border: 'none', cursor: saved ? 'default' : 'pointer', color: saved ? C.accent : C.text3, display: 'flex', padding: 2, flex: 'none' }}>
+                      <Star size={15} style={{ fill: saved ? C.accent : 'none' }} />
+                    </button>
                   </div>
                 );
               })}
@@ -7569,6 +7615,19 @@ function App() {
     }).catch(() => {});
     return () => { alive = false; };
   }, [ready]);
+  // Hoje (wide) fica aberta parada na tela o dia todo — atualiza sozinha a cada 10min
+  // o que muda com o tempo: saúde (passos), agenda (Google), saldo (itens) e notícias.
+  // Clima/câmbio se atualizam por conta própria dentro da própria barra de clima.
+  useEffect(() => {
+    if (!ready || !wide || active.screen !== 'home') return;
+    const id = setInterval(() => {
+      authFetch('/api/oura').then((r) => r.json()).then((j) => { if (j) { if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); } if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); } }).catch(() => {});
+      authFetch('/api/google?ts=' + Date.now()).then((r) => r.json()).then((j) => { if (!j) return; if (Array.isArray(j.events)) setGEvents(j.events); if (Array.isArray(j.messages)) setGMsgs(j.messages); }).catch(() => {});
+      loadState().then((s) => { if (s.items) setItems(s.items); }).catch(() => {});
+      loadNews(true);
+    }, 10 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [ready, wide, active.screen]);
 
   const saveTimer = useRef();
   useEffect(() => {
@@ -7610,6 +7669,9 @@ function App() {
     if (Array.isArray(j.messages)) setGMsgs(j.messages);
   }).catch(() => {});
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2000); };
+  // "salvar para ler depois" — usado tanto na Notícias quanto na Hoje (wide), pra
+  // aparecer marcado nos dois lugares e permitir ler mesmo depois do feed rodar.
+  const saveNewsItem = (n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); };
   // Avisa se a sincronização de sessão com os widgets falhou (ver syncNativeSession, no topo do
   // arquivo) — sem isso a falha é totalmente silenciosa e só aparece muito depois, no widget.
   useEffect(() => {
@@ -7851,13 +7913,13 @@ function App() {
       )}
       <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
         {active.screen === 'home' && (wide
-          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} />
+          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} />
           : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
         )}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
           savedNews={items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news')}
-          onSaveItem={(n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); }}
+          onSaveItem={saveNewsItem}
           onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
           onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
         {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} openClaude={(q) => setClaudeSeed(q)} goIndicatorsFull={() => setActive({ screen: 'indicatorsFull', module: null })} />}
