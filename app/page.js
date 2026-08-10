@@ -6772,7 +6772,13 @@ function AppLockSetting({ settings, setSettings, lang }) {
 /** Registra o token do device no backend (chamado ao ligar e no refresh do token do Firebase). */
 async function registerPushToken() {
   const { token } = await FirebaseMessaging.getToken();
-  if (token) await authFetch('/api/push/register', { method: 'POST', body: JSON.stringify({ token, platform: Capacitor.getPlatform() }) });
+  if (!token) return null;
+  const res = await authFetch('/api/push/register', { method: 'POST', body: JSON.stringify({ token, platform: Capacitor.getPlatform() }) });
+  if (!res.ok) {
+    let msg = 'Erro ao registrar o device (' + res.status + ').';
+    try { const j = await res.json(); if (j && j.error) msg = j.error; } catch (e) {}
+    throw new Error(msg);
+  }
   return token;
 }
 
