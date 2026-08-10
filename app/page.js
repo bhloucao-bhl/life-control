@@ -551,7 +551,7 @@ const S = {
   dashboard: L('Painel de Controle', 'Dashboard'), dashShort: L('Painel', 'Dashboard'), claude: L('Claude', 'Claude'),
   work: L('Trabalho', 'Work'), purchases: L('Compras', 'Purchases'), tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
   people: L('Contatos', 'Contacts'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'),
-  readiness: L('Prontidão', 'Readiness'), sleepScore: L('Sono', 'Sleep'),
+  readiness: L('Prontidão', 'Readiness'), sleepScore: L('Sono', 'Sleep'), steps: L('Passos', 'Steps'),
   connectOura: L('Conecte o Oura em Ajustes, ou toque para registrar.', 'Connect Oura in Settings, or tap to log.'),
   weather: L('Clima', 'Weather'), weatherSoon: L('Tempo real (open-meteo) na versão no celular.', 'Live weather in the phone version.'),
   news: L('Notícias', 'News'), newsSoon: L('5 principais dos seus temas — entra com o deploy.', 'Top 5 — arrives at deploy.'),
@@ -858,6 +858,13 @@ const DOCKABLE = ['home', 'messages', 'calendar', 'dashboard', 'claude', 'tasks'
 const DEFAULT_DOCK = ['home', 'messages', 'calendar', 'dashboard', 'claude'];
 function navIcon(k) { return SCREEN_ICONS[k] || (moduleByKey(k) ? moduleByKey(k).icon : Circle); }
 function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
+// menu lateral wide (web/iPad paisagem): navegação fixa e sempre expandida, agrupada —
+// "Painel" some daqui (o conteúdo dele entra na Hoje), os módulos passam a ser destinos diretos.
+const WIDE_NAV_GROUPS = [
+  { label: L('Visão geral', 'Overview'), keys: ['home', 'calendar', 'messages', 'claude'] },
+  { label: L('Vida', 'Life'), keys: ['work', 'tasks', 'health', 'house', 'finance', 'kids'] },
+  { label: L('Registros', 'Records'), keys: ['people', 'docs', 'cars', 'travel', 'purchases'] },
+];
 const TUYA_SEED = {
   'eb2a4a8b85c2a8deadb1g8': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'light' },
   'ebce584d586201f762d4ag': { show: true, alias: 'Subwoofer', room: 'Home-office', kind: 'plug' },
@@ -2361,6 +2368,409 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       </div>
       <button onClick={goNews} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', fontSize: 12.5, padding: '8px 2px', display: 'flex', alignItems: 'center', gap: 4 }}>{t('seeAll')}<ChevronRight size={14} /></button>
       {logOpen && !ouraOn && <WellnessLog current={w} lang={lang} t={t} onSave={(v) => setHealth((h) => ({ ...h, [today]: v }))} onClose={() => setLogOpen(false)} />}
+    </div>
+  );
+}
+
+/* ---------------- Today — wide (web / iPad landscape) ----------------
+   Tela "Hoje" própria pra telas largas: mescla o que antes era o Painel
+   (saúde, finanças, próxima viagem) direto na Hoje, num grid de 3 colunas. */
+const WIDE_DOMAIN_COLOR = (domain) => ({ work: C.sky, health: C.rose, home: C.blue, finance: C.green, kids: C.violet, travel: C.teal, shopping: C.accent }[domain] || C.accent);
+const WIDE_DOMAIN_LABEL_KEY = { work: 'fWork', home: 'fHouse', kids: 'fKids', health: 'fHealth', finance: 'finance', travel: 'travel', shopping: 'fShopping' };
+const WIDE_TASK_FILTERS = [
+  ['work', 'fWork', (i) => i.domain === 'work'],
+  ['personal', 'fPersonal', (i) => !['work', 'home', 'kids', 'health'].includes(i.domain)],
+  ['home', 'fHouse', (i) => i.domain === 'home'],
+  ['kids', 'fKids', (i) => i.domain === 'kids'],
+  ['health', 'fHealth', (i) => i.domain === 'health'],
+];
+function WideCard({ title, action, onAction, children, style }) {
+  return (
+    <div style={{ ...card, padding: 18, minWidth: 0, ...style }}>
+      {title && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13 }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{title}</div>
+          {action && <button onClick={onAction} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, whiteSpace: 'nowrap', flexShrink: 0 }}>{action}</button>}
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
+function HourlyWxChart({ points }) {
+  const W = 320, H = 56;
+  const temps = points.map((h) => h.temp).filter((v) => v != null);
+  if (!temps.length) return null;
+  const min = Math.min(...temps), max = Math.max(...temps), span = (max - min) || 1;
+  const n = points.length;
+  const x = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * (W - 12) + 6);
+  const y = (v) => 18 + (1 - (v - min) / span) * 22;
+  const pathPts = points.map((h, i) => [x(i), h.temp != null ? y(h.temp) : null]);
+  const dPath = pathPts.filter((p) => p[1] != null).map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  return (
+    <>
+      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={52} preserveAspectRatio="none" style={{ display: 'block', overflow: 'visible' }}>
+        {points.map((h, i) => {
+          if (h.rain == null || h.rain <= 0) return null;
+          const bh = Math.max(1, (h.rain / 100) * 12);
+          return <rect key={i} x={x(i) - 3} y={49 - bh} width={6} height={bh} rx={1} fill={C.teal} opacity={0.55} />;
+        })}
+        <path d={dPath} fill="none" stroke={C.sky} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        {pathPts.map((p, i) => p[1] != null && <circle key={i} cx={p[0]} cy={p[1]} r={2.6} fill={C.sky} />)}
+        {points.map((h, i) => h.temp != null && <text key={i} x={x(i)} y={Math.max(9, y(h.temp) - 8)} fontSize="9.5" fontWeight="700" textAnchor="middle" fill={C.text} fontFamily="ui-monospace,Menlo,monospace">{h.temp}°</text>)}
+      </svg>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
+        {points.map((h, i) => <span key={i} style={{ fontSize: 10, color: C.text3 }}>{h.h}</span>)}
+      </div>
+    </>
+  );
+}
+// clima + câmbio da barra da Hoje wide: geolocalização automática (com cache em
+// window.__lccGeo, compartilhado com a Hoje do celular) OU busca manual de cidade
+// (geocoding gratuito do open-meteo, mesmo usado em WeatherDetail).
+function WeatherBarWide({ lang, t }) {
+  const [live, setLive] = useState(null);
+  const [liveLoading, setLiveLoading] = useState(true);
+  const [cityLabel, setCityLabel] = useState(null); // null = localização automática
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [cq, setCq] = useState(''); const [copts, setCopts] = useState([]); const [csearching, setCsearching] = useState(false);
+  const load = (lat, lon) => {
+    setLiveLoading(true);
+    const q = lat != null ? `?lat=${lat}&lon=${lon}` : '';
+    fetch('/api/live' + q).then((r) => r.json()).then((j) => { setLive(j); setLiveLoading(false); }).catch(() => setLiveLoading(false));
+  };
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.__lccGeo) { load(window.__lccGeo.lat, window.__lccGeo.lon); return; }
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      let settled = false;
+      const finish = (lat, lon) => { if (settled) return; settled = true; load(lat, lon); };
+      const fallback = setTimeout(() => finish(null, null), 4500);
+      navigator.geolocation.getCurrentPosition(
+        (p) => { clearTimeout(fallback); const lat = p.coords.latitude.toFixed(3), lon = p.coords.longitude.toFixed(3); if (typeof window !== 'undefined') window.__lccGeo = { lat, lon }; finish(lat, lon); },
+        () => { clearTimeout(fallback); finish(null, null); },
+        { timeout: 4000, maximumAge: 1800000 }
+      );
+    } else load(null, null);
+  }, []);
+  const searchCity = (text) => {
+    setCq(text);
+    if (!text || text.trim().length < 3) { setCopts([]); return; }
+    setCsearching(true);
+    fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(text)}&count=6&language=${lang === 'pt' ? 'pt' : 'en'}`)
+      .then((r) => r.json()).then((j) => setCopts(j.results || [])).catch(() => setCopts([])).finally(() => setCsearching(false));
+  };
+  const pickCity = (c) => {
+    setCityLabel([c.name, c.admin1].filter(Boolean).join(', '));
+    setPickerOpen(false); setCq(''); setCopts([]);
+    load(c.latitude, c.longitude);
+  };
+  const useMyLocation = () => {
+    setCityLabel(null); setPickerOpen(false); setCq(''); setCopts([]);
+    if (typeof window !== 'undefined' && window.__lccGeo) load(window.__lccGeo.lat, window.__lccGeo.lon); else load(null, null);
+  };
+  const wx = live && live.weather;
+  const fx = live && live.fx;
+  if (!wx) {
+    return (
+      <div style={{ ...card, flex: 1, minWidth: 340, padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 10, color: C.text3 }}>
+        {liveLoading ? <Loader2 size={16} className="spin" /> : <CloudSun size={16} />}
+        <span style={{ fontSize: 12.5 }}>{liveLoading ? t('thinking') : t('weatherOff')}</span>
+      </div>
+    );
+  }
+  const now = wmo(wx.code, lang);
+  const NowIcon = wxIcon(now.kind);
+  const nowColor = now.kind === 'sun' ? '#F59E0B' : now.kind === 'rain' ? C.sky : C.text2;
+  const pts = (wx.hours || []).filter((_, i) => i % 2 === 0).slice(0, 8);
+  const peakRain = pts.reduce((best, h) => ((h.rain || 0) > (best && best.rain || 0) ? h : best), null);
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', rowGap: 10, gap: 16, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: card.boxShadow, padding: '14px 20px', flex: 1, minWidth: 560 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 340 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, flex: 'none' }}>
+          <NowIcon size={24} style={{ color: nowColor }} />
+          <div>
+            <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', whiteSpace: 'nowrap' }}>{wx.temp}°C</div>
+            <div style={{ fontSize: 10.5, color: C.text3, whiteSpace: 'nowrap' }}>{now.label}</div>
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setPickerOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 3, border: 'none', background: 'transparent', padding: 0, marginTop: 2, cursor: 'pointer', color: C.accent }}>
+                <MapPin size={10} style={{ color: C.accent }} />
+                <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{cityLabel || (lang === 'pt' ? 'Minha localização' : 'My location')}</span>
+                <ChevronRight size={9} style={{ color: C.accent, transform: pickerOpen ? 'rotate(90deg)' : 'none' }} />
+              </button>
+              {pickerOpen && (
+                <>
+                  <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
+                  <div style={{ position: 'absolute', top: 24, left: 0, width: 240, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.3)', padding: 10, zIndex: 30 }}>
+                    <input autoFocus value={cq} onChange={(e) => searchCity(e.target.value)} placeholder={lang === 'pt' ? 'Buscar cidade…' : 'Search city…'} style={{ ...inputStyle, marginBottom: 8, fontSize: 12, padding: '7px 10px' }} />
+                    {cityLabel && <button onClick={useMyLocation} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, padding: '4px 2px 8px', display: 'flex', gap: 5, alignItems: 'center' }}><MapPin size={11} />{lang === 'pt' ? 'Usar minha localização' : 'Use my location'}</button>}
+                    {csearching && <div style={{ fontSize: 11.5, color: C.text3, padding: '4px 2px' }}>{t('thinking')}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', maxHeight: 180, overflowY: 'auto' }}>
+                      {copts.map((c, i) => (
+                        <div key={i} onMouseDown={() => pickCity(c)} style={{ fontSize: 12, color: C.text2, padding: '7px 8px', borderRadius: 7, cursor: 'pointer' }}>{[c.name, c.admin1, c.country].filter(Boolean).join(', ')}</div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, overflow: 'hidden' }}>
+          {pts.length > 1 ? <HourlyWxChart points={pts} /> : <div style={{ fontSize: 11, color: C.text3 }}>{t('weatherOff')}</div>}
+        </div>
+      </div>
+      <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap', rowGap: 8, flex: 'none' }}>
+        {peakRain && peakRain.rain > 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+              <CloudRain size={13} style={{ color: C.sky }} />
+              <div style={{ fontSize: 10, color: C.text3, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'chuva até' : 'rain up to'} <span style={{ color: C.text, fontWeight: 700 }}>{peakRain.rain}%</span> {lang === 'pt' ? 'às' : 'at'} {peakRain.h}</div>
+            </div>
+            <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
+          </>
+        )}
+        <div style={{ display: 'flex', gap: 12, flex: 'none' }}>
+          {(wx.days || []).slice(1, 3).map((d, i) => {
+            const kind = wmo(d.code, lang).kind; const I = wxIcon(kind);
+            const wd = WD[lang][new Date(d.date + 'T00:00:00').getDay()];
+            return (
+              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ fontSize: 10.5, color: C.text2 }}>{wd}</span>
+                <I size={13} style={{ color: kind === 'sun' ? '#F59E0B' : kind === 'rain' ? C.sky : C.text3 }} />
+                <span style={{ fontSize: 10.5, fontFamily: 'ui-monospace,Menlo,monospace', whiteSpace: 'nowrap' }}>{d.hi}°/{d.lo}°</span>
+              </div>
+            );
+          })}
+        </div>
+        {fx && fx.length > 0 && (
+          <>
+            <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 'none' }}>
+              <TrendingUp size={14} style={{ color: C.text3 }} />
+              <div style={{ fontSize: 10, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', lineHeight: 1.4 }}>
+                {fx.map((x) => (
+                  <div key={x.code} style={{ display: 'flex', alignItems: 'center', gap: 4, fontWeight: x.code === 'USD' ? 700 : 400, color: x.code === 'USD' ? C.text : C.text3 }}>
+                    {x.code} {Number(x.value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    {x.pct != null && <span style={{ color: x.pct < 0 ? C.rose : C.green, fontWeight: 700 }}>{x.pct < 0 ? '▼' : '▲'}{Math.abs(x.pct).toFixed(1)}%</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+function HealthRingWide({ score, sleep, steps, lang, t, onClick }) {
+  const v = score == null ? 0 : Math.max(0, Math.min(100, score));
+  return (
+    <button onClick={onClick} style={{ background: 'none', border: 'none', padding: 0, cursor: onClick ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 14, width: '100%', textAlign: 'left', fontFamily: 'inherit' }}>
+      <div style={{ width: 56, height: 56, borderRadius: '50%', background: score == null ? C.surface2 : `conic-gradient(${C.rose} ${v * 3.6}deg, ${C.surface2} 0deg)`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none' }}>
+        <div style={{ width: 42, height: 42, borderRadius: '50%', background: C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: score == null ? C.text3 : C.text }}>{score == null ? '–' : score}</div>
+        </div>
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.text3, marginBottom: 4 }}><span>{t('sleepScore')}</span><span style={{ color: C.text, fontFamily: 'ui-monospace,Menlo,monospace' }}>{sleep == null ? '–' : sleep}</span></div>
+        {steps != null && <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: C.text3 }}><span>{t('steps')}</span><span style={{ color: C.text, fontFamily: 'ui-monospace,Menlo,monospace' }}>{steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span></div>}
+      </div>
+    </button>
+  );
+}
+function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem }) {
+  const today = todayISO(); const w = health[today] || {};
+  const [taskFilter, setTaskFilter] = useState('work');
+  const [financeHidden, setFinanceHidden] = useState(true);
+  const [addingGrocery, setAddingGrocery] = useState(false); const [groceryText, setGroceryText] = useState('');
+
+  const todayItems = items.filter((i) => i.date === today && i.status !== 'done' && i.type !== 'task').sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 6);
+  const openTasksSrc = [...items.filter((i) => i.status !== 'done' && i.type === 'task' && !String(i.id).startsWith('tt_')), ...ttItems.filter((i) => i.status !== 'done')];
+  const filteredTasks = openTasksSrc.filter(WIDE_TASK_FILTERS.find((f) => f[0] === taskFilter)[2]).slice(0, 6);
+  const houseTasks = items.filter((i) => i.domain === 'home' && i.type === 'task' && i.status !== 'done');
+  const kidsTasks = items.filter((i) => i.domain === 'kids' && (i.type === 'task' || i.type === 'event') && i.status !== 'done' && (!i.date || i.date >= today));
+  const familyList = [...kidsTasks, ...houseTasks].sort((a, b) => (b.priority === 1 ? 1 : 0) - (a.priority === 1 ? 1 : 0)).slice(0, 4);
+  const acc = (todayAccountId && items.find((i) => i.id === todayAccountId && i.type === 'account')) || items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
+  const balance = acc ? accountBalance(acc, items) : null;
+  const balCol = balance != null && balance < 0 ? C.rose : C.text;
+  const billsDue = items.filter((i) => i.type === 'bill' && i.status !== 'done' && i.date && i.date <= addDays(today, 5));
+  const trips = items.filter((i) => i.type === 'trip' && i.status !== 'done' && i.date && i.date >= today).sort((a, b) => a.date.localeCompare(b.date));
+  const nextTrip = trips[0];
+  const nextTripDays = nextTrip ? Math.max(0, Math.ceil((new Date(nextTrip.date + 'T00:00:00') - new Date(today + 'T00:00:00')) / 86400000)) : null;
+
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 22, marginBottom: 24, flexWrap: 'wrap', rowGap: 16 }}>
+        <div style={{ flex: 'none' }}>
+          <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: '-.2px', whiteSpace: 'nowrap' }}>{name ? `${greeting()}, ${name}` : greeting()}</div>
+          <div style={{ fontSize: 13.5, color: C.text3, marginTop: 5, whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>{fmtLongPretty(today, lang)} · <LiveClock style={{ fontFamily: 'ui-monospace,SF Mono,Menlo,monospace' }} /></div>
+        </div>
+        <WeatherBarWide lang={lang} t={t} />
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} items={items} onOpen={onOpen} />
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+          <WideCard title={lang === 'pt' ? 'Compromissos de hoje' : "Today's schedule"} action={lang === 'pt' ? 'Ver calendário' : 'See calendar'} onAction={() => goScreen('calendar')}>
+            {todayItems.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                {todayItems.map((i) => (
+                  <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+                    <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
+                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div>
+                        {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6 }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{t(WIDE_DOMAIN_LABEL_KEY[i.domain] || 'fPersonal')} · {t('t_' + i.type)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </WideCard>
+
+          <WideCard title={lang === 'pt' ? 'Principais tarefas' : 'Top tasks'} action={t('seeAll')} onAction={() => goModule('tasks')}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              {WIDE_TASK_FILTERS.map(([key, labelKey]) => <Chip key={key} active={taskFilter === key} onClick={() => setTaskFilter(key)}>{t(labelKey)}</Chip>)}
+            </div>
+            {filteredTasks.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {filteredTasks.map((i) => (
+                  <div key={i.id} onClick={() => toggleTask(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, cursor: 'pointer' }}>
+                    <Circle size={16} style={{ color: C.text3, flex: 'none' }} />
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div>
+                    {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6, flex: 'none' }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </WideCard>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+          <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
+            <HealthRingWide score={w.readiness} sleep={w.sleep} steps={w.steps} lang={lang} t={t} onClick={() => goModule('health')} />
+          </WideCard>
+
+          <WideCard title={lang === 'pt' ? 'Casa & Família' : 'Home & Family'} action={t('seeAll')} onAction={() => goModule('house')}>
+            {familyList.length === 0 ? <Empty icon={Home} text={t('noAttention')} /> : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+                {familyList.map((i) => {
+                  const isKid = i.domain === 'kids';
+                  const initial = isKid && i.person ? i.person.trim()[0].toUpperCase() : null;
+                  return (
+                    <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700 }}>
+                        {initial || <Home size={13} />}
+                      </div>
+                      <div style={{ flex: 1, fontSize: 12.5, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </WideCard>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+          <WideCard>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('finance')}</div>
+              <button onClick={() => setFinanceHidden((v) => !v)} title={financeHidden ? (lang === 'pt' ? 'Mostrar saldo' : 'Show balance') : (lang === 'pt' ? 'Ocultar saldo' : 'Hide balance')} style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.text3 }}>
+                {financeHidden ? <EyeOff size={13} /> : <Eye size={13} />}
+              </button>
+            </div>
+            <div style={{ fontSize: 26, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', letterSpacing: financeHidden ? 1 : '-.3px', marginBottom: 6, color: financeHidden ? C.text : balCol }}>
+              {financeHidden ? '••••••' : (balance != null ? fmtMoney(balance, lang) : '—')}
+            </div>
+            <div style={{ fontSize: 12, color: C.text3, marginBottom: 12 }}>
+              {billsDue.length > 0 ? `${billsDue.length} ${lang === 'pt' ? 'conta(s) a vencer' : 'bill(s) due'}` : (lang === 'pt' ? 'Nenhuma conta a vencer' : 'No bills due')}
+            </div>
+            <button onClick={() => goModule('finance')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0 }}>{lang === 'pt' ? 'Ver finanças →' : 'See finances →'}</button>
+          </WideCard>
+
+          <WideCard title={lang === 'pt' ? 'Compra da semana' : "This week's shopping"}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {groceryList.map((i) => (
+                <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
+                  <button onClick={() => toggleGroceryItem(i.id)} style={{ width: 18, height: 18, borderRadius: 5, border: i.checked ? 'none' : `1.5px solid ${C.border}`, background: i.checked ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none', padding: 0 }}>
+                    {i.checked && <Check size={11} style={{ color: '#fff' }} />}
+                  </button>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: i.checked ? C.text3 : C.text2, textDecoration: i.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.text}</div>
+                  <button onClick={() => removeGroceryItem(i.id)} style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}><X size={12} /></button>
+                </div>
+              ))}
+              {addingGrocery ? (
+                <form onSubmit={(e) => { e.preventDefault(); addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} style={{ padding: '8px 0' }}>
+                  <input autoFocus value={groceryText} onChange={(e) => setGroceryText(e.target.value)} onBlur={() => { if (groceryText.trim()) addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} placeholder={lang === 'pt' ? 'Novo item…' : 'New item…'} style={{ ...inputStyle, padding: '6px 9px', fontSize: 12.5 }} />
+                </form>
+              ) : (
+                <div onClick={() => setAddingGrocery(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', cursor: 'pointer' }}>
+                  <div style={{ width: 18, height: 18, borderRadius: '50%', border: `1.5px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: C.text3 }}><Plus size={10} /></div>
+                  <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Adicionar item à lista' : 'Add item to list'}</div>
+                </div>
+              )}
+            </div>
+          </WideCard>
+
+          {nextTrip && (
+            <WideCard>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('nextTrip')}</div>
+                <div style={{ fontSize: 19, fontWeight: 700 }}>{(nextTrip.meta && nextTrip.meta.destination) || nextTrip.title}</div>
+                <div style={{ fontSize: 12, color: C.text3 }}>{nextTripDays === 0 ? t('ongoing') : `${lang === 'pt' ? 'em' : 'in'} ${nextTripDays} ${t('daysWord')}`}</div>
+                <button onClick={() => goModule('travel')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0, textAlign: 'left' }}>{lang === 'pt' ? 'Ver viagem →' : 'See trip →'}</button>
+              </div>
+            </WideCard>
+          )}
+        </div>
+      </div>
+
+      <div style={{ marginTop: 20 }}>
+        <WideCard>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', rowGap: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>{t('news')}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                {[
+                  { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="#fff"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg> },
+                  { name: 'X', url: 'https://x.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="12" height="12" fill="#fff"><path d="M18.9 1.2h3.7l-8 9.1L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9zM17.6 20.6h2L6.5 3.3H4.3z"/></svg> },
+                  { name: 'Instagram', url: 'https://instagram.com', bg: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none"/></svg> },
+                  { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="12" height="12" fill="#fff"><path d="M16.6 5.82a4.28 4.28 0 01-1-2.66V3h-3.09v12.4a2.59 2.59 0 01-2.59 2.5 2.59 2.59 0 01-2.59-2.59 2.59 2.59 0 013.2-2.51V9.66a5.66 5.66 0 00-.61-.03A5.68 5.68 0 003.6 15.3a5.68 5.68 0 0011.36 0V8.99a7.31 7.31 0 004.28 1.37V7.27a4.28 4.28 0 01-2.64-1.45z"/></svg> },
+                ].map((s) => (
+                  <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 28, height: 28, borderRadius: 8, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}` }}>{s.svg}</a>
+                ))}
+              </div>
+              <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
+              <button onClick={goNews} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12 }}>{t('seeAll')}</button>
+            </div>
+          </div>
+          {news === null ? (
+            <div style={{ padding: 8, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
+          ) : news.length === 0 ? (
+            <div style={{ padding: 8, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Sem notícias agora.' : 'No news.'}</div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {news.slice(0, 4).map((n, i) => {
+                const src = (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
+                return (
+                  <div key={i} onClick={goNews} style={{ borderBottom: i < 3 ? `1px solid ${C.borderSoft}` : 'none', paddingBottom: i < 3 ? 12 : 0, cursor: 'pointer' }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{n.title}</div>
+                    <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </WideCard>
+      </div>
     </div>
   );
 }
@@ -7022,7 +7432,6 @@ function App() {
   // breakpoint extra pra telas grandes (ex: iPad Pro 13" em paisagem, ~1366pt) — usa mais a largura disponível
   // em vez de ficar com a mesma largura de conteúdo de um iPad Mini/Air em paisagem.
   const [xwide, setXwide] = useState(false);
-  const [sideDash, setSideDash] = useState(false);
   const [sideEditing, setSideEditing] = useState(false);
   useEffect(() => {
     const check = () => {
@@ -7127,13 +7536,6 @@ function App() {
     catch (e) { return false; }
     finally { setTimeout(() => { authBusyRef.current = false; wasBackgroundedRef.current = false; }, 1200); }
   };
-  // mesma ordem usada no Painel (arrastar pra reordenar lá reflete aqui no menu lateral)
-  const orderedModules = [...MODULES].sort((a, b) => {
-    const ord = settings.moduleOrder || [];
-    const ia = ord.indexOf(a.key), ib = ord.indexOf(b.key);
-    return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
-  });
-
   useEffect(() => { (async () => {
     const s = await loadState();
     if (s.items && s.items.length) setItems(s.items);
@@ -7287,6 +7689,10 @@ function App() {
     return { ...s, weights: list.slice(-120), profile: { ...(s.profile || {}), weight: kg } };
   });
   const setDevices = (fn) => setSettings((s) => ({ ...s, devices: typeof fn === 'function' ? fn(s.devices || DEFAULT_DEVICES) : fn }));
+  // lista de compras da semana (widget da Hoje, versão wide) — vive em settings, igual pesos/dieta
+  const toggleGroceryItem = (id) => setSettings((s) => ({ ...s, groceryList: (s.groceryList || []).map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)) }));
+  const removeGroceryItem = (id) => setSettings((s) => ({ ...s, groceryList: (s.groceryList || []).filter((i) => i.id !== id) }));
+  const addGroceryItem = (text) => { if (!text || !text.trim()) return; setSettings((s) => ({ ...s, groceryList: [...(s.groceryList || []), { id: uid(), text: text.trim(), checked: false }] })); };
   const setTuyaPrefs = (fn) => setSettings((s) => ({ ...s, tuyaPrefs: typeof fn === 'function' ? fn(s.tuyaPrefs || {}) : fn }));
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
   const openAccount = (accId) => { if (typeof window !== 'undefined') window.__lccOpenAccount = accId; setActive({ screen: 'dashboard', module: moduleByKey('finance') }); };
@@ -7360,14 +7766,18 @@ function App() {
   return (
     <div onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.bg, color: C.text, minHeight: '100vh', fontFamily: 'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif', maxWidth: wide ? (xwide ? 1440 : 1080) : 480, margin: '0 auto', position: 'relative', paddingBottom: wide ? 24 : 'calc(env(safe-area-inset-bottom, 0px) + 84px)', display: wide ? 'flex' : 'block', gap: wide ? 0 : undefined, alignItems: 'flex-start' }}>
       {wide && (
-        <div style={{ width: xwide ? 232 : 210, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: `1px solid ${C.borderSoft}`, padding: '20px 12px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 10px 16px' }}>
-            <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', fontSize: 16, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8, padding: 0 }}><span style={{ width: 9, height: 9, borderRadius: 2, background: C.accent }} />Life in Control</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+        <div style={{ width: xwide ? 250 : 226, flexShrink: 0, position: 'sticky', top: 0, height: '100vh', borderRight: `1px solid ${C.borderSoft}`, padding: '18px 12px', display: 'flex', flexDirection: 'column', gap: 18, overflowY: 'auto' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '2px 8px 0' }}>
+            <button onClick={() => setActive({ screen: 'home', module: null })} style={{ background: 'none', border: 'none', color: C.text, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10, padding: 0 }}>
+              <span style={{ width: 28, height: 28, borderRadius: 8, background: C.accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: 13, flexShrink: 0 }}>L</span>
+              <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: '.1px' }}>Life Control</span>
+            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <NotifBell />
-              <button onClick={() => setSideEditing((v) => !v)} title={lang === 'pt' ? 'Ordenar menu' : 'Reorder menu'} style={{ background: 'none', border: 'none', color: sideEditing ? C.accent : C.text3, cursor: 'pointer', display: 'flex', padding: 4 }}>{sideEditing ? <Check size={15} /> : <Pencil size={13} />}</button>
+              <button onClick={() => setSideEditing((v) => !v)} title={lang === 'pt' ? 'Ordenar atalhos do celular' : 'Reorder phone shortcuts'} style={{ background: 'none', border: 'none', color: sideEditing ? C.accent : C.text3, cursor: 'pointer', display: 'flex', padding: 4 }}>{sideEditing ? <Check size={15} /> : <Pencil size={13} />}</button>
             </div>
           </div>
+
           {sideEditing ? (
             <DragReorderList orderKeys={dock} onReorder={(next) => setSettings((s) => ({ ...s, dock: next }))} renderItem={(k, idx, handleProps) => {
               const Ic = navIcon(k);
@@ -7378,38 +7788,47 @@ function App() {
                 </div>
               );
             }} />
-          ) : dock.map((k) => {
-            const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
-            const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
-            if (k === 'dashboard') {
-              return (
-                <div key={k}>
-                  <button onClick={() => setSideDash((v) => !v)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
-                    <Ic size={19} />{navLabel(k, t)}<ChevronRight size={15} style={{ marginLeft: 'auto', transform: sideDash ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }} />
-                  </button>
-                  {sideDash && (
-                    <div style={{ marginLeft: 12, marginTop: 2, borderLeft: `1px solid ${C.borderSoft}`, paddingLeft: 6 }}>
-                      {orderedModules.map((mo) => {
-                        const on = active.screen === 'dashboard' && active.module && active.module.key === mo.key;
-                        const MIc = mo.icon;
-                        return <button key={mo.key} onClick={() => setActive({ screen: 'dashboard', module: mo })} style={{ background: on ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: on ? C.accent : C.text3, display: 'flex', alignItems: 'center', gap: 9, padding: '7px 11px', borderRadius: 9, fontSize: 12.5, fontWeight: on ? 600 : 400, width: '100%', textAlign: 'left' }}>
-                          <MIc size={15} />{t(mo.key)}
-                        </button>;
-                      })}
-                    </div>
-                  )}
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 18, flex: 1, minHeight: 0, overflowY: 'auto' }}>
+              {WIDE_NAV_GROUPS.map((g) => (
+                <div key={g.label.pt}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', color: C.text3, textTransform: 'uppercase', padding: '0 10px 7px' }}>{lang === 'pt' ? g.label.pt : g.label.en}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {g.keys.map((k) => {
+                      const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
+                      const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
+                      return (
+                        <button key={k} onClick={() => navTo(k)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '9px 10px', borderRadius: 9, fontSize: 13.5, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
+                          <Ic size={17} />{navLabel(k, t)}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              );
-            }
-            return <button key={k} onClick={() => navTo(k)} style={{ background: activeK ? C.accentSoft : 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text2, display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 11, fontSize: 14, fontWeight: activeK ? 600 : 500, width: '100%', textAlign: 'left' }}>
-              <Ic size={19} />{navLabel(k, t)}
-            </button>;
-          })}
-          <div style={{ flex: 1 }} />
-          <button onClick={() => setShowCapture(true)} style={{ background: C.accent, color: '#FFFFFF', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600, width: '100%', marginBottom: 8 }}><Plus size={18} />{lang === 'pt' ? 'Capturar' : 'Capture'}</button>
+              ))}
+            </div>
+          )}
+
+          <div style={{ flex: sideEditing ? 1 : undefined }} />
+
+          <button onClick={() => setShowCapture(true)} style={{ background: C.accent, color: '#FFFFFF', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px', borderRadius: 12, fontSize: 14, fontWeight: 600, width: '100%' }}><Plus size={18} />{lang === 'pt' ? 'Capturar' : 'Capture'}</button>
           <div style={{ display: 'flex', gap: 6 }}>
             <button onClick={() => setSettings((s) => ({ ...s, lang: s.lang === 'pt' ? 'en' : 'pt' }))} style={{ ...card, flex: 1, padding: '8px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}><Globe size={13} />{lang.toUpperCase()}</button>
             <button onClick={() => setShowSettings(true)} style={{ ...card, flex: 1, padding: '8px', color: C.text2, cursor: 'pointer', display: 'flex', justifyContent: 'center' }}><Cog size={15} /></button>
+          </div>
+
+          <div style={{ borderTop: `1px solid ${C.borderSoft}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button onClick={() => applyTheme(theme === 'light' ? 'dark' : 'light')} style={{ display: 'flex', alignItems: 'center', gap: 11, width: '100%', padding: '9px 10px', borderRadius: 10, border: 'none', background: 'transparent', color: C.text2, fontSize: 13, cursor: 'pointer', textAlign: 'left', fontFamily: 'inherit' }}>
+              {theme === 'light' ? <Sun size={17} /> : <Moon size={17} />}
+              <span>{theme === 'light' ? (lang === 'pt' ? 'Modo escuro' : 'Dark mode') : (lang === 'pt' ? 'Modo claro' : 'Light mode')}</span>
+            </button>
+            <button onClick={() => setShowSettings(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: 'inherit' }}>
+              <span style={{ width: 30, height: 30, borderRadius: '50%', background: C.surface2, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12.5, fontWeight: 700, color: C.text2, flexShrink: 0 }}>{(settings.name || (lang === 'pt' ? 'V' : 'Y'))[0].toUpperCase()}</span>
+              <span style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{settings.name || (lang === 'pt' ? 'Você' : 'You')}</div>
+                <div style={{ fontSize: 11, color: C.text3 }}>{lang === 'pt' ? 'Ajustes' : 'Settings'}</div>
+              </span>
+            </button>
           </div>
         </div>
       )}
@@ -7431,7 +7850,10 @@ function App() {
       </div>
       )}
       <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
-        {active.screen === 'home' && <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />}
+        {active.screen === 'home' && (wide
+          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} />
+          : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
+        )}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
           savedNews={items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news')}
