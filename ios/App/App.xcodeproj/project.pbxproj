@@ -36,6 +36,7 @@
 		AB55F4967474308EE4004442 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF897D7A1455C2A99163D0AF /* AppIntents.framework */; };
 		B9512A1BB9DF15FFA5F21EEA /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */; };
 		C3AB1944A3CBA4191DBE75EA /* WidgetUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */; };
+		C987043C6C6EFF7FFA86D52B /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */; };
 		CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863B924633F127D12E497D8B /* PurchasesWidget.swift */; };
 		E38DAFDB428EEBA73C80694D /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */; };
 		F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A20782818C62B8359506B99 /* FinanceWidget.swift */; };
@@ -98,6 +99,7 @@
 		BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetAPI.swift; sourceTree = "<group>"; };
 		C36D5570D246468E76B5B210 /* AppGroup.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
 		E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
+		E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EF897D7A1455C2A99163D0AF /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
 		FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LifeControlWidgets.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -180,6 +182,7 @@
 				89F7B142245FFF8482C3B32A /* App.entitlements */,
 				76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */,
 				E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */,
+				E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -350,6 +353,7 @@
 				50379B232058CBB4000EE86E /* capacitor.config.json in Resources */,
 				504EC30D1FED79650016851F /* Main.storyboard in Resources */,
 				2FAD9763203C412B000D30F8 /* config.xml in Resources */,
+				C987043C6C6EFF7FFA86D52B /* GoogleService-Info.plist in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
