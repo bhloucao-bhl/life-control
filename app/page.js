@@ -6783,7 +6783,13 @@ function PushNotificationsSetting({ lang }) {
 
   useEffect(() => {
     if (!isNative()) return;
-    FirebaseMessaging.checkPermissions().then((r) => setStatus(r.receive)).catch(() => setStatus('prompt'));
+    FirebaseMessaging.checkPermissions().then((r) => {
+      setStatus(r.receive);
+      // a permissão do iOS já pode estar concedida de uma tentativa anterior (ex: o
+      // registro falhou por outro motivo) — nesse caso o botão "Ativar" não aparece
+      // de novo, então tenta registrar o token sozinho sempre que a tela abrir.
+      if (r.receive === 'granted') registerPushToken().catch((e) => setTestMsg(String(e.message || e)));
+    }).catch(() => setStatus('prompt'));
     const sub = FirebaseMessaging.addListener('tokenReceived', () => { registerPushToken().catch(() => {}); });
     return () => { sub.then((h) => h.remove()).catch(() => {}); };
   }, []);
