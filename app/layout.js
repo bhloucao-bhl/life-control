@@ -1,3 +1,6 @@
+import 'react-grid-layout/css/styles.css';
+import 'react-resizable/css/styles.css';
+
 const SF_STACK = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif";
 
 export const metadata = {
@@ -35,6 +38,9 @@ export default function RootLayout({ children }) {
           .lcc-tip { background: rgba(10,14,23,.85) !important; border: none !important; color: #F59E0B !important; font-size: 10px !important; font-weight: 700 !important; box-shadow: none !important; padding: 1px 5px !important; }
           .lcc-tip::before { display: none !important; }
           .leaflet-container { font-family: ${SF_STACK} !important; background: #0A0E17 !important; }
+          .react-grid-placeholder { background: rgba(37,99,235,0.28) !important; border-radius: 16px !important; }
+          .react-grid-item.react-grid-item-resizing { opacity: 0.9; }
+          .react-resizable-handle { z-index: 5; }
         `}</style>
       </head>
       <body>{children}</body>

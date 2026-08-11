@@ -110,7 +110,7 @@ export async function GET(req) {
     const nowIso = `${nowD}T${nowT.slice(0, 2)}`;
     let idx = (hh.time || []).findIndex((x) => String(x).slice(0, 13) >= nowIso);
     if (idx < 0) idx = 0;
-    const hours = (hh.time || []).slice(idx, idx + 12).map((x, k) => ({
+    const hours = (hh.time || []).slice(idx, idx + 24).map((x, k) => ({
       h: String(x).slice(11, 16),
       rain: hh.precipitation_probability ? hh.precipitation_probability[idx + k] : null,
       temp: hh.temperature_2m ? Math.round(hh.temperature_2m[idx + k]) : null,
