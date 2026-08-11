@@ -1726,26 +1726,26 @@ function DraftReview({ drafts, lang, t, onDone, onCancel }) {
     </div>
   );
 }
-function MealConfirmModal({ draft, lang, t, onSave, onCancel }) {
-  const [title, setTitle] = useState(draft.title);
-  const [calories, setCalories] = useState(draft.calories);
-  const [proteinG, setProteinG] = useState(draft.proteinG);
-  const [carbsG, setCarbsG] = useState(draft.carbsG);
-  const [fatG, setFatG] = useState(draft.fatG);
+function MealConfirmModal({ draft, lang, t, onSave, onCancel, manual }) {
+  const [title, setTitle] = useState(draft.title || '');
+  const [calories, setCalories] = useState(draft.calories || 0);
+  const [proteinG, setProteinG] = useState(draft.proteinG || 0);
+  const [carbsG, setCarbsG] = useState(draft.carbsG || 0);
+  const [fatG, setFatG] = useState(draft.fatG || 0);
   return (
     <Modal onClose={onCancel}>
-      <SheetHead title={lang === 'pt' ? 'Registrar refeição' : 'Log meal'} onClose={onCancel} icon={Flame} />
-      <Field label={lang === 'pt' ? 'O que é' : 'What is it'}><input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyleBig} /></Field>
+      <SheetHead title={manual ? (lang === 'pt' ? 'Adicionar refeição' : 'Add meal') : (lang === 'pt' ? 'Registrar refeição' : 'Log meal')} onClose={onCancel} icon={Flame} />
+      <Field label={lang === 'pt' ? 'O que é' : 'What is it'}><input autoFocus={manual} value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyleBig} /></Field>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label={lang === 'pt' ? 'Calorias (kcal)' : 'Calories (kcal)'}><input type="number" value={calories} onChange={(e) => setCalories(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
         <Field label={lang === 'pt' ? 'Proteína (g)' : 'Protein (g)'}><input type="number" value={proteinG} onChange={(e) => setProteinG(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
         <Field label={lang === 'pt' ? 'Carboidrato (g)' : 'Carbs (g)'}><input type="number" value={carbsG} onChange={(e) => setCarbsG(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
         <Field label={lang === 'pt' ? 'Gordura (g)' : 'Fat (g)'}><input type="number" value={fatG} onChange={(e) => setFatG(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
       </div>
-      <div style={{ fontSize: 11, color: C.text3, margin: '4px 0 16px', lineHeight: 1.4 }}>{lang === 'pt' ? 'Estimativa da IA a partir da foto — ajuste se quiser antes de salvar.' : "AI estimate from the photo — adjust if you'd like before saving."}</div>
-      <div style={{ display: 'flex', gap: 8 }}>
+      {!manual && <div style={{ fontSize: 11, color: C.text3, margin: '4px 0 16px', lineHeight: 1.4 }}>{lang === 'pt' ? 'Estimativa da IA a partir da foto — ajuste se quiser antes de salvar.' : "AI estimate from the photo — adjust if you'd like before saving."}</div>}
+      <div style={{ display: 'flex', gap: 8, marginTop: manual ? 16 : 0 }}>
         <Btn kind="ghost" onClick={onCancel} style={{ flex: 1 }}>{t('cancel')}</Btn>
-        <Btn onClick={() => onSave({ title, calories, proteinG, carbsG, fatG })} style={{ flex: 1.4 }}>{t('save')}</Btn>
+        <Btn onClick={() => onSave({ title: title || (lang === 'pt' ? 'Refeição' : 'Meal'), calories, proteinG, carbsG, fatG })} disabled={manual && !title.trim()} style={{ flex: 1.4 }}>{t('save')}</Btn>
       </div>
     </Modal>
   );
@@ -2537,7 +2537,7 @@ function WeatherBarWide({ lang, t }) {
         </div>
       </div>
       <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
-      <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 220px', minWidth: 200, maxWidth: 340 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 200 }}>
         {pts.length > 1 ? <HourlyWxChart points={pts} /> : <div style={{ fontSize: 11, color: C.text3, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Sem previsão agora.' : 'No forecast right now.'}</div>}
       </div>
       {peakRain && peakRain.rain > 0 && (
@@ -2599,29 +2599,46 @@ function MiniRing({ label, value, color }) {
 }
 // Saúde da Hoje wide: dois anéis (prontidão + sono, igual ao par que o app do celular já
 // mostra) mais passos — que a Oura já manda no daily_activity, só não estava sendo lido.
-function HealthRingWide({ readiness, sleep, steps, lang, t, onClick }) {
+function HealthRingWide({ readiness, sleep, steps, caloriesToday, calorieGoal, onAddMeal, lang, t, onClick }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', padding: 0, cursor: onClick ? 'pointer' : 'default', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', textAlign: 'left', fontFamily: 'inherit' }}>
-      <div style={{ display: 'flex', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%' }}>
+      <div onClick={onClick} style={{ display: 'flex', gap: 8, cursor: onClick ? 'pointer' : 'default' }}>
         <MiniRing label={t('readiness')} value={readiness} color={C.rose} />
         <MiniRing label={t('sleepScore')} value={sleep} color={C.violet} />
       </div>
       {steps != null && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 10 }}>
-          <Footprints size={14} style={{ color: C.text3 }} />
-          <span style={{ fontSize: 12.5, color: C.text2 }}>{t('steps')}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text }}>{steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span>
+        <div onClick={onClick} style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 9, cursor: onClick ? 'pointer' : 'default' }}>
+          <Footprints size={13} style={{ color: C.text3 }} />
+          <span style={{ fontSize: 12, color: C.text2 }}>{t('steps')}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text }}>{steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span>
         </div>
       )}
-    </button>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, borderTop: `1px solid ${C.borderSoft}`, paddingTop: 9 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+          <Flame size={13} style={{ color: C.rose, flex: 'none' }} />
+          <span style={{ fontSize: 12, color: C.text2, whiteSpace: 'nowrap' }}>
+            <span style={{ fontWeight: 700, color: C.text, fontFamily: 'ui-monospace,Menlo,monospace' }}>{caloriesToday}</span>
+            <span style={{ color: C.text3 }}>{calorieGoal ? ` / ${calorieGoal}` : ''} kcal</span>
+          </span>
+        </div>
+        <button onClick={onAddMeal} title={lang === 'pt' ? 'Adicionar refeição' : 'Add meal'} style={{ width: 22, height: 22, borderRadius: 7, border: `1px solid ${C.border}`, background: 'transparent', color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}><Plus size={12} /></button>
+      </div>
+    </div>
   );
 }
-function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews }) {
+function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal }) {
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
   const [addingGrocery, setAddingGrocery] = useState(false); const [groceryText, setGroceryText] = useState('');
   const [agendaDate, setAgendaDate] = useState(today); // navegação de dia só no card "Compromissos do dia" — o resto da tela continua em "hoje" de verdade
+  const [addingMeal, setAddingMeal] = useState(false);
+  const caloriesToday = items.filter((i) => i.type === 'meal' && i.date === today).reduce((a, b) => a + Number((b.meta && b.meta.calories) || 0), 0);
+  const saveManualMeal = (m) => {
+    addItem({ type: 'meal', domain: 'health', title: m.title, date: today, time: nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, source: 'manual' } });
+    flash(lang === 'pt' ? 'Refeição registrada ✓' : 'Meal logged ✓');
+    setAddingMeal(false);
+  };
 
   const isAgendaToday = agendaDate === today;
   // no dia de hoje só o que ainda vai rolar (o que já passou não é mais "hoje"); em outro
@@ -2655,85 +2672,45 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
         <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} items={items} onOpen={onOpen} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,2fr) minmax(0,1fr) minmax(0,1fr)', gap: 20, alignItems: 'start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
-          <div style={{ ...card, padding: 18, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13, flexWrap: 'wrap', rowGap: 8 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Compromissos do dia' : "Day's schedule"}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: C.bg2, borderRadius: 9, padding: 2 }}>
-                  <button onClick={() => setAgendaDate((d) => addDays(d, -1))} title={lang === 'pt' ? 'Dia anterior' : 'Previous day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronLeft size={14} /></button>
-                  <button onClick={() => setAgendaDate(today)} disabled={isAgendaToday} style={{ background: isAgendaToday ? 'transparent' : C.surface, border: 'none', color: isAgendaToday ? C.text3 : C.accent, cursor: isAgendaToday ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 600, padding: '5px 9px', borderRadius: 7, whiteSpace: 'nowrap' }}>
-                    {isAgendaToday ? (lang === 'pt' ? 'Hoje' : 'Today') : `${WD[lang][new Date(agendaDate + 'T00:00:00').getDay()]} ${Number(agendaDate.slice(8, 10))}`}
-                  </button>
-                  <button onClick={() => setAgendaDate((d) => addDays(d, 1))} title={lang === 'pt' ? 'Próximo dia' : 'Next day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronRight size={14} /></button>
-                </div>
-                <button onClick={() => goScreen('calendar')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Ver calendário' : 'See calendar'}</button>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,3fr) minmax(0,2fr)', gap: 20, alignItems: 'start' }}>
+        <div style={{ ...card, padding: 18, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13, flexWrap: 'wrap', rowGap: 8 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Compromissos do dia' : "Day's schedule"}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: C.bg2, borderRadius: 9, padding: 2 }}>
+                <button onClick={() => setAgendaDate((d) => addDays(d, -1))} title={lang === 'pt' ? 'Dia anterior' : 'Previous day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronLeft size={14} /></button>
+                <button onClick={() => setAgendaDate(today)} disabled={isAgendaToday} style={{ background: isAgendaToday ? 'transparent' : C.surface, border: 'none', color: isAgendaToday ? C.text3 : C.accent, cursor: isAgendaToday ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 600, padding: '5px 9px', borderRadius: 7, whiteSpace: 'nowrap' }}>
+                  {isAgendaToday ? (lang === 'pt' ? 'Hoje' : 'Today') : `${WD[lang][new Date(agendaDate + 'T00:00:00').getDay()]} ${Number(agendaDate.slice(8, 10))}`}
+                </button>
+                <button onClick={() => setAgendaDate((d) => addDays(d, 1))} title={lang === 'pt' ? 'Próximo dia' : 'Next day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronRight size={14} /></button>
               </div>
+              <button onClick={() => goScreen('calendar')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Ver calendário' : 'See calendar'}</button>
             </div>
-            {agendaItems.length === 0 ? <Empty icon={Sun} text={isAgendaToday ? t('nothingToday') : (lang === 'pt' ? 'Nada marcado nesse dia.' : 'Nothing planned that day.')} /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                {agendaItems.map((i) => (
-                  <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
-                    <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                        <div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div>
-                        {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6 }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
-                      </div>
-                      <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{t(WIDE_DOMAIN_LABEL_KEY[i.domain] || 'fPersonal')} · {t('t_' + i.type)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-
-          <WideCard title={lang === 'pt' ? 'Principais tarefas' : 'Top tasks'} action={t('seeAll')} onAction={() => goModule('tasks')}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-              {WIDE_TASK_FILTERS.map(([key, labelKey]) => <Chip key={key} active={taskFilter === key} onClick={() => setTaskFilter(key)}>{t(labelKey)}</Chip>)}
-            </div>
-            {filteredTasks.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {filteredTasks.map((i) => (
-                  <div key={i.id} onClick={() => toggleTask(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, cursor: 'pointer' }}>
-                    <Circle size={16} style={{ color: C.text3, flex: 'none' }} />
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div>
-                    {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6, flex: 'none' }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </WideCard>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
-          <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
-            <HealthRingWide readiness={w.readiness} sleep={w.sleep} steps={w.steps} lang={lang} t={t} onClick={() => goModule('health')} />
-          </WideCard>
-
-          <WideCard title={lang === 'pt' ? 'Casa & Família' : 'Home & Family'} action={t('seeAll')} onAction={() => goModule('house')}>
-            {familyList.length === 0 ? <Empty icon={Home} text={t('noAttention')} /> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-                {familyList.map((i) => {
-                  const isKid = i.domain === 'kids';
-                  const initial = isKid && i.person ? i.person.trim()[0].toUpperCase() : null;
-                  return (
-                    <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginTop: 1 }}>
-                        {initial || <Home size={13} />}
-                      </div>
-                      <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.4, minWidth: 0, display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}>{i.title}</div>
+          {agendaItems.length === 0 ? <Empty icon={Sun} text={isAgendaToday ? t('nothingToday') : (lang === 'pt' ? 'Nada marcado nesse dia.' : 'Nothing planned that day.')} /> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {agendaItems.map((i) => (
+                <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+                  <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
+                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div>
+                      {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6 }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </WideCard>
+                    <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{t(WIDE_DOMAIN_LABEL_KEY[i.domain] || 'fPersonal')} · {t('t_' + i.type)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, minWidth: 0 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, minWidth: 0, alignItems: 'start' }}>
+          <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
+            <HealthRingWide readiness={w.readiness} sleep={w.sleep} steps={w.steps} caloriesToday={caloriesToday} calorieGoal={calorieGoal} onAddMeal={() => setAddingMeal(true)} lang={lang} t={t} onClick={() => goModule('health')} />
+          </WideCard>
+
           <WideCard>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
               <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('finance')}</div>
@@ -2741,10 +2718,10 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
                 {financeHidden ? <EyeOff size={13} /> : <Eye size={13} />}
               </button>
             </div>
-            <div style={{ fontSize: 26, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', letterSpacing: financeHidden ? 1 : '-.3px', marginBottom: 6, color: financeHidden ? C.text : balCol }}>
+            <div style={{ fontSize: 24, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', letterSpacing: financeHidden ? 1 : '-.3px', marginBottom: 6, color: financeHidden ? C.text : balCol }}>
               {financeHidden ? '••••••' : (balance != null ? fmtMoney(balance, lang) : '—')}
             </div>
-            <div style={{ fontSize: 12, color: C.text3, marginBottom: 12 }}>
+            <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 12 }}>
               {billsDue.length > 0 ? `${billsDue.length} ${lang === 'pt' ? 'conta(s) a vencer' : 'bill(s) due'}` : (lang === 'pt' ? 'Nenhuma conta a vencer' : 'No bills due')}
             </div>
             <button onClick={() => goModule('finance')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0 }}>{lang === 'pt' ? 'Ver finanças →' : 'See finances →'}</button>
@@ -2774,18 +2751,63 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </div>
           </WideCard>
 
-          {nextTrip && (
-            <WideCard>
+          <WideCard>
+            {nextTrip ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('nextTrip')}</div>
-                <div style={{ fontSize: 19, fontWeight: 700 }}>{(nextTrip.meta && nextTrip.meta.destination) || nextTrip.title}</div>
+                <div style={{ fontSize: 18, fontWeight: 700 }}>{(nextTrip.meta && nextTrip.meta.destination) || nextTrip.title}</div>
                 <div style={{ fontSize: 12, color: C.text3 }}>{nextTripDays === 0 ? t('ongoing') : `${lang === 'pt' ? 'em' : 'in'} ${nextTripDays} ${t('daysWord')}`}</div>
                 <button onClick={() => goModule('travel')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0, textAlign: 'left' }}>{lang === 'pt' ? 'Ver viagem →' : 'See trip →'}</button>
               </div>
-            </WideCard>
-          )}
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('nextTrip')}</div>
+                <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Nada marcado.' : 'Nothing planned.'}</div>
+              </div>
+            )}
+          </WideCard>
         </div>
       </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 20, alignItems: 'start' }}>
+        <WideCard title={lang === 'pt' ? 'Principais tarefas' : 'Top tasks'} action={t('seeAll')} onAction={() => goModule('tasks')}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            {WIDE_TASK_FILTERS.map(([key, labelKey]) => <Chip key={key} active={taskFilter === key} onClick={() => setTaskFilter(key)}>{t(labelKey)}</Chip>)}
+          </div>
+          {filteredTasks.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {filteredTasks.map((i) => (
+                <div key={i.id} onClick={() => toggleTask(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, cursor: 'pointer' }}>
+                  <Circle size={16} style={{ color: C.text3, flex: 'none' }} />
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div>
+                  {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6, flex: 'none' }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </WideCard>
+
+        <WideCard title={lang === 'pt' ? 'Casa & Família' : 'Home & Family'} action={t('seeAll')} onAction={() => goModule('house')}>
+          {familyList.length === 0 ? <Empty icon={Home} text={t('noAttention')} /> : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {familyList.map((i) => {
+                const isKid = i.domain === 'kids';
+                const initial = isKid && i.person ? i.person.trim()[0].toUpperCase() : null;
+                return (
+                  <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                    <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginTop: 1 }}>
+                      {initial || <Home size={13} />}
+                    </div>
+                    <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.4, minWidth: 0 }}>{i.title}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </WideCard>
+      </div>
+
+      {addingMeal && <MealConfirmModal manual draft={{}} lang={lang} t={t} onSave={saveManualMeal} onCancel={() => setAddingMeal(false)} />}
 
       <div style={{ marginTop: 20 }}>
         <WideCard>
@@ -7928,7 +7950,7 @@ function App() {
       )}
       <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
         {active.screen === 'home' && (wide
-          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} />
+          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} />
           : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
         )}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
