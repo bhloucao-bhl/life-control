@@ -2757,7 +2757,9 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
   const filteredTasks = openTasksSrc.filter(WIDE_TASK_FILTERS.find((f) => f[0] === taskFilter)[2]).slice(0, 6);
   const houseTasks = items.filter((i) => i.domain === 'home' && i.type === 'task' && i.status !== 'done');
   const kidsTasks = items.filter((i) => i.domain === 'kids' && (i.type === 'task' || i.type === 'event') && i.status !== 'done' && (!i.date || i.date >= today));
-  const familyList = [...kidsTasks, ...houseTasks].sort((a, b) => (b.priority === 1 ? 1 : 0) - (a.priority === 1 ? 1 : 0)).slice(0, 4);
+  // sem limite curto fixo: o card já rola (overflowY:auto no WideCard), então redimensionar
+  // o widget maior no grid personalizável naturalmente mostra mais itens sem precisar rolar.
+  const familyList = [...kidsTasks, ...houseTasks].sort((a, b) => (b.priority === 1 ? 1 : 0) - (a.priority === 1 ? 1 : 0)).slice(0, 30);
   const acc = (todayAccountId && items.find((i) => i.id === todayAccountId && i.type === 'account')) || items.find((i) => i.type === 'account' && /alelo/i.test(i.title || ''));
   const balance = acc ? accountBalance(acc, items) : null;
   const balCol = balance != null && balance < 0 ? C.rose : C.text;
