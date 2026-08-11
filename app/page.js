@@ -2421,14 +2421,24 @@ function mergeWideLayout(saved) {
   const byId = {}; saved.forEach((it) => { if (it && it.i) byId[it.i] = it; });
   return WIDE_DEFAULT_LAYOUT.map((d) => (byId[d.i] ? { ...d, ...byId[d.i] } : d));
 }
-// alça de arrastar de cada widget do grid personalizável — só aparece no modo de edição,
-// pra não brigar com cliques normais nos botões/links de dentro do card.
-function WidgetShell({ editing, children }) {
+const WIDE_WIDGET_LABELS = {
+  agenda: L('Compromissos do dia', "Day's schedule"), health: L('Saúde', 'Health'), finance: L('Finanças', 'Finance'),
+  grocery: L('Compra da semana', "This week's shopping"), trip: L('Próxima viagem', 'Next trip'),
+  tasks: L('Principais tarefas', 'Top tasks'), family: L('Casa & Família', 'Home & Family'), news: L('Notícias', 'News'),
+};
+// alça de arrastar + botão de ocultar de cada widget do grid personalizável — só aparecem
+// no modo de edição, pra não brigar com cliques normais nos botões/links de dentro do card.
+function WidgetShell({ editing, onHide, lang, children }) {
   return (
     <div style={{ height: '100%', width: '100%', position: 'relative' }}>
       {editing && (
-        <div className="wide-drag-handle" style={{ position: 'absolute', top: 10, right: 10, zIndex: 5, width: 26, height: 26, borderRadius: 7, background: C.surface2, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.text3, cursor: 'grab', boxShadow: '0 2px 6px rgba(0,0,0,.3)' }}>
-          <GripVertical size={14} />
+        <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 5, display: 'flex', gap: 5 }}>
+          <button onClick={onHide} title={lang === 'pt' ? 'Ocultar' : 'Hide'} style={{ width: 26, height: 26, borderRadius: 7, background: C.surface2, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.text3, cursor: 'pointer', boxShadow: '0 2px 6px rgba(0,0,0,.3)' }}>
+            <X size={13} />
+          </button>
+          <div className="wide-drag-handle" style={{ width: 26, height: 26, borderRadius: 7, background: C.surface2, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.text3, cursor: 'grab', boxShadow: '0 2px 6px rgba(0,0,0,.3)' }}>
+            <GripVertical size={14} />
+          </div>
         </div>
       )}
       {children}
@@ -2693,7 +2703,7 @@ function HealthRingWide({ readiness, sleep, steps, caloriesToday, calorieGoal, o
     </div>
   );
 }
-function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal, wideLayout, setWideLayout }) {
+function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal, wideLayout, setWideLayout, wideHidden = [], setWideHidden }) {
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
@@ -2702,6 +2712,11 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
   const [addingMeal, setAddingMeal] = useState(false);
   const [editingLayout, setEditingLayout] = useState(false);
   const layout = mergeWideLayout(wideLayout);
+  const hiddenWidgets = wideHidden;
+  const hiddenSet = new Set(hiddenWidgets);
+  const gridLayout = layout.filter((it) => !hiddenSet.has(it.i));
+  const hideWidget = (id) => setWideHidden([...hiddenWidgets, id]);
+  const showWidget = (id) => setWideHidden(hiddenWidgets.filter((x) => x !== id));
   const caloriesToday = items.filter((i) => i.type === 'meal' && i.date === today).reduce((a, b) => a + Number((b.meta && b.meta.calories) || 0), 0);
   const saveManualMeal = (m) => {
     addItem({ type: 'meal', domain: 'health', title: m.title, date: today, time: nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, source: 'manual' } });
@@ -2733,6 +2748,16 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
         <div style={{ flex: 'none' }}>
           <div style={{ fontSize: 27, fontWeight: 700, letterSpacing: '-.2px', whiteSpace: 'nowrap' }}>{name ? `${greeting()}, ${name}` : greeting()}</div>
           <div style={{ fontSize: 13.5, color: C.text3, marginTop: 5, whiteSpace: 'nowrap', display: 'flex', gap: 6, alignItems: 'center' }}>{fmtLongPretty(today, lang)} · <LiveClock style={{ fontFamily: 'ui-monospace,SF Mono,Menlo,monospace' }} /></div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 7 }}>
+            <button onClick={() => setEditingLayout((v) => !v)} style={{ background: 'none', border: 'none', color: editingLayout ? C.accent : C.text3, cursor: 'pointer', fontSize: 11, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}>
+              {editingLayout ? <Check size={10} /> : <Pencil size={9} />}{editingLayout ? (lang === 'pt' ? 'Concluir' : 'Done') : (lang === 'pt' ? 'Editar layout' : 'Edit layout')}
+            </button>
+            {editingLayout && (
+              <button onClick={() => { setWideLayout(WIDE_DEFAULT_LAYOUT); setWideHidden([]); }} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4, padding: 0 }}>
+                <RefreshCw size={9} />{lang === 'pt' ? 'Restaurar padrão' : 'Reset to default'}
+              </button>
+            )}
+          </div>
         </div>
         <WeatherBarWide lang={lang} t={t} />
       </div>
@@ -2741,23 +2766,24 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
         <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} items={items} onOpen={onOpen} />
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
-        {editingLayout && (
-          <button onClick={() => setWideLayout(WIDE_DEFAULT_LAYOUT)} style={{ ...card, padding: '7px 12px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center' }}>
-            <RefreshCw size={12} />{lang === 'pt' ? 'Restaurar padrão' : 'Reset to default'}
-          </button>
-        )}
-        <button onClick={() => setEditingLayout((v) => !v)} style={{ ...card, padding: '7px 14px', color: editingLayout ? C.accent : C.text2, border: `1px solid ${editingLayout ? C.accent + '55' : C.border}`, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center' }}>
-          {editingLayout ? <Check size={13} /> : <Pencil size={12} />}{editingLayout ? (lang === 'pt' ? 'Concluir' : 'Done') : (lang === 'pt' ? 'Editar layout' : 'Edit layout')}
-        </button>
-      </div>
+      {editingLayout && hiddenWidgets.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
+          <span style={{ fontSize: 11, color: C.text3 }}>{lang === 'pt' ? 'Ocultos:' : 'Hidden:'}</span>
+          {hiddenWidgets.map((id) => (
+            <button key={id} onClick={() => showWidget(id)} style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 999, padding: '4px 10px 4px 12px', color: C.text2, fontSize: 11.5, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {WIDE_WIDGET_LABELS[id] ? (lang === 'pt' ? WIDE_WIDGET_LABELS[id].pt : WIDE_WIDGET_LABELS[id].en) : id}<Plus size={11} />
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* grid personalizável: arrasta pela alcinha (canto superior direito de cada card, só
           aparece editando) e redimensiona pelo canto inferior direito — tamanho/posição salvos
           em settings.wideLayout. Só a barra de clima, a captura e a sidebar ficam fixas, fora daqui. */}
-      <WideGridLayout className="wide-grid" cols={WIDE_GRID_COLS} rowHeight={28} margin={[18, 18]} layout={layout} onLayoutChange={(l) => { if (editingLayout) setWideLayout(l); }} isDraggable={editingLayout} isResizable={editingLayout} draggableHandle=".wide-drag-handle" compactType="vertical" useCSSTransforms>
+      <WideGridLayout className="wide-grid" cols={WIDE_GRID_COLS} rowHeight={28} margin={[18, 18]} layout={gridLayout} onLayoutChange={(l) => { if (editingLayout) setWideLayout(l); }} isDraggable={editingLayout} isResizable={editingLayout} draggableHandle=".wide-drag-handle" compactType="vertical" useCSSTransforms>
+        {!hiddenSet.has('agenda') && (
         <div key="agenda">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('agenda')} lang={lang}>
             <div style={{ ...card, padding: 18, minWidth: 0, height: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13, flexWrap: 'wrap', rowGap: 8 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Compromissos do dia' : "Day's schedule"}</div>
@@ -2792,17 +2818,21 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </div>
           </WidgetShell>
         </div>
+        )}
 
+        {!hiddenSet.has('health') && (
         <div key="health">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('health')} lang={lang}>
             <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
               <HealthRingWide readiness={w.readiness} sleep={w.sleep} steps={w.steps} caloriesToday={caloriesToday} calorieGoal={calorieGoal} onAddMeal={() => setAddingMeal(true)} lang={lang} t={t} onClick={() => goModule('health')} />
             </WideCard>
           </WidgetShell>
         </div>
+        )}
 
+        {!hiddenSet.has('finance') && (
         <div key="finance">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('finance')} lang={lang}>
             <WideCard>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
                 <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('finance')}</div>
@@ -2820,9 +2850,11 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </WideCard>
           </WidgetShell>
         </div>
+        )}
 
+        {!hiddenSet.has('grocery') && (
         <div key="grocery">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('grocery')} lang={lang}>
             <WideCard title={lang === 'pt' ? 'Compra da semana' : "This week's shopping"}>
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 {groceryList.map((i) => (
@@ -2848,9 +2880,11 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </WideCard>
           </WidgetShell>
         </div>
+        )}
 
+        {!hiddenSet.has('trip') && (
         <div key="trip">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('trip')} lang={lang}>
             <WideCard>
               {nextTrip ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -2868,9 +2902,11 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </WideCard>
           </WidgetShell>
         </div>
+        )}
 
+        {!hiddenSet.has('tasks') && (
         <div key="tasks">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('tasks')} lang={lang}>
             <WideCard title={lang === 'pt' ? 'Principais tarefas' : 'Top tasks'} action={t('seeAll')} onAction={() => goModule('tasks')}>
               <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
                 {WIDE_TASK_FILTERS.map(([key, labelKey]) => <Chip key={key} active={taskFilter === key} onClick={() => setTaskFilter(key)}>{t(labelKey)}</Chip>)}
@@ -2889,9 +2925,11 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </WideCard>
           </WidgetShell>
         </div>
+        )}
 
+        {!hiddenSet.has('family') && (
         <div key="family">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('family')} lang={lang}>
             <WideCard title={lang === 'pt' ? 'Casa & Família' : 'Home & Family'} action={t('seeAll')} onAction={() => goModule('house')}>
               {familyList.length === 0 ? <Empty icon={Home} text={t('noAttention')} /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -2912,9 +2950,11 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </WideCard>
           </WidgetShell>
         </div>
+        )}
 
+        {!hiddenSet.has('news') && (
         <div key="news">
-          <WidgetShell editing={editingLayout}>
+          <WidgetShell editing={editingLayout} onHide={() => hideWidget('news')} lang={lang}>
             <WideCard>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', rowGap: 8 }}>
                 <div style={{ fontSize: 15, fontWeight: 700 }}>{t('news')}</div>
@@ -2960,6 +3000,7 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
             </WideCard>
           </WidgetShell>
         </div>
+        )}
       </WideGridLayout>
 
       {addingMeal && <MealConfirmModal manual draft={{}} lang={lang} t={t} onSave={saveManualMeal} onCancel={() => setAddingMeal(false)} />}
@@ -7903,6 +7944,7 @@ function App() {
   const addGroceryItem = (text) => { if (!text || !text.trim()) return; setSettings((s) => ({ ...s, groceryList: [...(s.groceryList || []), { id: uid(), text: text.trim(), checked: false }] })); };
   // layout personalizável da Hoje wide (tamanho/posição de cada card) — persistido igual ao resto de settings
   const setWideLayout = (l) => setSettings((s) => ({ ...s, wideLayout: l }));
+  const setWideHidden = (ids) => setSettings((s) => ({ ...s, wideHidden: ids }));
   const setTuyaPrefs = (fn) => setSettings((s) => ({ ...s, tuyaPrefs: typeof fn === 'function' ? fn(s.tuyaPrefs || {}) : fn }));
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
   const openAccount = (accId) => { if (typeof window !== 'undefined') window.__lccOpenAccount = accId; setActive({ screen: 'dashboard', module: moduleByKey('finance') }); };
@@ -8061,7 +8103,7 @@ function App() {
       )}
       <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
         {active.screen === 'home' && (wide
-          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} wideLayout={settings.wideLayout} setWideLayout={setWideLayout} />
+          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} wideLayout={settings.wideLayout} setWideLayout={setWideLayout} wideHidden={settings.wideHidden || []} setWideHidden={setWideHidden} />
           : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
         )}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
