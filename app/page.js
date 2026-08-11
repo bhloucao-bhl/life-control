@@ -1730,6 +1730,8 @@ function DraftReview({ drafts, lang, t, onDone, onCancel }) {
 }
 function MealConfirmModal({ draft, lang, t, onSave, onCancel, manual }) {
   const [title, setTitle] = useState(draft.title || '');
+  const [time, setTime] = useState(draft.time || nowHM());
+  const [mealType, setMealType] = useState(draft.mealType || guessMealType(draft.time || nowHM()));
   const [calories, setCalories] = useState(draft.calories || 0);
   const [proteinG, setProteinG] = useState(draft.proteinG || 0);
   const [carbsG, setCarbsG] = useState(draft.carbsG || 0);
@@ -1749,9 +1751,21 @@ function MealConfirmModal({ draft, lang, t, onSave, onCancel, manual }) {
       <SheetHead title={manual ? (lang === 'pt' ? 'Adicionar refeição' : 'Add meal') : (lang === 'pt' ? 'Registrar refeição' : 'Log meal')} onClose={onCancel} icon={Flame} />
       <Field label={lang === 'pt' ? 'O que é' : 'What is it'}><input autoFocus={manual} value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyleBig} /></Field>
       {manual && (
-        <Btn kind="soft" onClick={doEstimate} disabled={estimating || !title.trim()} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>
-          {estimating ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}{estimating ? (lang === 'pt' ? 'Consultando...' : 'Estimating...') : (lang === 'pt' ? 'Estimar calorias com IA' : 'Estimate calories with AI')}
-        </Btn>
+        <>
+          <Field label={lang === 'pt' ? 'Horário' : 'Time'}><input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ ...inputStyleBig, colorScheme: _theme === 'light' ? 'light' : 'dark' }} /></Field>
+          <Field label={lang === 'pt' ? 'Tipo de refeição' : 'Meal type'}>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {MEAL_TYPES.map(([mk, ptn, enn, Ic, col]) => (
+                <Chip key={mk} active={mealType === mk} onClick={() => setMealType(mk)} color={col}>
+                  <span style={{ display: 'flex', gap: 5, alignItems: 'center' }}><Ic size={12} />{lang === 'pt' ? ptn : enn}</span>
+                </Chip>
+              ))}
+            </div>
+          </Field>
+          <Btn kind="soft" onClick={doEstimate} disabled={estimating || !title.trim()} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>
+            {estimating ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}{estimating ? (lang === 'pt' ? 'Consultando...' : 'Estimating...') : (lang === 'pt' ? 'Estimar calorias com IA' : 'Estimate calories with AI')}
+          </Btn>
+        </>
       )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label={lang === 'pt' ? 'Calorias (kcal)' : 'Calories (kcal)'}><input type="number" value={calories} onChange={(e) => setCalories(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
@@ -1762,7 +1776,7 @@ function MealConfirmModal({ draft, lang, t, onSave, onCancel, manual }) {
       {!manual && <div style={{ fontSize: 11, color: C.text3, margin: '4px 0 16px', lineHeight: 1.4 }}>{lang === 'pt' ? 'Estimativa da IA a partir da foto — ajuste se quiser antes de salvar.' : "AI estimate from the photo — adjust if you'd like before saving."}</div>}
       <div style={{ display: 'flex', gap: 8, marginTop: manual ? 16 : 0 }}>
         <Btn kind="ghost" onClick={onCancel} style={{ flex: 1 }}>{t('cancel')}</Btn>
-        <Btn onClick={() => onSave({ title: title || (lang === 'pt' ? 'Refeição' : 'Meal'), calories, proteinG, carbsG, fatG })} disabled={manual && !title.trim()} style={{ flex: 1.4 }}>{t('save')}</Btn>
+        <Btn onClick={() => onSave({ title: title || (lang === 'pt' ? 'Refeição' : 'Meal'), time, mealType, calories, proteinG, carbsG, fatG })} disabled={manual && !title.trim()} style={{ flex: 1.4 }}>{t('save')}</Btn>
       </div>
     </Modal>
   );
@@ -2728,15 +2742,16 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
   const showWidget = (id) => setWideHidden(hiddenWidgets.filter((x) => x !== id));
   const caloriesToday = items.filter((i) => i.type === 'meal' && i.date === today).reduce((a, b) => a + Number((b.meta && b.meta.calories) || 0), 0);
   const saveManualMeal = (m) => {
-    addItem({ type: 'meal', domain: 'health', title: m.title, date: today, time: nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, source: 'manual' } });
+    addItem({ type: 'meal', domain: 'health', title: m.title, date: today, time: m.time || nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, mealType: m.mealType, source: 'manual' } });
     flash(lang === 'pt' ? 'Refeição registrada ✓' : 'Meal logged ✓');
     setAddingMeal(false);
   };
 
   const isAgendaToday = agendaDate === today;
   // no dia de hoje só o que ainda vai rolar (o que já passou não é mais "hoje"); em outro
-  // dia mostra o dia inteiro, já que "passado"/"futuro" só faz sentido em relação a agora
-  const agendaItems = items.filter((i) => i.date === agendaDate && i.status !== 'done' && i.type !== 'task' && (!isAgendaToday || !i.time || i.time >= hm)).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 8);
+  // dia mostra o dia inteiro, já que "passado"/"futuro" só faz sentido em relação a agora.
+  // refeição não é compromisso nem tarefa — mesma exclusão que a Hoje do celular já faz.
+  const agendaItems = items.filter((i) => i.date === agendaDate && i.status !== 'done' && i.type !== 'task' && i.type !== 'meal' && i.type !== 'purchase' && !(i.meta && i.meta.purchaseRef) && (!isAgendaToday || !i.time || i.time >= hm)).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 8);
   const savedNewsLinks = new Set(items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news').map((i) => i.meta.link).filter(Boolean));
   const openTasksSrc = [...items.filter((i) => i.status !== 'done' && i.type === 'task' && !String(i.id).startsWith('tt_')), ...ttItems.filter((i) => i.status !== 'done')];
   const filteredTasks = openTasksSrc.filter(WIDE_TASK_FILTERS.find((f) => f[0] === taskFilter)[2]).slice(0, 6);
