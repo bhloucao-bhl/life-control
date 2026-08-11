@@ -10,6 +10,8 @@ import { Network } from '@capacitor/network';
 import { App as CapApp } from '@capacitor/app';
 import { BiometricAuth, BiometryType } from '@aparajita/capacitor-biometric-auth';
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
+import ReactGridLayoutBase, { WidthProvider as RGLWidthProvider } from 'react-grid-layout/legacy';
+const WideGridLayout = RGLWidthProvider(ReactGridLayoutBase);
 
 /* ============================================================
    Recursos nativos (iOS): tudo aqui é seguro de chamar mesmo
@@ -1732,10 +1734,25 @@ function MealConfirmModal({ draft, lang, t, onSave, onCancel, manual }) {
   const [proteinG, setProteinG] = useState(draft.proteinG || 0);
   const [carbsG, setCarbsG] = useState(draft.carbsG || 0);
   const [fatG, setFatG] = useState(draft.fatG || 0);
+  const [estimating, setEstimating] = useState(false);
+  const doEstimate = async () => {
+    if (!title.trim()) return;
+    setEstimating(true);
+    try {
+      const est = await estimateMealFromText(title, lang);
+      setCalories(est.calories); setProteinG(est.proteinG); setCarbsG(est.carbsG); setFatG(est.fatG);
+    } catch (e) {}
+    setEstimating(false);
+  };
   return (
     <Modal onClose={onCancel}>
       <SheetHead title={manual ? (lang === 'pt' ? 'Adicionar refeição' : 'Add meal') : (lang === 'pt' ? 'Registrar refeição' : 'Log meal')} onClose={onCancel} icon={Flame} />
       <Field label={lang === 'pt' ? 'O que é' : 'What is it'}><input autoFocus={manual} value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyleBig} /></Field>
+      {manual && (
+        <Btn kind="soft" onClick={doEstimate} disabled={estimating || !title.trim()} style={{ width: '100%', marginBottom: 14, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}>
+          {estimating ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />}{estimating ? (lang === 'pt' ? 'Consultando...' : 'Estimating...') : (lang === 'pt' ? 'Estimar calorias com IA' : 'Estimate calories with AI')}
+        </Btn>
+      )}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label={lang === 'pt' ? 'Calorias (kcal)' : 'Calories (kcal)'}><input type="number" value={calories} onChange={(e) => setCalories(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
         <Field label={lang === 'pt' ? 'Proteína (g)' : 'Protein (g)'}><input type="number" value={proteinG} onChange={(e) => setProteinG(Number(e.target.value) || 0)} style={inputStyleBig} /></Field>
@@ -2384,9 +2401,43 @@ const WIDE_TASK_FILTERS = [
   ['kids', 'fKids', (i) => i.domain === 'kids'],
   ['health', 'fHealth', (i) => i.domain === 'health'],
 ];
+// grid personalizável da Hoje wide — cols=24 pra caber metades/terços/quartos redondos.
+// Fixos (fora do grid): a top bar (clima), a barra de captura e a sidebar.
+const WIDE_GRID_COLS = 24;
+const WIDE_DEFAULT_LAYOUT = [
+  { i: 'agenda', x: 0, y: 0, w: 14, h: 11, minW: 6, minH: 6 },
+  { i: 'health', x: 14, y: 0, w: 5, h: 5, minW: 4, minH: 4 },
+  { i: 'finance', x: 19, y: 0, w: 5, h: 5, minW: 4, minH: 4 },
+  { i: 'grocery', x: 14, y: 5, w: 5, h: 6, minW: 4, minH: 4 },
+  { i: 'trip', x: 19, y: 5, w: 5, h: 6, minW: 4, minH: 4 },
+  { i: 'tasks', x: 0, y: 11, w: 12, h: 9, minW: 5, minH: 5 },
+  { i: 'family', x: 12, y: 11, w: 12, h: 9, minW: 5, minH: 5 },
+  { i: 'news', x: 0, y: 20, w: 24, h: 9, minW: 8, minH: 5 },
+];
+// junta o layout salvo com o padrão: mantém widgets novos que ainda não estavam salvos,
+// e descarta ids salvos que não existem mais — evita quebrar se os widgets mudarem no futuro.
+function mergeWideLayout(saved) {
+  if (!Array.isArray(saved) || !saved.length) return WIDE_DEFAULT_LAYOUT;
+  const byId = {}; saved.forEach((it) => { if (it && it.i) byId[it.i] = it; });
+  return WIDE_DEFAULT_LAYOUT.map((d) => (byId[d.i] ? { ...d, ...byId[d.i] } : d));
+}
+// alça de arrastar de cada widget do grid personalizável — só aparece no modo de edição,
+// pra não brigar com cliques normais nos botões/links de dentro do card.
+function WidgetShell({ editing, children }) {
+  return (
+    <div style={{ height: '100%', width: '100%', position: 'relative' }}>
+      {editing && (
+        <div className="wide-drag-handle" style={{ position: 'absolute', top: 10, right: 10, zIndex: 5, width: 26, height: 26, borderRadius: 7, background: C.surface2, border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.text3, cursor: 'grab', boxShadow: '0 2px 6px rgba(0,0,0,.3)' }}>
+          <GripVertical size={14} />
+        </div>
+      )}
+      {children}
+    </div>
+  );
+}
 function WideCard({ title, action, onAction, children, style }) {
   return (
-    <div style={{ ...card, padding: 18, minWidth: 0, ...style }}>
+    <div style={{ ...card, padding: 18, minWidth: 0, height: '100%', boxSizing: 'border-box', overflowY: 'auto', ...style }}>
       {title && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13 }}>
           <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{title}</div>
@@ -2397,32 +2448,48 @@ function WideCard({ title, action, onAction, children, style }) {
     </div>
   );
 }
+// O viewBox acompanha a largura medida de verdade do contêiner (via ResizeObserver) em vez
+// de um tamanho fixo esticado por preserveAspectRatio="none" — sem isso, círculos e traço
+// ficavam ovalados/borrados sempre que a barra ficava mais larga que o desenho original.
 function HourlyWxChart({ points }) {
-  const W = 320, H = 56;
+  const wrapRef = useRef(null);
+  const [w, setW] = useState(560);
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const cw = entries[0] && entries[0].contentRect && entries[0].contentRect.width;
+      if (cw > 0) setW(Math.round(cw));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const H = 60;
   const temps = points.map((h) => h.temp).filter((v) => v != null);
-  if (!temps.length) return null;
+  if (!temps.length) return <div ref={wrapRef} style={{ width: '100%' }} />;
   const min = Math.min(...temps), max = Math.max(...temps), span = (max - min) || 1;
   const n = points.length;
-  const x = (i) => (n === 1 ? W / 2 : (i / (n - 1)) * (W - 12) + 6);
-  const y = (v) => 18 + (1 - (v - min) / span) * 22;
+  const padX = Math.min(20, w * 0.04);
+  const x = (i) => (n === 1 ? w / 2 : (i / (n - 1)) * (w - padX * 2) + padX);
+  const y = (v) => 20 + (1 - (v - min) / span) * 24;
   const pathPts = points.map((h, i) => [x(i), h.temp != null ? y(h.temp) : null]);
   const dPath = pathPts.filter((p) => p[1] != null).map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
   return (
-    <>
-      <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={52} preserveAspectRatio="none" style={{ display: 'block', overflow: 'visible' }}>
+    <div ref={wrapRef} style={{ width: '100%' }}>
+      <svg viewBox={`0 0 ${w} ${H}`} width={w} height={H} style={{ display: 'block' }}>
         {points.map((h, i) => {
           if (h.rain == null || h.rain <= 0) return null;
-          const bh = Math.max(1, (h.rain / 100) * 12);
-          return <rect key={i} x={x(i) - 3} y={49 - bh} width={6} height={bh} rx={1} fill={C.teal} opacity={0.55} />;
+          const bh = Math.max(1, (h.rain / 100) * 14);
+          return <rect key={i} x={x(i) - 3} y={57 - bh} width={6} height={bh} rx={1} fill={C.teal} opacity={0.55} />;
         })}
         <path d={dPath} fill="none" stroke={C.sky} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        {pathPts.map((p, i) => p[1] != null && <circle key={i} cx={p[0]} cy={p[1]} r={2.6} fill={C.sky} />)}
-        {points.map((h, i) => h.temp != null && <text key={i} x={x(i)} y={Math.max(9, y(h.temp) - 8)} fontSize="9.5" fontWeight="700" textAnchor="middle" fill={C.text} fontFamily="ui-monospace,Menlo,monospace">{h.temp}°</text>)}
+        {pathPts.map((p, i) => p[1] != null && <circle key={i} cx={p[0]} cy={p[1]} r={3} fill={C.sky} />)}
+        {points.map((h, i) => h.temp != null && <text key={i} x={x(i)} y={Math.max(11, y(h.temp) - 9)} fontSize="11" fontWeight="700" textAnchor="middle" fill={C.text} fontFamily="ui-monospace,Menlo,monospace">{h.temp}°</text>)}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
         {points.map((h, i) => <span key={i} style={{ fontSize: 10, color: C.text3 }}>{h.h}</span>)}
       </div>
-    </>
+    </div>
   );
 }
 // clima + câmbio da barra da Hoje wide: geolocalização automática (com cache em
@@ -2513,7 +2580,7 @@ function WeatherBarWide({ lang, t }) {
   const now = wx && wmo(wx.code, lang);
   const NowIcon = now ? wxIcon(now.kind) : CloudSun;
   const nowColor = now ? (now.kind === 'sun' ? '#F59E0B' : now.kind === 'rain' ? C.sky : C.text2) : C.text3;
-  const pts = wx ? (wx.hours || []).filter((_, i) => i % 2 === 0).slice(0, 8) : [];
+  const pts = wx ? (wx.hours || []).filter((_, i) => i % 2 === 0).slice(0, 10) : [];
   const peakRain = pts.reduce((best, h) => ((h.rain || 0) > (best && best.rain || 0) ? h : best), null);
   // tudo numa linha só, sem quebrar — se faltar espaço de verdade (telas bem estreitas)
   // rola na horizontal só essa barra, em vez de empilhar chuva/previsão/câmbio embaixo do gráfico.
@@ -2626,13 +2693,15 @@ function HealthRingWide({ readiness, sleep, steps, caloriesToday, calorieGoal, o
     </div>
   );
 }
-function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal }) {
+function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal, wideLayout, setWideLayout }) {
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
   const [addingGrocery, setAddingGrocery] = useState(false); const [groceryText, setGroceryText] = useState('');
   const [agendaDate, setAgendaDate] = useState(today); // navegação de dia só no card "Compromissos do dia" — o resto da tela continua em "hoje" de verdade
   const [addingMeal, setAddingMeal] = useState(false);
+  const [editingLayout, setEditingLayout] = useState(false);
+  const layout = mergeWideLayout(wideLayout);
   const caloriesToday = items.filter((i) => i.type === 'meal' && i.date === today).reduce((a, b) => a + Number((b.meta && b.meta.calories) || 0), 0);
   const saveManualMeal = (m) => {
     addItem({ type: 'meal', domain: 'health', title: m.title, date: today, time: nowHM(), meta: { calories: m.calories, proteinG: m.proteinG, carbsG: m.carbsG, fatG: m.fatG, source: 'manual' } });
@@ -2672,188 +2741,228 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
         <QuickCapture lang={lang} t={t} addItems={addItems} flash={flash} items={items} onOpen={onOpen} />
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,3fr) minmax(0,2fr)', gap: 20, alignItems: 'start' }}>
-        <div style={{ ...card, padding: 18, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13, flexWrap: 'wrap', rowGap: 8 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Compromissos do dia' : "Day's schedule"}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: C.bg2, borderRadius: 9, padding: 2 }}>
-                <button onClick={() => setAgendaDate((d) => addDays(d, -1))} title={lang === 'pt' ? 'Dia anterior' : 'Previous day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronLeft size={14} /></button>
-                <button onClick={() => setAgendaDate(today)} disabled={isAgendaToday} style={{ background: isAgendaToday ? 'transparent' : C.surface, border: 'none', color: isAgendaToday ? C.text3 : C.accent, cursor: isAgendaToday ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 600, padding: '5px 9px', borderRadius: 7, whiteSpace: 'nowrap' }}>
-                  {isAgendaToday ? (lang === 'pt' ? 'Hoje' : 'Today') : `${WD[lang][new Date(agendaDate + 'T00:00:00').getDay()]} ${Number(agendaDate.slice(8, 10))}`}
-                </button>
-                <button onClick={() => setAgendaDate((d) => addDays(d, 1))} title={lang === 'pt' ? 'Próximo dia' : 'Next day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronRight size={14} /></button>
-              </div>
-              <button onClick={() => goScreen('calendar')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Ver calendário' : 'See calendar'}</button>
-            </div>
-          </div>
-          {agendaItems.length === 0 ? <Empty icon={Sun} text={isAgendaToday ? t('nothingToday') : (lang === 'pt' ? 'Nada marcado nesse dia.' : 'Nothing planned that day.')} /> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {agendaItems.map((i) => (
-                <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
-                  <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
-                  <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div>
-                      {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6 }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
-                    </div>
-                    <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{t(WIDE_DOMAIN_LABEL_KEY[i.domain] || 'fPersonal')} · {t('t_' + i.type)}</div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginBottom: 14 }}>
+        {editingLayout && (
+          <button onClick={() => setWideLayout(WIDE_DEFAULT_LAYOUT)} style={{ ...card, padding: '7px 12px', color: C.text2, fontSize: 12, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center' }}>
+            <RefreshCw size={12} />{lang === 'pt' ? 'Restaurar padrão' : 'Reset to default'}
+          </button>
+        )}
+        <button onClick={() => setEditingLayout((v) => !v)} style={{ ...card, padding: '7px 14px', color: editingLayout ? C.accent : C.text2, border: `1px solid ${editingLayout ? C.accent + '55' : C.border}`, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', display: 'flex', gap: 6, alignItems: 'center' }}>
+          {editingLayout ? <Check size={13} /> : <Pencil size={12} />}{editingLayout ? (lang === 'pt' ? 'Concluir' : 'Done') : (lang === 'pt' ? 'Editar layout' : 'Edit layout')}
+        </button>
+      </div>
+
+      {/* grid personalizável: arrasta pela alcinha (canto superior direito de cada card, só
+          aparece editando) e redimensiona pelo canto inferior direito — tamanho/posição salvos
+          em settings.wideLayout. Só a barra de clima, a captura e a sidebar ficam fixas, fora daqui. */}
+      <WideGridLayout className="wide-grid" cols={WIDE_GRID_COLS} rowHeight={28} margin={[18, 18]} layout={layout} onLayoutChange={(l) => { if (editingLayout) setWideLayout(l); }} isDraggable={editingLayout} isResizable={editingLayout} draggableHandle=".wide-drag-handle" compactType="vertical" useCSSTransforms>
+        <div key="agenda">
+          <WidgetShell editing={editingLayout}>
+            <div style={{ ...card, padding: 18, minWidth: 0, height: '100%', boxSizing: 'border-box', overflowY: 'auto' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 13, flexWrap: 'wrap', rowGap: 8 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Compromissos do dia' : "Day's schedule"}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 'none' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 2, background: C.bg2, borderRadius: 9, padding: 2 }}>
+                    <button onClick={() => setAgendaDate((d) => addDays(d, -1))} title={lang === 'pt' ? 'Dia anterior' : 'Previous day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronLeft size={14} /></button>
+                    <button onClick={() => setAgendaDate(today)} disabled={isAgendaToday} style={{ background: isAgendaToday ? 'transparent' : C.surface, border: 'none', color: isAgendaToday ? C.text3 : C.accent, cursor: isAgendaToday ? 'default' : 'pointer', fontSize: 11.5, fontWeight: 600, padding: '5px 9px', borderRadius: 7, whiteSpace: 'nowrap' }}>
+                      {isAgendaToday ? (lang === 'pt' ? 'Hoje' : 'Today') : `${WD[lang][new Date(agendaDate + 'T00:00:00').getDay()]} ${Number(agendaDate.slice(8, 10))}`}
+                    </button>
+                    <button onClick={() => setAgendaDate((d) => addDays(d, 1))} title={lang === 'pt' ? 'Próximo dia' : 'Next day'} style={{ background: 'none', border: 'none', color: C.text2, cursor: 'pointer', display: 'flex', padding: '5px 6px', borderRadius: 6 }}><ChevronRight size={14} /></button>
                   </div>
+                  <button onClick={() => goScreen('calendar')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Ver calendário' : 'See calendar'}</button>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, minWidth: 0, alignItems: 'start' }}>
-          <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
-            <HealthRingWide readiness={w.readiness} sleep={w.sleep} steps={w.steps} caloriesToday={caloriesToday} calorieGoal={calorieGoal} onAddMeal={() => setAddingMeal(true)} lang={lang} t={t} onClick={() => goModule('health')} />
-          </WideCard>
-
-          <WideCard>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
-              <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('finance')}</div>
-              <button onClick={() => setFinanceHidden((v) => !v)} title={financeHidden ? (lang === 'pt' ? 'Mostrar saldo' : 'Show balance') : (lang === 'pt' ? 'Ocultar saldo' : 'Hide balance')} style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.text3 }}>
-                {financeHidden ? <EyeOff size={13} /> : <Eye size={13} />}
-              </button>
-            </div>
-            <div style={{ fontSize: 24, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', letterSpacing: financeHidden ? 1 : '-.3px', marginBottom: 6, color: financeHidden ? C.text : balCol }}>
-              {financeHidden ? '••••••' : (balance != null ? fmtMoney(balance, lang) : '—')}
-            </div>
-            <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 12 }}>
-              {billsDue.length > 0 ? `${billsDue.length} ${lang === 'pt' ? 'conta(s) a vencer' : 'bill(s) due'}` : (lang === 'pt' ? 'Nenhuma conta a vencer' : 'No bills due')}
-            </div>
-            <button onClick={() => goModule('finance')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0 }}>{lang === 'pt' ? 'Ver finanças →' : 'See finances →'}</button>
-          </WideCard>
-
-          <WideCard title={lang === 'pt' ? 'Compra da semana' : "This week's shopping"}>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {groceryList.map((i) => (
-                <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                  <button onClick={() => toggleGroceryItem(i.id)} style={{ width: 18, height: 18, borderRadius: 5, border: i.checked ? 'none' : `1.5px solid ${C.border}`, background: i.checked ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none', padding: 0 }}>
-                    {i.checked && <Check size={11} style={{ color: '#fff' }} />}
-                  </button>
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: i.checked ? C.text3 : C.text2, textDecoration: i.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.text}</div>
-                  <button onClick={() => removeGroceryItem(i.id)} style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}><X size={12} /></button>
-                </div>
-              ))}
-              {addingGrocery ? (
-                <form onSubmit={(e) => { e.preventDefault(); addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} style={{ padding: '8px 0' }}>
-                  <input autoFocus value={groceryText} onChange={(e) => setGroceryText(e.target.value)} onBlur={() => { if (groceryText.trim()) addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} placeholder={lang === 'pt' ? 'Novo item…' : 'New item…'} style={{ ...inputStyle, padding: '6px 9px', fontSize: 12.5 }} />
-                </form>
-              ) : (
-                <div onClick={() => setAddingGrocery(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', cursor: 'pointer' }}>
-                  <div style={{ width: 18, height: 18, borderRadius: '50%', border: `1.5px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: C.text3 }}><Plus size={10} /></div>
-                  <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Adicionar item à lista' : 'Add item to list'}</div>
+              </div>
+              {agendaItems.length === 0 ? <Empty icon={Sun} text={isAgendaToday ? t('nothingToday') : (lang === 'pt' ? 'Nada marcado nesse dia.' : 'Nothing planned that day.')} /> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {agendaItems.map((i) => (
+                    <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+                      <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div>
+                          {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6 }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{t(WIDE_DOMAIN_LABEL_KEY[i.domain] || 'fPersonal')} · {t('t_' + i.type)}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
-          </WideCard>
-
-          <WideCard>
-            {nextTrip ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('nextTrip')}</div>
-                <div style={{ fontSize: 18, fontWeight: 700 }}>{(nextTrip.meta && nextTrip.meta.destination) || nextTrip.title}</div>
-                <div style={{ fontSize: 12, color: C.text3 }}>{nextTripDays === 0 ? t('ongoing') : `${lang === 'pt' ? 'em' : 'in'} ${nextTripDays} ${t('daysWord')}`}</div>
-                <button onClick={() => goModule('travel')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0, textAlign: 'left' }}>{lang === 'pt' ? 'Ver viagem →' : 'See trip →'}</button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('nextTrip')}</div>
-                <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Nada marcado.' : 'Nothing planned.'}</div>
-              </div>
-            )}
-          </WideCard>
+          </WidgetShell>
         </div>
-      </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginTop: 20, alignItems: 'start' }}>
-        <WideCard title={lang === 'pt' ? 'Principais tarefas' : 'Top tasks'} action={t('seeAll')} onAction={() => goModule('tasks')}>
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-            {WIDE_TASK_FILTERS.map(([key, labelKey]) => <Chip key={key} active={taskFilter === key} onClick={() => setTaskFilter(key)}>{t(labelKey)}</Chip>)}
-          </div>
-          {filteredTasks.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {filteredTasks.map((i) => (
-                <div key={i.id} onClick={() => toggleTask(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, cursor: 'pointer' }}>
-                  <Circle size={16} style={{ color: C.text3, flex: 'none' }} />
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div>
-                  {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6, flex: 'none' }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </WideCard>
+        <div key="health">
+          <WidgetShell editing={editingLayout}>
+            <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
+              <HealthRingWide readiness={w.readiness} sleep={w.sleep} steps={w.steps} caloriesToday={caloriesToday} calorieGoal={calorieGoal} onAddMeal={() => setAddingMeal(true)} lang={lang} t={t} onClick={() => goModule('health')} />
+            </WideCard>
+          </WidgetShell>
+        </div>
 
-        <WideCard title={lang === 'pt' ? 'Casa & Família' : 'Home & Family'} action={t('seeAll')} onAction={() => goModule('house')}>
-          {familyList.length === 0 ? <Empty icon={Home} text={t('noAttention')} /> : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {familyList.map((i) => {
-                const isKid = i.domain === 'kids';
-                const initial = isKid && i.person ? i.person.trim()[0].toUpperCase() : null;
-                return (
-                  <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                    <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginTop: 1 }}>
-                      {initial || <Home size={13} />}
-                    </div>
-                    <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.4, minWidth: 0 }}>{i.title}</div>
+        <div key="finance">
+          <WidgetShell editing={editingLayout}>
+            <WideCard>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 12 }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('finance')}</div>
+                <button onClick={() => setFinanceHidden((v) => !v)} title={financeHidden ? (lang === 'pt' ? 'Mostrar saldo' : 'Show balance') : (lang === 'pt' ? 'Ocultar saldo' : 'Hide balance')} style={{ width: 26, height: 26, borderRadius: 8, border: `1px solid ${C.border}`, background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: C.text3 }}>
+                  {financeHidden ? <EyeOff size={13} /> : <Eye size={13} />}
+                </button>
+              </div>
+              <div style={{ fontSize: 24, fontWeight: 700, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', letterSpacing: financeHidden ? 1 : '-.3px', marginBottom: 6, color: financeHidden ? C.text : balCol }}>
+                {financeHidden ? '••••••' : (balance != null ? fmtMoney(balance, lang) : '—')}
+              </div>
+              <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 12 }}>
+                {billsDue.length > 0 ? `${billsDue.length} ${lang === 'pt' ? 'conta(s) a vencer' : 'bill(s) due'}` : (lang === 'pt' ? 'Nenhuma conta a vencer' : 'No bills due')}
+              </div>
+              <button onClick={() => goModule('finance')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0 }}>{lang === 'pt' ? 'Ver finanças →' : 'See finances →'}</button>
+            </WideCard>
+          </WidgetShell>
+        </div>
+
+        <div key="grocery">
+          <WidgetShell editing={editingLayout}>
+            <WideCard title={lang === 'pt' ? 'Compra da semana' : "This week's shopping"}>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {groceryList.map((i) => (
+                  <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
+                    <button onClick={() => toggleGroceryItem(i.id)} style={{ width: 18, height: 18, borderRadius: 5, border: i.checked ? 'none' : `1.5px solid ${C.border}`, background: i.checked ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none', padding: 0 }}>
+                      {i.checked && <Check size={11} style={{ color: '#fff' }} />}
+                    </button>
+                    <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: i.checked ? C.text3 : C.text2, textDecoration: i.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.text}</div>
+                    <button onClick={() => removeGroceryItem(i.id)} style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}><X size={12} /></button>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </WideCard>
-      </div>
+                ))}
+                {addingGrocery ? (
+                  <form onSubmit={(e) => { e.preventDefault(); addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} style={{ padding: '8px 0' }}>
+                    <input autoFocus value={groceryText} onChange={(e) => setGroceryText(e.target.value)} onBlur={() => { if (groceryText.trim()) addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} placeholder={lang === 'pt' ? 'Novo item…' : 'New item…'} style={{ ...inputStyle, padding: '6px 9px', fontSize: 12.5 }} />
+                  </form>
+                ) : (
+                  <div onClick={() => setAddingGrocery(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', cursor: 'pointer' }}>
+                    <div style={{ width: 18, height: 18, borderRadius: '50%', border: `1.5px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: C.text3 }}><Plus size={10} /></div>
+                    <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Adicionar item à lista' : 'Add item to list'}</div>
+                  </div>
+                )}
+              </div>
+            </WideCard>
+          </WidgetShell>
+        </div>
+
+        <div key="trip">
+          <WidgetShell editing={editingLayout}>
+            <WideCard>
+              {nextTrip ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('nextTrip')}</div>
+                  <div style={{ fontSize: 18, fontWeight: 700 }}>{(nextTrip.meta && nextTrip.meta.destination) || nextTrip.title}</div>
+                  <div style={{ fontSize: 12, color: C.text3 }}>{nextTripDays === 0 ? t('ongoing') : `${lang === 'pt' ? 'em' : 'in'} ${nextTripDays} ${t('daysWord')}`}</div>
+                  <button onClick={() => goModule('travel')} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12, padding: 0, textAlign: 'left' }}>{lang === 'pt' ? 'Ver viagem →' : 'See trip →'}</button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>{t('nextTrip')}</div>
+                  <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Nada marcado.' : 'Nothing planned.'}</div>
+                </div>
+              )}
+            </WideCard>
+          </WidgetShell>
+        </div>
+
+        <div key="tasks">
+          <WidgetShell editing={editingLayout}>
+            <WideCard title={lang === 'pt' ? 'Principais tarefas' : 'Top tasks'} action={t('seeAll')} onAction={() => goModule('tasks')}>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                {WIDE_TASK_FILTERS.map(([key, labelKey]) => <Chip key={key} active={taskFilter === key} onClick={() => setTaskFilter(key)}>{t(labelKey)}</Chip>)}
+              </div>
+              {filteredTasks.length === 0 ? <Empty icon={Check} text={t('noAttention')} /> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {filteredTasks.map((i) => (
+                    <div key={i.id} onClick={() => toggleTask(i.id)} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '9px 0', borderBottom: `1px solid ${C.borderSoft}`, cursor: 'pointer' }}>
+                      <Circle size={16} style={{ color: C.text3, flex: 'none' }} />
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 13, color: C.text2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.title}</div>
+                      {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6, flex: 'none' }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </WideCard>
+          </WidgetShell>
+        </div>
+
+        <div key="family">
+          <WidgetShell editing={editingLayout}>
+            <WideCard title={lang === 'pt' ? 'Casa & Família' : 'Home & Family'} action={t('seeAll')} onAction={() => goModule('house')}>
+              {familyList.length === 0 ? <Empty icon={Home} text={t('noAttention')} /> : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {familyList.map((i) => {
+                    const isKid = i.domain === 'kids';
+                    const initial = isKid && i.person ? i.person.trim()[0].toUpperCase() : null;
+                    return (
+                      <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginTop: 1 }}>
+                          {initial || <Home size={13} />}
+                        </div>
+                        <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.4, minWidth: 0 }}>{i.title}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </WideCard>
+          </WidgetShell>
+        </div>
+
+        <div key="news">
+          <WidgetShell editing={editingLayout}>
+            <WideCard>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', rowGap: 8 }}>
+                <div style={{ fontSize: 15, fontWeight: 700 }}>{t('news')}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                    {[
+                      { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="#fff"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg> },
+                      { name: 'X', url: 'https://x.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="12" height="12" fill="#fff"><path d="M18.9 1.2h3.7l-8 9.1L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9zM17.6 20.6h2L6.5 3.3H4.3z"/></svg> },
+                      { name: 'Instagram', url: 'https://instagram.com', bg: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none"/></svg> },
+                      { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="12" height="12" fill="#fff"><path d="M16.6 5.82a4.28 4.28 0 01-1-2.66V3h-3.09v12.4a2.59 2.59 0 01-2.59 2.5 2.59 2.59 0 01-2.59-2.59 2.59 2.59 0 013.2-2.51V9.66a5.66 5.66 0 00-.61-.03A5.68 5.68 0 003.6 15.3a5.68 5.68 0 0011.36 0V8.99a7.31 7.31 0 004.28 1.37V7.27a4.28 4.28 0 01-2.64-1.45z"/></svg> },
+                    ].map((s) => (
+                      <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 28, height: 28, borderRadius: 8, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}` }}>{s.svg}</a>
+                    ))}
+                  </div>
+                  <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
+                  <button onClick={goNews} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12 }}>{t('seeAll')}</button>
+                </div>
+              </div>
+              {news === null ? (
+                <div style={{ padding: 8, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
+              ) : news.length === 0 ? (
+                <div style={{ padding: 8, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Sem notícias agora.' : 'No news.'}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  {news.slice(0, 10).map((n, i, arr) => {
+                    const src = (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
+                    const saved = savedNewsLinks.has(n.link);
+                    const last = i === arr.length - 1;
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: last ? 'none' : `1px solid ${C.borderSoft}`, paddingBottom: last ? 0 : 12 }}>
+                        <div onClick={goNews} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                          <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{n.title}</div>
+                          <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div>
+                        </div>
+                        <button onClick={(e) => { e.stopPropagation(); if (!saved) onSaveNews && onSaveNews(n); }} title={saved ? (lang === 'pt' ? 'Salvo pra ler depois' : 'Saved for later') : (lang === 'pt' ? 'Salvar pra ler depois' : 'Save for later')} style={{ background: 'none', border: 'none', cursor: saved ? 'default' : 'pointer', color: saved ? C.accent : C.text3, display: 'flex', padding: 2, flex: 'none' }}>
+                          <Star size={15} style={{ fill: saved ? C.accent : 'none' }} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </WideCard>
+          </WidgetShell>
+        </div>
+      </WideGridLayout>
 
       {addingMeal && <MealConfirmModal manual draft={{}} lang={lang} t={t} onSave={saveManualMeal} onCancel={() => setAddingMeal(false)} />}
-
-      <div style={{ marginTop: 20 }}>
-        <WideCard>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', rowGap: 8 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>{t('news')}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                {[
-                  { name: 'LinkedIn', url: 'https://www.linkedin.com/feed', bg: '#0A66C2', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="#fff"><path d="M20.5 2h-17A1.5 1.5 0 002 3.5v17A1.5 1.5 0 003.5 22h17a1.5 1.5 0 001.5-1.5v-17A1.5 1.5 0 0020.5 2zM8 19H5v-9h3zM6.5 8.25A1.75 1.75 0 118.3 6.5a1.78 1.78 0 01-1.8 1.75zM19 19h-3v-4.74c0-1.42-.6-1.93-1.38-1.93A1.74 1.74 0 0013 14.19a.66.66 0 000 .14V19h-3v-9h2.9v1.3a3.11 3.11 0 012.7-1.4c1.55 0 3.36.86 3.36 3.66z"/></svg> },
-                  { name: 'X', url: 'https://x.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="12" height="12" fill="#fff"><path d="M18.9 1.2h3.7l-8 9.1L24 22.8h-7.4l-5.8-7.6-6.6 7.6H.5l8.6-9.8L0 1.2h7.6l5.2 6.9zM17.6 20.6h2L6.5 3.3H4.3z"/></svg> },
-                  { name: 'Instagram', url: 'https://instagram.com', bg: 'radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)', svg: <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="#fff" strokeWidth="2"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#fff" stroke="none"/></svg> },
-                  { name: 'TikTok', url: 'https://www.tiktok.com', bg: '#000', svg: <svg viewBox="0 0 24 24" width="12" height="12" fill="#fff"><path d="M16.6 5.82a4.28 4.28 0 01-1-2.66V3h-3.09v12.4a2.59 2.59 0 01-2.59 2.5 2.59 2.59 0 01-2.59-2.59 2.59 2.59 0 013.2-2.51V9.66a5.66 5.66 0 00-.61-.03A5.68 5.68 0 003.6 15.3a5.68 5.68 0 0011.36 0V8.99a7.31 7.31 0 004.28 1.37V7.27a4.28 4.28 0 01-2.64-1.45z"/></svg> },
-                ].map((s) => (
-                  <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 28, height: 28, borderRadius: 8, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}` }}>{s.svg}</a>
-                ))}
-              </div>
-              <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center' }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
-              <button onClick={goNews} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 12 }}>{t('seeAll')}</button>
-            </div>
-          </div>
-          {news === null ? (
-            <div style={{ padding: 8, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
-          ) : news.length === 0 ? (
-            <div style={{ padding: 8, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Sem notícias agora.' : 'No news.'}</div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {news.slice(0, 10).map((n, i, arr) => {
-                const src = (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
-                const saved = savedNewsLinks.has(n.link);
-                const last = i === arr.length - 1;
-                return (
-                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: last ? 'none' : `1px solid ${C.borderSoft}`, paddingBottom: last ? 0 : 12 }}>
-                    <div onClick={goNews} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                      <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{n.title}</div>
-                      <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div>
-                    </div>
-                    <button onClick={(e) => { e.stopPropagation(); if (!saved) onSaveNews && onSaveNews(n); }} title={saved ? (lang === 'pt' ? 'Salvo pra ler depois' : 'Saved for later') : (lang === 'pt' ? 'Salvar pra ler depois' : 'Save for later')} style={{ background: 'none', border: 'none', cursor: saved ? 'default' : 'pointer', color: saved ? C.accent : C.text3, display: 'flex', padding: 2, flex: 'none' }}>
-                      <Star size={15} style={{ fill: saved ? C.accent : 'none' }} />
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </WideCard>
-      </div>
     </div>
   );
 }
@@ -7792,6 +7901,8 @@ function App() {
   const toggleGroceryItem = (id) => setSettings((s) => ({ ...s, groceryList: (s.groceryList || []).map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)) }));
   const removeGroceryItem = (id) => setSettings((s) => ({ ...s, groceryList: (s.groceryList || []).filter((i) => i.id !== id) }));
   const addGroceryItem = (text) => { if (!text || !text.trim()) return; setSettings((s) => ({ ...s, groceryList: [...(s.groceryList || []), { id: uid(), text: text.trim(), checked: false }] })); };
+  // layout personalizável da Hoje wide (tamanho/posição de cada card) — persistido igual ao resto de settings
+  const setWideLayout = (l) => setSettings((s) => ({ ...s, wideLayout: l }));
   const setTuyaPrefs = (fn) => setSettings((s) => ({ ...s, tuyaPrefs: typeof fn === 'function' ? fn(s.tuyaPrefs || {}) : fn }));
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
   const openAccount = (accId) => { if (typeof window !== 'undefined') window.__lccOpenAccount = accId; setActive({ screen: 'dashboard', module: moduleByKey('finance') }); };
@@ -7950,7 +8061,7 @@ function App() {
       )}
       <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
         {active.screen === 'home' && (wide
-          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} />
+          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} wideLayout={settings.wideLayout} setWideLayout={setWideLayout} />
           : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
         )}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
