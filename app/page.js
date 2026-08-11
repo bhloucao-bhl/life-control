@@ -2484,16 +2484,23 @@ function HourlyWxChart({ points }) {
   const y = (v) => 20 + (1 - (v - min) / span) * 24;
   const pathPts = points.map((h, i) => [x(i), h.temp != null ? y(h.temp) : null]);
   const dPath = pathPts.filter((p) => p[1] != null).map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  // pico de chuva: só rotula o maior ponto (como no gráfico do celular), pra não poluir com
+  // um número em cada barra — as barras em si já mostram a variação ao longo do dia.
+  const hasRain = points.some((h) => h.rain != null && h.rain > 0);
+  const maxRainIdx = hasRain ? points.reduce((best, h, i) => ((h.rain || 0) > (points[best].rain || 0) ? i : best), 0) : -1;
   return (
     <div ref={wrapRef} style={{ width: '100%' }}>
       <svg viewBox={`0 0 ${w} ${H}`} width={w} height={H} style={{ display: 'block' }}>
         {points.map((h, i) => {
           if (h.rain == null || h.rain <= 0) return null;
-          const bh = Math.max(1, (h.rain / 100) * 14);
-          return <rect key={i} x={x(i) - 3} y={57 - bh} width={6} height={bh} rx={1} fill={C.teal} opacity={0.55} />;
+          const bh = Math.max(2, (h.rain / 100) * 20);
+          return <rect key={i} x={x(i) - 3.5} y={56 - bh} width={7} height={bh} rx={1.5} fill={C.sky} opacity={0.45} />;
         })}
-        <path d={dPath} fill="none" stroke={C.sky} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
-        {pathPts.map((p, i) => p[1] != null && <circle key={i} cx={p[0]} cy={p[1]} r={3} fill={C.sky} />)}
+        {maxRainIdx >= 0 && (
+          <text x={x(maxRainIdx)} y={56 - Math.max(2, (points[maxRainIdx].rain / 100) * 20) - 4} fontSize="9.5" fontWeight="700" textAnchor="middle" fill={C.sky} fontFamily="ui-monospace,Menlo,monospace">{Math.round(points[maxRainIdx].rain)}%</text>
+        )}
+        <path d={dPath} fill="none" stroke={C.accent} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+        {pathPts.map((p, i) => p[1] != null && <circle key={i} cx={p[0]} cy={p[1]} r={3} fill={C.accent} />)}
         {points.map((h, i) => h.temp != null && <text key={i} x={x(i)} y={Math.max(11, y(h.temp) - 9)} fontSize="11" fontWeight="700" textAnchor="middle" fill={C.text} fontFamily="ui-monospace,Menlo,monospace">{h.temp}°</text>)}
       </svg>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
