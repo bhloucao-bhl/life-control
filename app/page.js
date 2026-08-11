@@ -2461,7 +2461,7 @@ function WideCard({ title, action, onAction, children, style }) {
 // O viewBox acompanha a largura medida de verdade do contêiner (via ResizeObserver) em vez
 // de um tamanho fixo esticado por preserveAspectRatio="none" — sem isso, círculos e traço
 // ficavam ovalados/borrados sempre que a barra ficava mais larga que o desenho original.
-function HourlyWxChart({ points }) {
+function HourlyWxChart({ points, lang }) {
   const wrapRef = useRef(null);
   const [w, setW] = useState(560);
   useEffect(() => {
@@ -2506,6 +2506,8 @@ function HourlyWxChart({ points }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 2 }}>
         {points.map((h, i) => <span key={i} style={{ fontSize: 10, color: C.text3 }}>{h.h}</span>)}
       </div>
+      {/* sem isso, 0% de chuva parece "gráfico quebrado" em vez de "sem chuva prevista" */}
+      {!hasRain && <div style={{ fontSize: 9.5, color: C.text3, marginTop: 2 }}>{lang === 'pt' ? 'Sem chance de chuva no período.' : 'No rain chance in this window.'}</div>}
     </div>
   );
 }
@@ -2622,7 +2624,7 @@ function WeatherBarWide({ lang, t }) {
       </div>
       <div style={{ width: 1, alignSelf: 'stretch', background: C.borderSoft, flex: 'none' }} />
       <div style={{ display: 'flex', flexDirection: 'column', flex: '1 1 auto', minWidth: 200 }}>
-        {pts.length > 1 ? <HourlyWxChart points={pts} /> : <div style={{ fontSize: 11, color: C.text3, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Sem previsão agora.' : 'No forecast right now.'}</div>}
+        {pts.length > 1 ? <HourlyWxChart points={pts} lang={lang} /> : <div style={{ fontSize: 11, color: C.text3, whiteSpace: 'nowrap' }}>{lang === 'pt' ? 'Sem previsão agora.' : 'No forecast right now.'}</div>}
       </div>
       {peakRain && peakRain.rain > 0 && (
         <>
