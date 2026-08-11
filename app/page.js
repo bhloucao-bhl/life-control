@@ -2961,12 +2961,19 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                   {familyList.map((i) => {
                     const isKid = i.domain === 'kids';
+                    const isTask = i.type === 'task';
                     const initial = isKid && i.person ? i.person.trim()[0].toUpperCase() : null;
                     return (
                       <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer' }}>
-                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginTop: 1 }}>
-                          {initial || <Home size={13} />}
-                        </div>
+                        {isTask ? (
+                          <button onClick={(e) => { e.stopPropagation(); toggleTask(i.id); }} title={lang === 'pt' ? 'Marcar como concluída' : 'Mark as done'} style={{ width: 26, height: 26, flex: 'none', marginTop: 1, background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Circle size={20} />
+                          </button>
+                        ) : (
+                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: isKid ? C.violet : C.blue, flex: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 11, fontWeight: 700, marginTop: 1 }}>
+                            {initial || <Home size={13} />}
+                          </div>
+                        )}
                         <div style={{ flex: 1, fontSize: 13.5, lineHeight: 1.4, minWidth: 0 }}>{i.title}</div>
                       </div>
                     );
