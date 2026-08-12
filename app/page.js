@@ -1037,23 +1037,28 @@ function buildContext(items) {
 }
 
 /* ---------------- primitives ---------------- */
-const card = new Proxy({}, { get: (_, k) => {
-  const t = THEMES[_theme] || THEMES.dark;
-  if (k === 'background') return t.surface;
-  if (k === 'border') return `1px solid ${t.border}`;
-  if (k === 'borderRadius') return 20;
-  if (k === 'boxShadow') return _theme === 'light' ? '0 1px 3px rgba(0,0,0,0.06)' : '0 1px 0 rgba(255,255,255,0.03) inset';
-  return undefined;
-}, ownKeys: () => ['background', 'border', 'borderRadius', 'boxShadow'], getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
-const inputStyle = new Proxy({}, { get: (_, k) => {
-  const t = THEMES[_theme] || THEMES.dark;
-  const base = { width: '100%', borderRadius: 10, padding: '10px 12px', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
-  if (k in base) return base[k];
-  if (k === 'background') return t.bg2;
-  if (k === 'border') return `1px solid ${t.border}`;
-  if (k === 'color') return t.text;
-  return undefined;
-}, ownKeys: () => ['width', 'background', 'border', 'borderRadius', 'color', 'padding', 'fontSize', 'outline', 'boxSizing'], getOwnPropertyDescriptor: () => ({ enumerable: true, configurable: true }) });
+// getters em vez de Proxy: mesmo efeito (lê o tema atual a cada spread, sem precisar
+// recriar o objeto em cada render) mas sem os invariantes de Proxy que o React em
+// desenvolvimento (Next/Turbopack) viola ao re-renderizar — um Proxy com trap de
+// "ownKeys" custom quebra com "trap returned extra keys but proxy target is
+// non-extensible" assim que o alvo (sempre {}) é congelado pelo React em dev.
+const card = {
+  get background() { return (THEMES[_theme] || THEMES.dark).surface; },
+  get border() { return `1px solid ${(THEMES[_theme] || THEMES.dark).border}`; },
+  get borderRadius() { return 20; },
+  get boxShadow() { return _theme === 'light' ? '0 1px 3px rgba(0,0,0,0.06)' : '0 1px 0 rgba(255,255,255,0.03) inset'; },
+};
+const inputStyle = {
+  width: '100%',
+  get background() { return (THEMES[_theme] || THEMES.dark).bg2; },
+  get border() { return `1px solid ${(THEMES[_theme] || THEMES.dark).border}`; },
+  borderRadius: 10,
+  get color() { return (THEMES[_theme] || THEMES.dark).text; },
+  padding: '10px 12px',
+  fontSize: 14,
+  outline: 'none',
+  boxSizing: 'border-box',
+};
 const inputStyleBig = { ...inputStyle, padding: '14px 15px', fontSize: 16, borderRadius: 12 };
 function haptic(ms = 8) {
   if (isNative()) { Haptics.impact({ style: ms >= 15 ? ImpactStyle.Medium : ImpactStyle.Light }).catch(() => {}); return; }
