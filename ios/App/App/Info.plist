@@ -47,6 +47,8 @@
 	<string>Usado pra desbloquear o app quando o bloqueio por biometria está ativado.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Usado pra ler seus passos direto do Apple Health, com dados mais recentes do que a sincronização em nuvem da Oura.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>O Life Control não grava nenhum dado no Apple Health — só lê seus passos. Essa permissão é exigida pelo sistema mesmo quando o app não escreve informações.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Usado pra mostrar a previsão do tempo da sua localização atual.</string>
 	<key>UIApplicationSceneManifest</key>
