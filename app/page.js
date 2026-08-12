@@ -2337,6 +2337,13 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           );
         })()}
       </div>
+      {w.steps != null && (
+        <button onClick={() => goModule('health')} style={{ ...card, width: '100%', padding: '7px 12px', margin: '-2px 0 10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, background: 'none' }}>
+          <Footprints size={13} style={{ color: C.text3 }} />
+          <span style={{ fontSize: 12, color: C.text2 }}>{t('steps')}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text }}>{w.steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span>
+        </button>
+      )}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><AlertTriangle size={14} style={{ color: C.rose }} />{t('attention')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -5211,6 +5218,13 @@ Data de hoje: ${today}`;
         <ScoreRing label={t('readiness')} value={w.readiness ?? null} color={C.green} locked={ouraOn} onClick={() => setLogOpen(true)} />
         <ScoreRing label={t('sleepScore')} value={w.sleep ?? null} color={C.violet} locked={ouraOn} onClick={() => setLogOpen(true)} />
       </div>
+      {w.steps != null && (
+        <div style={{ ...card, padding: '7px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+          <Footprints size={13} style={{ color: C.text3 }} />
+          <span style={{ fontSize: 12, color: C.text2 }}>{t('steps')}</span>
+          <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text }}>{w.steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span>
+        </div>
+      )}
       {ouraOn && <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', marginBottom: 8, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{t('ouraSynced')}</div>}
 
       {ouraOn && (lastSleep ? <SleepCard s={lastSleep} lang={lang} t={t} /> : <div style={{ ...card, padding: 16, marginBottom: 10, color: C.text3, fontSize: 12.5, textAlign: 'center' }}>{t('noSleepData')}</div>)}
