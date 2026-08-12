@@ -1,0 +1,28 @@
+name: Sync Mercado Livre purchases
+
+# Roda de hora em hora e chama /api/cron/mercadolivre-sync no app publicado,
+# atualizando o cache de compras de todo mundo conectado ao Mercado Livre.
+#
+# Existe porque a Vercel Hobby só permite cron nativo diário (não horário) —
+# ver discussão na PR #71. Precisa de dois secrets configurados em
+# Settings > Secrets and variables > Actions deste repositório:
+#   - APP_BASE_URL: URL pública do app (ex: https://life-control.vercel.app)
+#   - CRON_SECRET: o mesmo valor da variável de ambiente CRON_SECRET na Vercel
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call mercadolivre-sync endpoint
+        run: |
+          curl --fail-with-body --show-error --silent \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_BASE_URL%/}/api/cron/mercadolivre-sync"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
