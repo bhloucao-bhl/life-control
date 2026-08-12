@@ -2775,10 +2775,16 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
   };
 
   const isAgendaToday = agendaDate === today;
-  // no dia de hoje só o que ainda vai rolar (o que já passou não é mais "hoje"); em outro
-  // dia mostra o dia inteiro, já que "passado"/"futuro" só faz sentido em relação a agora.
+  const agendaTomorrow = addDays(agendaDate, 1);
+  // no dia de hoje, mesma lógica de "próximas 24h" da Hoje do celular: do agora até a mesma
+  // hora amanhã, atravessando a virada do dia (por isso o item também entra se for de amanhã,
+  // mas só até a hora atual). Em outro dia (navegado pelas setas) isso equivale ao dia inteiro,
+  // já que 24h a partir da meia-noite desse dia é exatamente esse dia — sem precisar de caso especial.
   // refeição não é compromisso nem tarefa — mesma exclusão que a Hoje do celular já faz.
-  const agendaItems = items.filter((i) => i.date === agendaDate && i.status !== 'done' && i.type !== 'task' && i.type !== 'meal' && i.type !== 'purchase' && !(i.meta && i.meta.purchaseRef) && (!isAgendaToday || !i.time || i.time >= hm)).sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99')).slice(0, 8);
+  const agendaItems = items.filter((i) => i.status !== 'done' && i.type !== 'task' && i.type !== 'meal' && i.type !== 'purchase' && !(i.meta && i.meta.purchaseRef) && (
+    (i.date === agendaDate && (!isAgendaToday || !i.time || i.time >= hm)) ||
+    (isAgendaToday && i.date === agendaTomorrow && (!i.time || i.time <= hm))
+  )).sort((a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99'))).slice(0, 8);
   const savedNewsLinks = new Set(items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news').map((i) => i.meta.link).filter(Boolean));
   const openTasksSrc = [...items.filter((i) => i.status !== 'done' && i.type === 'task' && !String(i.id).startsWith('tt_')), ...ttItems.filter((i) => i.status !== 'done')];
   const filteredTasks = openTasksSrc.filter(WIDE_TASK_FILTERS.find((f) => f[0] === taskFilter)[2]).slice(0, 6);
@@ -2853,19 +2859,35 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
               </div>
               {agendaItems.length === 0 ? <Empty icon={Sun} text={isAgendaToday ? t('nothingToday') : (lang === 'pt' ? 'Nada marcado nesse dia.' : 'Nothing planned that day.')} /> : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-                  {agendaItems.map((i) => (
-                    <div key={i.id} onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
-                      <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
-                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
-                          <div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div>
-                          {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6 }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
+                  {agendaItems.map((i, idx) => {
+                    // divisor visível bem em cima do primeiro item que já é do dia seguinte —
+                    // só acontece na janela de "próximas 24h" de hoje, quando a lista atravessa a virada do dia.
+                    const showDivider = idx > 0 && i.date !== agendaItems[idx - 1].date;
+                    return (
+                      <React.Fragment key={i.id}>
+                        {showDivider && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0' }}>
+                            <div style={{ flex: 1, height: 1, background: C.border }} />
+                            <span style={{ fontSize: 10, fontWeight: 700, color: C.text3, textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap' }}>
+                              {lang === 'pt' ? 'Amanhã' : 'Tomorrow'} · {WD[lang][new Date(i.date + 'T00:00:00').getDay()]} {Number(i.date.slice(8, 10))}
+                            </span>
+                            <div style={{ flex: 1, height: 1, background: C.border }} />
+                          </div>
+                        )}
+                        <div onClick={() => onOpen(i)} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}>
+                          <div style={{ width: 44, flex: 'none', fontSize: 12, fontFamily: 'ui-monospace,SF Mono,Menlo,monospace', color: C.text3, paddingTop: 2 }}>{i.time || '—'}</div>
+                          <div style={{ width: 8, height: 8, borderRadius: '50%', background: WIDE_DOMAIN_COLOR(i.domain), marginTop: 5, flex: 'none' }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                              <div style={{ fontSize: 13.5, fontWeight: 600 }}>{i.title}</div>
+                              {i.priority === 1 && <span style={{ fontSize: 9, fontWeight: 700, color: C.rose, background: C.rose + '22', padding: '1px 7px', borderRadius: 6 }}>{lang === 'pt' ? 'Importante' : 'Important'}</span>}
+                            </div>
+                            <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{t(WIDE_DOMAIN_LABEL_KEY[i.domain] || 'fPersonal')} · {t('t_' + i.type)}</div>
+                          </div>
                         </div>
-                        <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{t(WIDE_DOMAIN_LABEL_KEY[i.domain] || 'fPersonal')} · {t('t_' + i.type)}</div>
-                      </div>
-                    </div>
-                  ))}
+                      </React.Fragment>
+                    );
+                  })}
                 </div>
               )}
             </div>
