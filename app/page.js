@@ -32,6 +32,26 @@ async function nativeShare(title, text) {
    acesso ao localStorage do WebView. Ver ios/App/LifeControlWidgets.
    ============================================================ */
 const SharedAuth = registerPlugin('SharedAuth');
+
+/* ============================================================
+   Passos via Apple Health (iOS): o HealthKit já tem os passos do dia
+   direto no aparelho (inclusive os que o próprio app da Oura grava lá),
+   sem esperar a sincronização em nuvem da Oura — que pode levar horas
+   pra refletir o dia atual. Ver ios/App/App/HealthKitPlugin.swift.
+   ============================================================ */
+const HealthKit = registerPlugin('HealthKit');
+async function fetchHealthKitSteps(days = 14) {
+  if (!isNative() || Capacitor.getPlatform() !== 'ios') return null;
+  try {
+    const avail = await HealthKit.isAvailable();
+    if (!avail || !avail.available) return null;
+    await HealthKit.requestAuthorization();
+    const { byDate } = await HealthKit.getDailySteps({ days });
+    return byDate || null;
+  } catch (e) {
+    return null;
+  }
+}
 async function syncNativeSession(session) {
   if (!isNative()) return;
   try {
@@ -7776,6 +7796,12 @@ function App() {
     if (j.lastSleep) setLastSleep(j.lastSleep);
     setOuraOn(!!j.connected);
   };
+  // passos lidos direto do HealthKit (só iOS nativo) — só o campo "steps" por dia, nunca
+  // substitui readiness/sono (que continuam vindo só da Oura). Ver fetchHealthKitSteps acima.
+  const [hkStepsByDate, setHkStepsByDate] = useState({});
+  const syncHealthKitSteps = () => {
+    fetchHealthKitSteps().then((byDate) => { if (byDate) setHkStepsByDate(byDate); });
+  };
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
   const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
@@ -7884,6 +7910,7 @@ function App() {
     if (!ready) return;
     let alive = true;
     authFetch('/api/oura').then((r) => r.json()).then((j) => { if (alive) applyOuraData(j); }).catch(() => {});
+    syncHealthKitSteps();
     loadGmail();
     loadNews();
     authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
@@ -7902,6 +7929,7 @@ function App() {
     if (!ready || !wide || active.screen !== 'home') return;
     const id = setInterval(() => {
       authFetch('/api/oura').then((r) => r.json()).then(applyOuraData).catch(() => {});
+      syncHealthKitSteps();
       authFetch('/api/google?ts=' + Date.now()).then((r) => r.json()).then((j) => { if (!j) return; if (Array.isArray(j.events)) setGEvents(j.events); if (Array.isArray(j.messages)) setGMsgs(j.messages); }).catch(() => {});
       loadState().then((s) => { if (s.items) setItems(s.items); }).catch(() => {});
       loadNews(true);
@@ -8093,6 +8121,11 @@ function App() {
   }));
   const allItems = [...items, ...(gEvents || []), ...(gMsgs || []), ...ttItems];
   const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
+  // HealthKit tem prioridade só pro campo "steps" (dado local, sem o delay de sync da Oura) —
+  // não pode sobrescrever o dia inteiro, senão perde readiness/sono que só a Oura tem.
+  Object.keys(hkStepsByDate).forEach((d) => {
+    mergedHealth[d] = { ...(mergedHealth[d] || {}), steps: hkStepsByDate[d] };
+  });
   const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, addItems, updateItem, delItem, flash, setPendingCount };
   const renderModule = (mo) => {
     const back = () => setActive({ screen: 'dashboard', module: null });
