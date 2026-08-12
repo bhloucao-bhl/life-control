@@ -7381,7 +7381,14 @@ function OuraWebhookSetup({ lang, onOuraSync }) {
     try {
       const j = await (await authFetch('/api/oura?refresh=1')).json();
       onOuraSync && onOuraSync(j);
-      setDebug({ today: (j.byDate && j.byDate[todayISO()]) || null, errors: j.errors || [], connected: !!j.connected });
+      setDebug({
+        today: (j.byDate && j.byDate[todayISO()]) || null,
+        // dia de ontem, já fechado — se vier com "steps", prova que a integração funciona e o
+        // problema de hoje é só a Oura ainda não ter processado a atividade do dia corrente.
+        yesterday: (j.byDate && j.byDate[addDays(todayISO(), -1)]) || null,
+        errors: j.errors || [],
+        connected: !!j.connected,
+      });
       await loadStatus();
     } catch (e) { setDebug({ error: String(e) }); }
     setRefreshing(false);
