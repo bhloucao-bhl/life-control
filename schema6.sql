@@ -4,8 +4,9 @@
 -- ============================================================
 
 -- Cache das compras do Mercado Livre, populado pelo cron horário
--- (/api/cron/mercadolivre-sync, ver vercel.json). O GET /api/mercadolivre
--- lê daqui primeiro; só busca ao vivo no Mercado Livre se ainda não houver
+-- (/api/cron/mercadolivre-sync, agendado via GitHub Actions — ver
+-- .github/workflows/mercadolivre-sync.yml). O GET /api/mercadolivre lê
+-- daqui primeiro; só busca ao vivo no Mercado Livre se ainda não houver
 -- cache, se ele estiver velho (>2h, sinal de que o cron parou de rodar), ou
 -- se ?refresh=1.
 create table if not exists public.ml_purchases_cache (

@@ -7,10 +7,13 @@ export const maxDuration = 60;
 /**
  * GET /api/cron/mercadolivre-sync
  *
- * Roda de hora em hora (ver vercel.json) e atualiza o cache de compras
- * (ml_purchases_cache) de todo mundo que tem o Mercado Livre conectado —
- * assim a aba Compras mostra pedidos recentes sem precisar desconectar e
- * reconectar a conta pra forçar um refetch.
+ * Roda de hora em hora e atualiza o cache de compras (ml_purchases_cache) de
+ * todo mundo que tem o Mercado Livre conectado — assim a aba Compras mostra
+ * pedidos recentes sem precisar desconectar e reconectar a conta pra forçar
+ * um refetch.
+ *
+ * Agendado via GitHub Actions (.github/workflows/mercadolivre-sync.yml), não
+ * pelo cron nativo da Vercel — contas Hobby só permitem cron diário lá.
  *
  * Protegida por Authorization: Bearer <CRON_SECRET>, igual /api/health/supabase.
  */
