@@ -7362,6 +7362,7 @@ function TuyaIrDiag({ t, lang }) {
 function OuraWebhookSetup({ lang, onOuraSync }) {
   const [busy, setBusy] = useState(false); const [result, setResult] = useState(null);
   const [refreshing, setRefreshing] = useState(false); const [cachedAt, setCachedAt] = useState(undefined);
+  const [debug, setDebug] = useState(null); // snapshot cru do que o /api/oura devolveu pra hoje, pra achar por que "steps" some
   const loadStatus = () => authFetch('/api/oura').then((r) => r.json()).then((j) => setCachedAt(j && j.cachedAt ? j.cachedAt : null)).catch(() => {});
   useEffect(() => { loadStatus(); }, []);
   const run = async () => {
@@ -7380,8 +7381,9 @@ function OuraWebhookSetup({ lang, onOuraSync }) {
     try {
       const j = await (await authFetch('/api/oura?refresh=1')).json();
       onOuraSync && onOuraSync(j);
+      setDebug({ today: (j.byDate && j.byDate[todayISO()]) || null, errors: j.errors || [], connected: !!j.connected });
       await loadStatus();
-    } catch (e) {}
+    } catch (e) { setDebug({ error: String(e) }); }
     setRefreshing(false);
   };
   return (
@@ -7406,6 +7408,12 @@ function OuraWebhookSetup({ lang, onOuraSync }) {
           {!!(result.failed && result.failed.length) && (
             <div style={{ marginTop: 4, color: C.rose }}>{result.failed.map((f) => `${f.key}: ${f.error}`).join(' · ')}</div>
           )}
+        </div>
+      )}
+      {debug && (
+        <div style={{ ...card, padding: 10, marginTop: 8, fontSize: 10.5, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+          {lang === 'pt' ? 'Diagnóstico (dado bruto de hoje, ' + todayISO() + '):' : 'Diagnostic (raw data for today, ' + todayISO() + '):'}
+          {'\n'}{JSON.stringify(debug, null, 1)}
         </div>
       )}
     </div>
