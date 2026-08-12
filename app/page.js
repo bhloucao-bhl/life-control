@@ -7796,11 +7796,25 @@ function App() {
     if (j.lastSleep) setLastSleep(j.lastSleep);
     setOuraOn(!!j.connected);
   };
-  // passos lidos direto do HealthKit (só iOS nativo) — só o campo "steps" por dia, nunca
-  // substitui readiness/sono (que continuam vindo só da Oura). Ver fetchHealthKitSteps acima.
-  const [hkStepsByDate, setHkStepsByDate] = useState({});
+  // passos do HealthKit — só o campo "steps" por dia, nunca substitui readiness/sono (que
+  // continuam vindo só da Oura). Duas fontes, priorizadas na hora de mesclar (ver mergedHealth):
+  // "server" vem de /api/healthkit-steps (funciona em qualquer plataforma, inclusive desktop —
+  // é o que o app iOS grava lá toda vez que lê o HealthKit); "local" só existe no próprio app
+  // iOS, lendo o HealthKit direto no aparelho, sem round-trip nenhum.
+  const [hkServerStepsByDate, setHkServerStepsByDate] = useState({});
+  const [hkLocalStepsByDate, setHkLocalStepsByDate] = useState({});
+  const loadHealthKitStepsFromServer = () => {
+    authFetch('/api/healthkit-steps').then((r) => r.json()).then((j) => { if (j && j.byDate) setHkServerStepsByDate(j.byDate); }).catch(() => {});
+  };
   const syncHealthKitSteps = () => {
-    fetchHealthKitSteps().then((byDate) => { if (byDate) setHkStepsByDate(byDate); });
+    loadHealthKitStepsFromServer();
+    fetchHealthKitSteps().then((byDate) => {
+      if (!byDate) return;
+      setHkLocalStepsByDate(byDate);
+      // só o app iOS chega até aqui (fetchHealthKitSteps já devolve null fora dele) — publica
+      // pro servidor pra versão desktop/web (sem acesso nenhum ao HealthKit) enxergar também.
+      authFetch('/api/healthkit-steps', { method: 'POST', body: JSON.stringify({ byDate }) }).catch(() => {});
+    });
   };
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
@@ -8121,10 +8135,14 @@ function App() {
   }));
   const allItems = [...items, ...(gEvents || []), ...(gMsgs || []), ...ttItems];
   const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
-  // HealthKit tem prioridade só pro campo "steps" (dado local, sem o delay de sync da Oura) —
-  // não pode sobrescrever o dia inteiro, senão perde readiness/sono que só a Oura tem.
-  Object.keys(hkStepsByDate).forEach((d) => {
-    mergedHealth[d] = { ...(mergedHealth[d] || {}), steps: hkStepsByDate[d] };
+  // HealthKit tem prioridade só pro campo "steps" (dado mais fresco, sem o delay de sync da
+  // Oura) — não pode sobrescrever o dia inteiro, senão perde readiness/sono que só a Oura tem.
+  // "server" (funciona em qualquer plataforma) primeiro, "local" (só existe no próprio app iOS,
+  // lendo o HealthKit direto no aparelho) por cima — o mais fresco vence quando os dois existem.
+  [hkServerStepsByDate, hkLocalStepsByDate].forEach((byDate) => {
+    Object.keys(byDate).forEach((d) => {
+      mergedHealth[d] = { ...(mergedHealth[d] || {}), steps: byDate[d] };
+    });
   });
   const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, addItems, updateItem, delItem, flash, setPendingCount };
   const renderModule = (mo) => {
