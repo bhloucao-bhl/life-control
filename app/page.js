@@ -2230,7 +2230,7 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, setHealth, goModule, openClaude, goNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, setHealth, goModule, openClaude, goNews, onOpenNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
   const [zBusy, setZBusy] = useState(false);
@@ -2390,7 +2390,7 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
         ) : news.slice(0, 5).map((n, i) => {
           const src = (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
           return (
-          <div key={i} onClick={goNews} style={{ padding: '11px 14px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div key={i} onClick={() => onOpenNews(n)} style={{ padding: '11px 14px', borderTop: i ? `1px solid ${C.borderSoft}` : 'none', cursor: 'pointer', display: 'flex', gap: 10, alignItems: 'center' }}>
             <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13.5, lineHeight: 1.35 }}>{n.title}</div><div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div></div>
             <ChevronRight size={15} style={{ color: C.text3, flexShrink: 0 }} />
           </div>
@@ -2726,7 +2726,7 @@ function HealthRingWide({ readiness, sleep, steps, caloriesToday, calorieGoal, o
     </div>
   );
 }
-function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal, wideLayout, setWideLayout, wideHidden = [], setWideHidden }) {
+function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, onOpenNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal, wideLayout, setWideLayout, wideHidden = [], setWideHidden }) {
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
@@ -3018,7 +3018,7 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
                     const last = i === arr.length - 1;
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderBottom: last ? 'none' : `1px solid ${C.borderSoft}`, paddingBottom: last ? 0 : 12 }}>
-                        <div onClick={goNews} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                        <div onClick={() => onOpenNews(n)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                           <div style={{ fontSize: 14.5, fontWeight: 600, marginBottom: 4 }}>{n.title}</div>
                           <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.03em' }}>{src}{n.pub ? ' · ' + timeAgo(n.pub, lang) : ''}</div>
                         </div>
@@ -3524,8 +3524,43 @@ function MedicalHistoryScreen({ items, people, lang, t, back, addItem, updateIte
     </div>
   );
 }
-function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSendItem, savedNews = [], onUnsave }) {
-  const [reader, setReader] = useState(null); // noticia aberta no leitor interno
+// leitor de notícia como overlay: abre por cima da tela atual (Hoje, lista de Notícias, etc.) e ao
+// fechar volta pra onde o usuário estava, sem precisar navegar pela lista pra achar a matéria de novo.
+function NewsReaderModal({ item, lang, t, onClose, isSaved, onSave, onUnsave, onShare }) {
+  const [frameState, setFrameState] = useState('loading'); // loading | ok | blocked
+  useEffect(() => {
+    setFrameState('loading');
+    const timer = setTimeout(() => setFrameState((v) => (v === 'loading' ? 'blocked' : v)), 4000);
+    return () => clearTimeout(timer);
+  }, [item && item.link]);
+  if (!item) return null;
+  const src = (item.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
+  const saved = isSaved(item);
+  return (
+    <Modal onClose={onClose} wide>
+      <SheetHead title={t('news')} onClose={onClose} icon={Newspaper} />
+      <div style={{ fontSize: 10.5, color: C.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{src}{item.pub ? ' · ' + timeAgo(item.pub, lang) : ''}</div>
+      <div style={{ fontSize: 18, fontWeight: 700, lineHeight: 1.3, marginBottom: 12 }}>{item.title}</div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <a href={item.link} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: 'none' }}><Btn style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><ArrowRight size={15} />{lang === 'pt' ? 'Abrir no site' : 'Open site'}</Btn></a>
+        <Btn kind="soft" onClick={() => (saved ? onUnsave(item) : onSave(item))} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Star size={14} style={{ color: saved ? C.accent : C.text2, fill: saved ? C.accent : 'none' }} /></Btn>
+        {onShare && <Btn kind="soft" onClick={() => onShare(item)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Send size={14} /></Btn>}
+      </div>
+      {frameState === 'blocked' ? (
+        <div style={{ ...card, padding: 16, textAlign: 'center', color: C.text3 }}>
+          <Newspaper size={22} style={{ color: C.text3, marginBottom: 8 }} />
+          <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{lang === 'pt' ? 'Este site não permite abrir aqui dentro. Toque em "Abrir no site" para ler a matéria completa.' : 'This site can’t be embedded here — tap "Open site" to read the full article.'}</div>
+        </div>
+      ) : (
+        <div style={{ position: 'relative', borderRadius: 14, overflow: 'hidden', border: `1px solid ${C.border}`, height: 'min(60vh, 560px)', background: C.surface2 }}>
+          {frameState === 'loading' && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.text3, gap: 8, fontSize: 12.5 }}><Loader2 size={15} className="spin" />{lang === 'pt' ? 'Carregando…' : 'Loading…'}</div>}
+          <iframe key={item.link} src={item.link} title={item.title} onLoad={() => setFrameState('ok')} style={{ width: '100%', height: '100%', border: 'none', opacity: frameState === 'ok' ? 1 : 0 }} referrerPolicy="no-referrer" sandbox="allow-scripts allow-same-origin allow-popups allow-forms allow-popups-to-escape-sandbox" />
+        </div>
+      )}
+    </Modal>
+  );
+}
+function NewsScreen({ lang, t, back, news, loading, onRefresh, onOpenItem, onSaveItem, onSendItem, savedNews = [], onUnsave }) {
   const [tab, setTab] = useState('feed'); // feed | saved
   const savedLinks = new Set((savedNews || []).map((x) => x.meta && x.meta.link).filter(Boolean));
   const isSaved = (n) => savedLinks.has(n.link);
@@ -3547,26 +3582,6 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
   };
   const sourceName = (n) => (n.source || '').replace(/\.com|\.br|\.co|\.info|\.net/g, '').split('.').pop() || 'web';
 
-  if (reader) {
-    return (
-      <div>
-        <button onClick={() => setReader(null)} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 10, padding: '4px 0' }}><ChevronLeft size={16} />{t('news')}</button>
-        <div style={{ fontSize: 10.5, color: (THEMES[reader.theme] || {}).color || C.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>{sourceName(reader)}{reader.pub ? ' · ' + timeAgo(reader.pub, lang) : ''}</div>
-        <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.3, marginBottom: 12 }}>{reader.title}</div>
-        {reader.summary && <div style={{ ...card, padding: 15, fontSize: 14, lineHeight: 1.6, color: C.text, marginBottom: 12 }}>{reader.summary}</div>}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-          <a href={reader.link} target="_blank" rel="noreferrer" style={{ flex: 1, textDecoration: 'none' }}><Btn style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 6, alignItems: 'center' }}><ArrowRight size={15} />{lang === 'pt' ? 'Abrir no site' : 'Open site'}</Btn></a>
-          <Btn kind="soft" onClick={() => { if (isSaved(reader)) { onUnsave && onUnsave(reader); } else { onSaveItem && onSaveItem(reader); } }} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Star size={14} style={{ color: isSaved(reader) ? C.accent : C.text2, fill: isSaved(reader) ? C.accent : 'none' }} /></Btn>
-          <Btn kind="soft" onClick={() => shareNative(reader)} style={{ display: 'flex', gap: 5, alignItems: 'center', padding: '10px 14px' }}><Send size={14} /></Btn>
-        </div>
-        <div style={{ ...card, padding: 16, textAlign: 'center', color: C.text3 }}>
-          <Newspaper size={22} style={{ color: C.text3, marginBottom: 8 }} />
-          <div style={{ fontSize: 12.5, lineHeight: 1.5 }}>{lang === 'pt' ? 'Toque em “Abrir no site” para ler a matéria completa na fonte original.' : 'Tap “Open site” to read the full article.'}</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div>
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{t('home')}</button>
@@ -3586,7 +3601,7 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
         (list || []).map((n, i) => {
           const th = THEMES[n.theme] || { label: n.theme, color: C.text3 };
           return (
-            <div key={i} onClick={() => setReader(n)} style={{ ...card, padding: 15, marginBottom: 10, cursor: 'pointer' }}>
+            <div key={i} onClick={() => onOpenItem(n)} style={{ ...card, padding: 15, marginBottom: 10, cursor: 'pointer' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
                 <span style={{ fontSize: 10.5, color: th.color, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em' }}>{sourceName(n)}</span>
                 {n.pub && <span style={{ fontSize: 10, color: C.text3 }}>{timeAgo(n.pub, lang)}</span>}
@@ -3594,7 +3609,7 @@ function NewsScreen({ lang, t, back, news, loading, onRefresh, onSaveItem, onSen
               <div style={{ fontSize: 15, fontWeight: 600, lineHeight: 1.35 }}>{n.title}</div>
               {n.summary && <div style={{ fontSize: 12.5, color: C.text2, marginTop: 6, lineHeight: 1.5 }}>{n.summary}</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }} onClick={(e) => e.stopPropagation()}>
-                <Btn kind="soft" onClick={() => setReader(n)} style={{ flex: 1, fontSize: 12, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><ArrowRight size={13} />{lang === 'pt' ? 'Ler' : 'Read'}</Btn>
+                <Btn kind="soft" onClick={() => onOpenItem(n)} style={{ flex: 1, fontSize: 12, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><ArrowRight size={13} />{lang === 'pt' ? 'Ler' : 'Read'}</Btn>
                 <Btn kind="soft" onClick={() => { if (isSaved(n) || n._saved) { onUnsave && onUnsave(n._saved || n); } else { onSaveItem && onSaveItem(n); } }} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Star size={13} style={{ color: (isSaved(n) || n._saved) ? C.accent : C.text2, fill: (isSaved(n) || n._saved) ? C.accent : 'none' }} /></Btn>
                 <Btn kind="soft" onClick={() => shareNative(n)} style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', padding: '9px 12px' }}><Send size={13} /></Btn>
               </div>
@@ -7711,6 +7726,7 @@ function App() {
   const [settings, setSettings] = useState({ lang: 'pt', name: '', health: {}, profile: {}, dock: DEFAULT_DOCK, devices: DEFAULT_DEVICES });
   const [active, setActive] = useState({ screen: 'home', module: null });
   const [detail, setDetail] = useState(null); const [showCapture, setShowCapture] = useState(false); const [showSettings, setShowSettings] = useState(false);
+  const [newsReader, setNewsReader] = useState(null); // noticia aberta como overlay, direto de onde foi clicada
   const [claudeSeed, setClaudeSeed] = useState(null); const [composeSeed, setComposeSeed] = useState(null);
   const [newsData, setNewsData] = useState(null); const [newsLoading, setNewsLoading] = useState(false);
   const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
@@ -7892,6 +7908,8 @@ function App() {
   // "salvar para ler depois" — usado tanto na Notícias quanto na Hoje (wide), pra
   // aparecer marcado nos dois lugares e permitir ler mesmo depois do feed rodar.
   const saveNewsItem = (n) => { addItem({ type: 'note', domain: 'personal', title: n.title, notes: (n.summary || '') + '\n\n' + n.link, meta: { link: n.link, source: 'news', theme: n.theme, pub: n.pub, sourceName: n.source } }); flash(lang === 'pt' ? 'Salvo ✓' : 'Saved ✓'); };
+  const unsaveNewsItem = (it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } };
+  const sendNewsItem = (n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link });
   // Avisa se a sincronização de sessão com os widgets falhou (ver syncNativeSession, no topo do
   // arquivo) — sem isso a falha é totalmente silenciosa e só aparece muito depois, no widget.
   useEffect(() => {
@@ -8136,15 +8154,16 @@ function App() {
       )}
       <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
         {active.screen === 'home' && (wide
-          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} wideLayout={settings.wideLayout} setWideLayout={setWideLayout} wideHidden={settings.wideHidden || []} setWideHidden={setWideHidden} />
-          : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
+          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} onOpenNews={setNewsReader} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} wideLayout={settings.wideLayout} setWideLayout={setWideLayout} wideHidden={settings.wideHidden || []} setWideHidden={setWideHidden} />
+          : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} onOpenNews={setNewsReader} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
         )}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
           savedNews={items.filter((i) => i.type === 'note' && i.meta && i.meta.source === 'news')}
+          onOpenItem={setNewsReader}
           onSaveItem={saveNewsItem}
-          onUnsave={(it) => { if (it && it.id) { delItem(it.id); flash(lang === 'pt' ? 'Removido' : 'Removed'); } }}
-          onSendItem={(n) => setComposeSeed({ to: '', subject: n.title, body: (n.summary || n.title) + '\n\n' + n.link })} />}
+          onUnsave={unsaveNewsItem}
+          onSendItem={sendNewsItem} />}
         {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} openClaude={(q) => setClaudeSeed(q)} goIndicatorsFull={() => setActive({ screen: 'indicatorsFull', module: null })} />}
         {active.screen === 'indicatorsFull' && <IndicatorsFullScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'medical', module: null })} />}
         {active.screen === 'diet' && <DietScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} delItem={delItem} onOpen={setDetail} flash={flash} dietSummary={settings.dietSummary} setDietSummary={setDietSummary} openClaude={(q) => setClaudeSeed(q)} />}
@@ -8182,6 +8201,11 @@ function App() {
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
       {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} />}
       {detail && <ErrorBoundary fallback={() => <Modal onClose={() => setDetail(null)}><SheetHead title={lang === 'pt' ? 'Erro' : 'Error'} onClose={() => setDetail(null)} icon={AlertTriangle} /><div style={{ ...card, padding: 16, fontSize: 13, color: C.text2 }}>{lang === 'pt' ? 'Não consegui abrir este item. Tente novamente ou edite-o pela lista.' : "Couldn't open this item."}</div></Modal>}><ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} allItems={allItems} addItem={addItem} /></ErrorBoundary>}
+      {newsReader && <NewsReaderModal item={newsReader} lang={lang} t={t} onClose={() => setNewsReader(null)}
+        isSaved={(n) => items.some((i) => i.type === 'note' && i.meta && i.meta.source === 'news' && i.meta.link === n.link)}
+        onSave={saveNewsItem}
+        onUnsave={(n) => unsaveNewsItem(items.find((i) => i.type === 'note' && i.meta && i.meta.source === 'news' && i.meta.link === n.link))}
+        onShare={sendNewsItem} />}
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
       {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', width: 'max-content', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 16, fontSize: 13, lineHeight: 1.4, textAlign: 'center', zIndex: 60, whiteSpace: 'normal', wordBreak: 'break-word' }}>{toast}</div>}
