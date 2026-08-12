@@ -7359,7 +7359,7 @@ function TuyaIrDiag({ t, lang }) {
   );
 }
 
-function OuraWebhookSetup({ lang }) {
+function OuraWebhookSetup({ lang, onOuraSync }) {
   const [busy, setBusy] = useState(false); const [result, setResult] = useState(null);
   const [refreshing, setRefreshing] = useState(false); const [cachedAt, setCachedAt] = useState(undefined);
   const loadStatus = () => authFetch('/api/oura').then((r) => r.json()).then((j) => setCachedAt(j && j.cachedAt ? j.cachedAt : null)).catch(() => {});
@@ -7375,7 +7375,13 @@ function OuraWebhookSetup({ lang }) {
   };
   const refreshNow = async () => {
     setRefreshing(true);
-    try { await authFetch('/api/oura?refresh=1'); await loadStatus(); } catch (e) {}
+    // busca ao vivo (?refresh=1) e já joga o resultado na Hoje/Saúde — sem isso, "Atualizar agora"
+    // só trocava o carimbo aqui dos Ajustes e a Hoje ficava com os dados antigos até um reload inteiro.
+    try {
+      const j = await (await authFetch('/api/oura?refresh=1')).json();
+      onOuraSync && onOuraSync(j);
+      await loadStatus();
+    } catch (e) {}
     setRefreshing(false);
   };
   return (
@@ -7405,7 +7411,7 @@ function OuraWebhookSetup({ lang }) {
     </div>
   );
 }
-function Connections({ lang, t }) {
+function Connections({ lang, t, onOuraSync }) {
   const [st, setSt] = useState(null); const [busy, setBusy] = useState('');
   const load = () => authFetch('/api/connect').then((r) => r.json()).then(setSt).catch(() => setSt({}));
   useEffect(() => { load(); }, []);
@@ -7449,7 +7455,7 @@ function Connections({ lang, t }) {
         <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
         <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
       </ResponsiveGrid>
-      {st.oura && st.oura.connected && <OuraWebhookSetup lang={lang} />}
+      {st.oura && st.oura.connected && <OuraWebhookSetup lang={lang} onOuraSync={onOuraSync} />}
     </>
   );
 }
@@ -7552,7 +7558,7 @@ function PushNotificationsSetting({ lang }) {
   );
 }
 
-function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme, applyTheme, onClose }) {
+function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme, applyTheme, onClose, onOuraSync }) {
   const [name, setName] = useState(settings.name);
   const dock = settings.dock || DEFAULT_DOCK;
   const toggleDock = (k) => setSettings((s) => { const cur = s.dock || DEFAULT_DOCK; const has = cur.includes(k); if (has) return { ...s, dock: cur.filter((x) => x !== k) }; if (cur.length >= 5) return s; return { ...s, dock: [...cur, k] }; });
@@ -7576,7 +7582,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
       </div>
       <div style={{ height: 1, background: C.borderSoft, margin: '8px 0 20px' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{t('connections')}</div>
-      <Connections lang={lang} t={t} />
+      <Connections lang={lang} t={t} onOuraSync={onOuraSync} />
       <TuyaIrDiag t={t} lang={lang} />
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
@@ -7746,6 +7752,15 @@ function App() {
   const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [theme, setThemeState] = useState(_theme); const applyTheme = (name) => { setTheme(name); setThemeState(name); };
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
+  // aplica a resposta de /api/oura no estado do app inteiro — usado tanto nos fetches automáticos
+  // quanto no "Atualizar agora" dos Ajustes, que antes só atualizava o carimbo local ali mesmo e
+  // deixava a Hoje/Saúde com os dados antigos até um reload completo da página.
+  const applyOuraData = (j) => {
+    if (!j) return;
+    if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); }
+    if (j.lastSleep) setLastSleep(j.lastSleep);
+    setOuraOn(!!j.connected);
+  };
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
   const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
@@ -7853,7 +7868,7 @@ function App() {
   useEffect(() => {
     if (!ready) return;
     let alive = true;
-    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (!alive || !j) return; if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); } if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); }).catch(() => {});
+    authFetch('/api/oura').then((r) => r.json()).then((j) => { if (alive) applyOuraData(j); }).catch(() => {});
     loadGmail();
     loadNews();
     authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
@@ -7871,7 +7886,7 @@ function App() {
   useEffect(() => {
     if (!ready || !wide || active.screen !== 'home') return;
     const id = setInterval(() => {
-      authFetch('/api/oura').then((r) => r.json()).then((j) => { if (j) { if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); } if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); } }).catch(() => {});
+      authFetch('/api/oura').then((r) => r.json()).then(applyOuraData).catch(() => {});
       authFetch('/api/google?ts=' + Date.now()).then((r) => r.json()).then((j) => { if (!j) return; if (Array.isArray(j.events)) setGEvents(j.events); if (Array.isArray(j.messages)) setGMsgs(j.messages); }).catch(() => {});
       loadState().then((s) => { if (s.items) setItems(s.items); }).catch(() => {});
       loadNews(true);
@@ -7941,7 +7956,7 @@ function App() {
     try {
       const jobs = [refreshGoogle(), loadGmail(), reloadTicktick(), loadNews(true)];
       await Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {})));
-      try { const j = await (await authFetch('/api/oura')).json(); if (j) { if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); } if (j.lastSleep) setLastSleep(j.lastSleep); setOuraOn(!!j.connected); } } catch (e) {}
+      try { applyOuraData(await (await authFetch('/api/oura')).json()); } catch (e) {}
     } finally { setTimeout(() => setRefreshing(false), 300); }
   };
   const scrollTop = () => (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0);
@@ -8213,7 +8228,7 @@ function App() {
 
       {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
-      {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} onOuraSync={applyOuraData} />}
       {detail && <ErrorBoundary fallback={() => <Modal onClose={() => setDetail(null)}><SheetHead title={lang === 'pt' ? 'Erro' : 'Error'} onClose={() => setDetail(null)} icon={AlertTriangle} /><div style={{ ...card, padding: 16, fontSize: 13, color: C.text2 }}>{lang === 'pt' ? 'Não consegui abrir este item. Tente novamente ou edite-o pela lista.' : "Couldn't open this item."}</div></Modal>}><ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} allItems={allItems} addItem={addItem} /></ErrorBoundary>}
       {newsReader && <NewsReaderModal item={newsReader} lang={lang} t={t} onClose={() => setNewsReader(null)}
         isSaved={(n) => items.some((i) => i.type === 'note' && i.meta && i.meta.source === 'news' && i.meta.link === n.link)}
