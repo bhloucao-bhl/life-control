@@ -40,6 +40,8 @@
 		CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863B924633F127D12E497D8B /* PurchasesWidget.swift */; };
 		E38DAFDB428EEBA73C80694D /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */; };
 		F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A20782818C62B8359506B99 /* FinanceWidget.swift */; };
+		9FF375CE429E45B357BB7854 /* HealthKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */; };
+		F4B41B89D3CABF0BAE9E7AA9 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7926AD07ACA0C95F611BDE70 /* HealthKit.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +104,8 @@
 		E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EF897D7A1455C2A99163D0AF /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
 		FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LifeControlWidgets.entitlements; sourceTree = "<group>"; };
+		DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitPlugin.swift; sourceTree = "<group>"; };
+		7926AD07ACA0C95F611BDE70 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/HealthKit.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -111,6 +115,7 @@
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
 				807485E720C9343B5E32A672 /* WidgetKit.framework in Frameworks */,
+				F4B41B89D3CABF0BAE9E7AA9 /* HealthKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -143,6 +148,7 @@
 				23E667EE9C149C717B10EC72 /* WidgetKit.framework */,
 				9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */,
 				EF897D7A1455C2A99163D0AF /* AppIntents.framework */,
+				7926AD07ACA0C95F611BDE70 /* HealthKit.framework */,
 			);
 			name = iOS;
 			sourceTree = "<group>";
@@ -181,6 +187,7 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				89F7B142245FFF8482C3B32A /* App.entitlements */,
 				76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */,
+				DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */,
 				E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */,
 				E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */,
 			);
@@ -367,6 +374,7 @@
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				81247BF62ADD51133363279E /* SharedAuthPlugin.swift in Sources */,
+				9FF375CE429E45B357BB7854 /* HealthKitPlugin.swift in Sources */,
 				9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */,
 				97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */,
 				AB4A2BBE075B811B822A8B79 /* MainViewController.swift in Sources */,
