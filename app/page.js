@@ -521,7 +521,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, Sparkle, GripVertical,
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, GripVertical,
   Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint, Footprints
 } from 'lucide-react';
 
@@ -2259,13 +2259,6 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
   const [zBusy, setZBusy] = useState(false);
-  const [horo, setHoro] = useState(null); const [horoLoading, setHoroLoading] = useState(false); const [horoOpen, setHoroOpen] = useState(false);
-  const openHoroscope = () => {
-    setHoroOpen(true);
-    if (horo) return;
-    setHoroLoading(true);
-    authFetch('/api/horoscope').then((r) => r.json()).then((j) => { setHoro(j); setHoroLoading(false); }).catch(() => { setHoro({ text: null, error: 'network' }); setHoroLoading(false); });
-  };
   const checkHouseEmailsNow = () => {
     setZBusy(true);
     scanHouseEmails({ addItems, flash, t, lang, items }).then((res) => {
@@ -2398,22 +2391,9 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           ].map((s) => (
             <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 27, height: 27, borderRadius: 7, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}`, boxShadow: _theme === 'light' ? 'none' : '0 0 0 1px rgba(255,255,255,0.1)' }}>{s.svg}</a>
           ))}
-          <button onClick={openHoroscope} title={lang === 'pt' ? 'Horóscopo' : 'Horoscope'} style={{ width: 27, height: 27, borderRadius: 7, background: 'linear-gradient(135deg, #8B5CF6, #C084FC)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.border}`, cursor: 'pointer', flexShrink: 0 }}><Sparkle size={14} style={{ color: '#fff' }} /></button>
           <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5, marginLeft: 2 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
         </div>
       </div>
-      {horoOpen && (
-        <Modal onClose={() => setHoroOpen(false)}>
-          <SheetHead title={lang === 'pt' ? 'Horóscopo — Sagitário' : 'Horoscope — Sagittarius'} onClose={() => setHoroOpen(false)} icon={Sparkle} />
-          {horoLoading ? (
-            <div style={{ padding: 20, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={14} className="spin" />{lang === 'pt' ? 'Buscando...' : 'Fetching...'}</div>
-          ) : horo && horo.text ? (
-            <div style={{ fontSize: 14, lineHeight: 1.6, color: C.text }}>{horo.text}</div>
-          ) : (
-            <div style={{ fontSize: 13, color: C.text3, lineHeight: 1.5 }}>{lang === 'pt' ? 'Não consegui buscar o horóscopo de hoje agora.' : "Couldn't fetch today's horoscope right now."}</div>
-          )}
-        </Modal>
-      )}
       <div style={{ ...card, overflow: 'hidden' }}>
         {news === null ? (
           <div style={{ padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
