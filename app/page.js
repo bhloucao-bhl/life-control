@@ -521,7 +521,7 @@ import {
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
   Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
-  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, Sparkle, GripVertical,
+  MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, GripVertical,
   Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint, Footprints
 } from 'lucide-react';
 
@@ -2259,13 +2259,6 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
   const [zBusy, setZBusy] = useState(false);
-  const [horo, setHoro] = useState(null); const [horoLoading, setHoroLoading] = useState(false); const [horoOpen, setHoroOpen] = useState(false);
-  const openHoroscope = () => {
-    setHoroOpen(true);
-    if (horo) return;
-    setHoroLoading(true);
-    authFetch('/api/horoscope').then((r) => r.json()).then((j) => { setHoro(j); setHoroLoading(false); }).catch(() => { setHoro({ text: null, error: 'network' }); setHoroLoading(false); });
-  };
   const checkHouseEmailsNow = () => {
     setZBusy(true);
     scanHouseEmails({ addItems, flash, t, lang, items }).then((res) => {
@@ -2398,22 +2391,9 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           ].map((s) => (
             <a key={s.name} href={s.url} target="_blank" rel="noreferrer" title={s.name} style={{ width: 27, height: 27, borderRadius: 7, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', textDecoration: 'none', flexShrink: 0, border: `1px solid ${C.border}`, boxShadow: _theme === 'light' ? 'none' : '0 0 0 1px rgba(255,255,255,0.1)' }}>{s.svg}</a>
           ))}
-          <button onClick={openHoroscope} title={lang === 'pt' ? 'Horóscopo' : 'Horoscope'} style={{ width: 27, height: 27, borderRadius: 7, background: 'linear-gradient(135deg, #8B5CF6, #C084FC)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${C.border}`, cursor: 'pointer', flexShrink: 0 }}><Sparkle size={14} style={{ color: '#fff' }} /></button>
           <button onClick={() => onRefreshNews && onRefreshNews()} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', gap: 4, alignItems: 'center', fontSize: 11.5, marginLeft: 2 }}>{newsLoading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}</button>
         </div>
       </div>
-      {horoOpen && (
-        <Modal onClose={() => setHoroOpen(false)}>
-          <SheetHead title={lang === 'pt' ? 'Horóscopo — Sagitário' : 'Horoscope — Sagittarius'} onClose={() => setHoroOpen(false)} icon={Sparkle} />
-          {horoLoading ? (
-            <div style={{ padding: 20, textAlign: 'center', color: C.text3, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={14} className="spin" />{lang === 'pt' ? 'Buscando...' : 'Fetching...'}</div>
-          ) : horo && horo.text ? (
-            <div style={{ fontSize: 14, lineHeight: 1.6, color: C.text }}>{horo.text}</div>
-          ) : (
-            <div style={{ fontSize: 13, color: C.text3, lineHeight: 1.5 }}>{lang === 'pt' ? 'Não consegui buscar o horóscopo de hoje agora.' : "Couldn't fetch today's horoscope right now."}</div>
-          )}
-        </Modal>
-      )}
       <div style={{ ...card, overflow: 'hidden' }}>
         {news === null ? (
           <div style={{ padding: 18, textAlign: 'center', color: C.text3, fontSize: 12.5, display: 'flex', gap: 8, justifyContent: 'center', alignItems: 'center' }}><Loader2 size={13} className="spin" />{lang === 'pt' ? 'Curando…' : 'Curating…'}</div>
@@ -7522,6 +7502,53 @@ function Connections({ lang, t, onOuraSync }) {
   );
 }
 
+/**
+ * A Tuya não tem login self-service pra contas do app Smart Life (só pra
+ * apps OEM de marca própria) — então quem vincula um novo usuário é o
+ * admin, à mão, depois que a pessoa escaneia o QR gerado em Devices → Link
+ * App Account no painel iot.tuya.com. Esse card só aparece pro e-mail
+ * configurado em NEXT_PUBLIC_ADMIN_EMAIL (a checagem de verdade, que
+ * bloqueia qualquer outra pessoa, é no servidor em /api/admin/tuya-link).
+ */
+function TuyaAdminLink({ lang }) {
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  const [meEmail, setMeEmail] = useState(null);
+  const [email, setEmail] = useState(''); const [uidVal, setUidVal] = useState('');
+  const [busy, setBusy] = useState(false); const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    if (!adminEmail) return;
+    supabase.auth.getSession().then(({ data }) => setMeEmail(data && data.session && data.session.user && data.session.user.email));
+  }, [adminEmail]);
+  if (!adminEmail || meEmail !== adminEmail) return null;
+  const link = async () => {
+    if (!email.trim() || !uidVal.trim()) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await authFetch('/api/admin/tuya-link', { method: 'POST', body: JSON.stringify({ email: email.trim(), uid: uidVal.trim() }) });
+      const j = await r.json();
+      if (j.ok) { setMsg(lang === 'pt' ? 'Vinculado ✓' : 'Linked ✓'); setEmail(''); setUidVal(''); }
+      else setMsg('Erro: ' + (j.error || '?'));
+    } catch (e) { setMsg('Erro: ' + String(e)); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ ...card, padding: 14, marginTop: 10 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>{lang === 'pt' ? 'Vincular Tuya (admin)' : 'Link Tuya (admin)'}</div>
+      <div style={{ fontSize: 11, color: C.text3, marginBottom: 10, lineHeight: 1.4 }}>
+        {lang === 'pt'
+          ? 'Depois que a pessoa escanear o QR em Devices → Link App Account no painel Tuya, cole aqui o e-mail dela (o login dela neste app) e o UID que apareceu no painel.'
+          : "After the person scans the QR under Devices → Link App Account in the Tuya console, paste their email (their login here) and the UID shown in the console."}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input placeholder={lang === 'pt' ? 'e-mail da pessoa' : 'person email'} value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
+        <input placeholder="UID (ex: az1626805279...)" value={uidVal} onChange={(e) => setUidVal(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
+        <Btn onClick={link} disabled={busy || !email.trim() || !uidVal.trim()} style={{ padding: '8px 14px' }}>{busy ? '…' : (lang === 'pt' ? 'Vincular' : 'Link')}</Btn>
+      </div>
+      {msg && <div style={{ fontSize: 11.5, marginTop: 8, color: msg.startsWith('Erro') ? C.rose : C.green }}>{msg}</div>}
+    </div>
+  );
+}
+
 function AppLockSetting({ settings, setSettings, lang }) {
   const [check, setCheck] = useState(null); // resultado de checkBiometry()
   useEffect(() => { if (isNative()) BiometricAuth.checkBiometry().then(setCheck).catch(() => setCheck({ isAvailable: false })); }, []);
@@ -7645,6 +7672,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
       <div style={{ height: 1, background: C.borderSoft, margin: '8px 0 20px' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{t('connections')}</div>
       <Connections lang={lang} t={t} onOuraSync={onOuraSync} />
+      <TuyaAdminLink lang={lang} />
       <TuyaIrDiag t={t} lang={lang} />
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />

@@ -1,5 +1,5 @@
-import crypto from 'crypto';
 import { userFromRequest, admin } from '../../../lib/oauth';
+import { tuyaHost, sha256hex, hmac } from '../../../lib/tuya';
 
 export const runtime = 'nodejs';
 
@@ -7,12 +7,14 @@ export const runtime = 'nodejs';
  * Integração Tuya / SmartLife.
  * Usa Client ID + Secret do projeto na nuvem Tuya (iot.tuya.com) — essas
  * credenciais continuam compartilhadas, é só a assinatura HMAC-SHA256 do
- * projeto. O UID (de quem são os dispositivos) agora é por usuário: cada
- * testador tem sua própria conta Smart Life/Tuya vinculada ao projeto pelo
- * painel da Tuya (Devices > Link Tuya App Account > Tuya App Account
- * Authorization, com QR code), e o UID resultante fica salvo em
- * connections.tuya_uid. Sem UID salvo pro usuário = "não conectado" (sem
- * fallback pros dispositivos de outra pessoa).
+ * projeto. O UID (de quem são os dispositivos) é por usuário: a Tuya não
+ * oferece login OAuth2 self-service pra contas do app Smart Life (isso só
+ * existe pra apps OEM de marca própria) — então o vínculo é feito à mão
+ * pelo admin, um usuário de cada vez: a pessoa escaneia o QR gerado em
+ * Devices → Link App Account no painel iot.tuya.com, e o admin cola o
+ * e-mail dela + o UID resultante em Ajustes (ver app/api/admin/tuya-link).
+ * O UID fica salvo em connections.tuya_uid. Sem UID salvo pro usuário =
+ * "não conectado" (sem fallback pros dispositivos de outra pessoa).
  */
 
 /** UID da Tuya vinculado a este usuário, ou null se ele ainda não conectou. */
@@ -24,25 +26,6 @@ async function resolveUid(userId) {
     .eq('provider', 'tuya')
     .maybeSingle();
   return (data && data.tuya_uid) || null;
-}
-
-const REGION_HOST = {
-  us: 'https://openapi.tuyaus.com',
-  eu: 'https://openapi.tuyaeu.com',
-  cn: 'https://openapi.tuyacn.com',
-  in: 'https://openapi.tuyain.com',
-};
-
-function host() {
-  const r = (process.env.TUYA_REGION || 'us').toLowerCase();
-  return REGION_HOST[r] || REGION_HOST.us;
-}
-
-function sha256hex(s) {
-  return crypto.createHash('sha256').update(s || '', 'utf8').digest('hex');
-}
-function hmac(msg, secret) {
-  return crypto.createHmac('sha256', secret).update(msg, 'utf8').digest('hex').toUpperCase();
 }
 
 // cache simples do token em memória do servidor
@@ -59,7 +42,7 @@ async function getToken() {
   const stringToSign = `GET\n${contentHash}\n\n${path}`;
   const sign = hmac(id + t + stringToSign, secret);
 
-  const r = await fetch(host() + path, {
+  const r = await fetch(tuyaHost() + path, {
     headers: { client_id: id, sign, t, sign_method: 'HMAC-SHA256', 'Content-Type': 'application/json' },
   });
   const j = await r.json();
@@ -85,7 +68,7 @@ async function tuya(method, path, body) {
   const stringToSign = `${method}\n${contentHash}\n\n${path}`;
   const sign = hmac(id + token + t + stringToSign, secret);
 
-  const r = await fetch(host() + path, {
+  const r = await fetch(tuyaHost() + path, {
     method,
     headers: { client_id: id, access_token: token, sign, t, sign_method: 'HMAC-SHA256', 'Content-Type': 'application/json' },
     body: bodyStr || undefined,
