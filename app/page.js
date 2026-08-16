@@ -7496,6 +7496,7 @@ function Connections({ lang, t, onOuraSync }) {
         <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
         <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
         <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
+        <Row id="tuya" label="Tuya / Smart Life" icon={Wifi} color={C.amber || '#f5a623'} />
       </ResponsiveGrid>
       {st.oura && st.oura.connected && <OuraWebhookSetup lang={lang} onOuraSync={onOuraSync} />}
     </>
@@ -8044,7 +8045,7 @@ function App() {
     const q = new URLSearchParams(window.location.search);
     const conn = q.get('conn');
     if (!conn) return;
-    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : 'Google conectado ✓';
+    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : conn === 'tuya' ? 'Tuya / Smart Life conectado ✓' : 'Google conectado ✓';
     setToast(q.get('ok') ? okMsg : 'Erro: ' + (q.get('erro') || ''));
     setTimeout(() => setToast(null), 4000);
     window.history.replaceState({}, '', window.location.pathname);
