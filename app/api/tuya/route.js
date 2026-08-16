@@ -7,11 +7,14 @@ export const runtime = 'nodejs';
  * Integração Tuya / SmartLife.
  * Usa Client ID + Secret do projeto na nuvem Tuya (iot.tuya.com) — essas
  * credenciais continuam compartilhadas, é só a assinatura HMAC-SHA256 do
- * projeto. O UID (de quem são os dispositivos) é por usuário: ele conecta
- * a própria conta Smart Life/Tuya pela aba Ajustes (login OAuth2, ver
- * app/api/connect e app/api/callback/tuya), e o UID resultante fica salvo
- * em connections.tuya_uid. Sem UID salvo pro usuário = "não conectado"
- * (sem fallback pros dispositivos de outra pessoa).
+ * projeto. O UID (de quem são os dispositivos) é por usuário: a Tuya não
+ * oferece login OAuth2 self-service pra contas do app Smart Life (isso só
+ * existe pra apps OEM de marca própria) — então o vínculo é feito à mão
+ * pelo admin, um usuário de cada vez: a pessoa escaneia o QR gerado em
+ * Devices → Link App Account no painel iot.tuya.com, e o admin cola o
+ * e-mail dela + o UID resultante em Ajustes (ver app/api/admin/tuya-link).
+ * O UID fica salvo em connections.tuya_uid. Sem UID salvo pro usuário =
+ * "não conectado" (sem fallback pros dispositivos de outra pessoa).
  */
 
 /** UID da Tuya vinculado a este usuário, ou null se ele ainda não conectou. */

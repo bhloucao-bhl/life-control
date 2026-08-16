@@ -7496,10 +7496,56 @@ function Connections({ lang, t, onOuraSync }) {
         <Row id="google" label="Gmail + Google Agenda" icon={Mail} color={C.blue} />
         <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
         <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
-        <Row id="tuya" label="Tuya / Smart Life" icon={Wifi} color={C.amber || '#f5a623'} />
       </ResponsiveGrid>
       {st.oura && st.oura.connected && <OuraWebhookSetup lang={lang} onOuraSync={onOuraSync} />}
     </>
+  );
+}
+
+/**
+ * A Tuya não tem login self-service pra contas do app Smart Life (só pra
+ * apps OEM de marca própria) — então quem vincula um novo usuário é o
+ * admin, à mão, depois que a pessoa escaneia o QR gerado em Devices → Link
+ * App Account no painel iot.tuya.com. Esse card só aparece pro e-mail
+ * configurado em NEXT_PUBLIC_ADMIN_EMAIL (a checagem de verdade, que
+ * bloqueia qualquer outra pessoa, é no servidor em /api/admin/tuya-link).
+ */
+function TuyaAdminLink({ lang }) {
+  const adminEmail = process.env.NEXT_PUBLIC_ADMIN_EMAIL;
+  const [meEmail, setMeEmail] = useState(null);
+  const [email, setEmail] = useState(''); const [uidVal, setUidVal] = useState('');
+  const [busy, setBusy] = useState(false); const [msg, setMsg] = useState(null);
+  useEffect(() => {
+    if (!adminEmail) return;
+    supabase.auth.getSession().then(({ data }) => setMeEmail(data && data.session && data.session.user && data.session.user.email));
+  }, [adminEmail]);
+  if (!adminEmail || meEmail !== adminEmail) return null;
+  const link = async () => {
+    if (!email.trim() || !uidVal.trim()) return;
+    setBusy(true); setMsg(null);
+    try {
+      const r = await authFetch('/api/admin/tuya-link', { method: 'POST', body: JSON.stringify({ email: email.trim(), uid: uidVal.trim() }) });
+      const j = await r.json();
+      if (j.ok) { setMsg(lang === 'pt' ? 'Vinculado ✓' : 'Linked ✓'); setEmail(''); setUidVal(''); }
+      else setMsg('Erro: ' + (j.error || '?'));
+    } catch (e) { setMsg('Erro: ' + String(e)); }
+    setBusy(false);
+  };
+  return (
+    <div style={{ ...card, padding: 14, marginTop: 10 }}>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>{lang === 'pt' ? 'Vincular Tuya (admin)' : 'Link Tuya (admin)'}</div>
+      <div style={{ fontSize: 11, color: C.text3, marginBottom: 10, lineHeight: 1.4 }}>
+        {lang === 'pt'
+          ? 'Depois que a pessoa escanear o QR em Devices → Link App Account no painel Tuya, cole aqui o e-mail dela (o login dela neste app) e o UID que apareceu no painel.'
+          : "After the person scans the QR under Devices → Link App Account in the Tuya console, paste their email (their login here) and the UID shown in the console."}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input placeholder={lang === 'pt' ? 'e-mail da pessoa' : 'person email'} value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
+        <input placeholder="UID (ex: az1626805279...)" value={uidVal} onChange={(e) => setUidVal(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
+        <Btn onClick={link} disabled={busy || !email.trim() || !uidVal.trim()} style={{ padding: '8px 14px' }}>{busy ? '…' : (lang === 'pt' ? 'Vincular' : 'Link')}</Btn>
+      </div>
+      {msg && <div style={{ fontSize: 11.5, marginTop: 8, color: msg.startsWith('Erro') ? C.rose : C.green }}>{msg}</div>}
+    </div>
   );
 }
 
@@ -7626,6 +7672,7 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
       <div style={{ height: 1, background: C.borderSoft, margin: '8px 0 20px' }} />
       <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{t('connections')}</div>
       <Connections lang={lang} t={t} onOuraSync={onOuraSync} />
+      <TuyaAdminLink lang={lang} />
       <TuyaIrDiag t={t} lang={lang} />
       <LgDiag t={t} lang={lang} />
       <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
@@ -8045,7 +8092,7 @@ function App() {
     const q = new URLSearchParams(window.location.search);
     const conn = q.get('conn');
     if (!conn) return;
-    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : conn === 'tuya' ? 'Tuya / Smart Life conectado ✓' : 'Google conectado ✓';
+    const okMsg = conn === 'oura' ? 'Oura conectado ✓' : conn === 'ticktick' ? 'TickTick conectado ✓' : 'Google conectado ✓';
     setToast(q.get('ok') ? okMsg : 'Erro: ' + (q.get('erro') || ''));
     setTimeout(() => setToast(null), 4000);
     window.history.replaceState({}, '', window.location.pathname);
