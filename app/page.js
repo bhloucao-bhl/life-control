@@ -7987,7 +7987,7 @@ function App() {
       if (!alive || !j) return;
       if (Array.isArray(j.events)) setGEvents(j.events);
       if (Array.isArray(j.messages)) setGMsgs(j.messages);
-      if (typeof window !== 'undefined') window.__lccGoogleDiag = { calendarsFound: j.calendarsFound, calendarErr: j.calendarErr, connected: j.connected, count: (j.events || []).length };
+      if (typeof window !== 'undefined') window.__lccGoogleDiag = { calendarsFound: j.calendarsFound, calendarErr: j.calendarErr, errors: j.errors, connected: j.connected, count: (j.events || []).length };
     }).catch(() => {});
     return () => { alive = false; };
   }, [ready]);

@@ -84,11 +84,16 @@ export async function GET(req) {
       try {
         const u = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.id)}/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime&maxResults=100`;
         const r = await fetch(u, { headers: h, cache: 'no-store' });
-        if (!r.ok) continue;
+        if (!r.ok) {
+          let detail = '';
+          try { const eb = await r.json(); detail = (eb.error && (eb.error.message || eb.error.status)) || ''; } catch (e2) {}
+          errors.push(`events(${cal.id}) HTTP ${r.status}` + (detail ? ' — ' + detail : ''));
+          continue;
+        }
         const j = await r.json();
         const evs = (j.items || []).filter((e) => e.status !== 'cancelled').map((e) => mapEvent(e, cal.work)).filter(Boolean);
         events = events.concat(evs);
-      } catch (e) {}
+      } catch (e) { errors.push(`events(${cal.id}): ${String(e.message || e)}`); }
     }
     const seen = new Set();
     events = events.filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
