@@ -35,8 +35,9 @@ export async function GET(req) {
   const now = new Date();
 
   const results = await Promise.allSettled(userIds.map(async (userId) => {
-    const { items } = await loadUserState(db, userId);
-    const review = buildEveningReview(items, now);
+    const { items, settings } = await loadUserState(db, userId);
+    const review = buildEveningReview(items, now, settings.notifPrefs);
+    if (!review) return { userId, sent: false };
     const res = await sendPush(userId, { title: review.title, body: review.body, data: { type: 'evening-review' } });
     return { userId, sent: res.sent > 0 };
   }));
