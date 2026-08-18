@@ -1,6 +1,7 @@
 import { admin } from '../../../../lib/oauth';
 import { sendPush } from '../../../../lib/push';
-import { loadUserState, buildEveningReview } from '../../../../lib/brief';
+import { loadUserState, buildEveningReview, shouldFireNow, markNotifSent } from '../../../../lib/brief';
+import { brDate } from '../../../../lib/tz';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -8,12 +9,13 @@ export const maxDuration = 60;
 /**
  * GET /api/cron/evening-review
  *
- * Roda todo dia às 17h30 (horário de Brasília) e manda uma push perguntando
- * se as tarefas de hoje foram feitas de verdade, e convidando a revisar/
- * repriorizar a agenda de amanhã.
+ * Roda a cada poucos minutos, o dia inteiro, e manda uma push perguntando se as tarefas
+ * de hoje foram feitas de verdade, e convidando a revisar/repriorizar a agenda de amanhã —
+ * pra cada usuário no horário que ele mesmo escolheu em Ajustes (settings.notifPrefs.evening.time,
+ * 17:30 por padrão). shouldFireNow() garante que só dispara uma vez por dia por usuário.
  *
- * Agendado via GitHub Actions (.github/workflows/evening-review.yml), mesmo
- * esquema do morning-brief e do sync do Mercado Livre.
+ * Agendado via GitHub Actions (.github/workflows/evening-review.yml), mesmo esquema do
+ * morning-brief e do sync do Mercado Livre.
  *
  * Protegida por Authorization: Bearer <CRON_SECRET>, igual /api/health/supabase.
  */
@@ -33,11 +35,17 @@ export async function GET(req) {
   }
   const userIds = [...new Set((devices || []).map((d) => d.user_id))];
   const now = new Date();
+  const today = brDate(now);
 
   const results = await Promise.allSettled(userIds.map(async (userId) => {
     const { items, settings } = await loadUserState(db, userId);
-    const review = buildEveningReview(items, now, settings.notifPrefs);
-    if (!review) return { userId, sent: false };
+    const notifPrefs = settings.notifPrefs || {};
+    const eveningPrefs = { on: true, time: '17:30', ...notifPrefs.evening };
+    const weekendsOn = notifPrefs.weekends !== false;
+    if (!shouldFireNow(eveningPrefs, weekendsOn, now, '17:30')) return { userId, sent: false };
+
+    await markNotifSent(db, userId, settings, 'evening', today);
+    const review = buildEveningReview(items, now);
     const res = await sendPush(userId, { title: review.title, body: review.body, data: { type: 'evening-review' } });
     return { userId, sent: res.sent > 0 };
   }));

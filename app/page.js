@@ -7696,7 +7696,6 @@ function PushNotificationsSetting({ lang }) {
 const SETTINGS_SECTIONS = [
   { key: 'general', icon: Cog, label: (lang) => (lang === 'pt' ? 'Geral' : 'General') },
   { key: 'notifications', icon: Bell, label: (lang) => (lang === 'pt' ? 'Notificações' : 'Notifications') },
-  { key: 'appearance', icon: Sun, label: (lang) => (lang === 'pt' ? 'Aparência' : 'Appearance') },
   { key: 'connections', icon: Globe, label: (lang) => (lang === 'pt' ? 'Conexões' : 'Connections') },
   { key: 'data', icon: Download, label: (lang) => (lang === 'pt' ? 'Dados' : 'Data') },
   { key: 'account', icon: UserRound, label: (lang) => (lang === 'pt' ? 'Conta' : 'Account') },
@@ -7736,10 +7735,13 @@ function MyProfileCard({ people, addItem, updateItem, lang, t }) {
 }
 
 function NotificationPrefs({ settings, setSettings, lang }) {
-  const morning = { on: true, work: true, groceries: true, tasks: true, ...(settings.notifPrefs && settings.notifPrefs.morning) };
-  const evening = { on: true, ...(settings.notifPrefs && settings.notifPrefs.evening) };
+  const prefs = settings.notifPrefs || {};
+  const morning = { on: true, work: true, groceries: true, tasks: true, time: '07:30', ...prefs.morning };
+  const evening = { on: true, time: '17:30', ...prefs.evening };
+  const weekends = prefs.weekends !== false; // default ligado
   const setMorning = (patch) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), morning: { ...morning, ...patch } } }));
   const setEvening = (patch) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), evening: { ...evening, ...patch } } }));
+  const setWeekends = (v) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), weekends: v } }));
   const Row = ({ on, onClick, label, disabled, master }) => (
     <button onClick={disabled ? undefined : onClick} disabled={disabled} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', background: 'none', border: 'none', cursor: disabled ? 'default' : 'pointer', textAlign: 'left', opacity: disabled ? 0.45 : 1 }}>
       <span style={{ flex: 1, fontSize: 13, color: C.text, fontWeight: master ? 600 : 500 }}>{label}</span>
@@ -7748,16 +7750,26 @@ function NotificationPrefs({ settings, setSettings, lang }) {
       </span>
     </button>
   );
+  const TimeRow = ({ value, onChange, label, disabled }) => (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', opacity: disabled ? 0.45 : 1 }}>
+      <span style={{ flex: 1, fontSize: 12.5, color: C.text2 }}>{label}</span>
+      <input type="time" value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} style={{ ...inputStyle, width: 100, padding: '6px 8px', fontSize: 13, colorScheme: _theme === 'light' ? 'light' : 'dark' }} />
+    </div>
+  );
   return (
     <div style={{ ...card, padding: '2px 14px', marginBottom: 16 }}>
-      <Row master on={morning.on} onClick={() => setMorning({ on: !morning.on })} label={lang === 'pt' ? 'Resumo da manhã (07h30)' : 'Morning brief (7:30am)'} />
+      <Row master on={morning.on} onClick={() => setMorning({ on: !morning.on })} label={lang === 'pt' ? 'Resumo da manhã' : 'Morning brief'} />
+      <TimeRow disabled={!morning.on} value={morning.time} onChange={(v) => setMorning({ time: v })} label={lang === 'pt' ? 'Horário' : 'Time'} />
       <div style={{ paddingLeft: 14, borderLeft: `2px solid ${C.borderSoft}`, marginLeft: 2 }}>
         <Row on={morning.work} disabled={!morning.on} onClick={() => setMorning({ work: !morning.work })} label={lang === 'pt' ? 'Compromissos de trabalho' : 'Work commitments'} />
         <Row on={morning.groceries} disabled={!morning.on} onClick={() => setMorning({ groceries: !morning.groceries })} label={lang === 'pt' ? 'Lista de compras' : 'Shopping list'} />
         <Row on={morning.tasks} disabled={!morning.on} onClick={() => setMorning({ tasks: !morning.tasks })} label={lang === 'pt' ? 'Tarefas importantes' : 'Important tasks'} />
       </div>
       <div style={{ height: 1, background: C.borderSoft, margin: '4px 0' }} />
-      <Row master on={evening.on} onClick={() => setEvening({ on: !evening.on })} label={lang === 'pt' ? 'Revisão de fim de dia (17h30)' : 'Evening review (5:30pm)'} />
+      <Row master on={evening.on} onClick={() => setEvening({ on: !evening.on })} label={lang === 'pt' ? 'Revisão de fim de dia' : 'Evening review'} />
+      <TimeRow disabled={!evening.on} value={evening.time} onChange={(v) => setEvening({ time: v })} label={lang === 'pt' ? 'Horário' : 'Time'} />
+      <div style={{ height: 1, background: C.borderSoft, margin: '4px 0' }} />
+      <Row master on={weekends} onClick={() => setWeekends(!weekends)} label={lang === 'pt' ? 'Notificar também nos fins de semana' : 'Also notify on weekends'} />
     </div>
   );
 }
@@ -7770,7 +7782,6 @@ function DiagnosticsView({ lang, t, onBack }) {
       <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 10, padding: '4px 0' }}><ChevronLeft size={16} />{lang === 'pt' ? 'Ajustes' : 'Settings'}</button>
       <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, display: 'flex', gap: 8, alignItems: 'center' }}><Wrench size={16} style={{ color: C.accent }} />{lang === 'pt' ? 'Diagnósticos' : 'Diagnostics'}</div>
       <div style={{ fontSize: 12, color: C.text3, marginBottom: 14, lineHeight: 1.5 }}>{lang === 'pt' ? 'Ferramentas de suporte da Casa Inteligente — pra ajudar no troubleshooting enquanto o app estiver em versão de teste.' : 'Smart-home troubleshooting tools — kept around to help while the app is still in testing.'}</div>
-      <TuyaAdminLink lang={lang} />
       <TuyaIrDiag t={t} lang={lang} />
       <LgDiag t={t} lang={lang} />
     </Modal>
@@ -7791,6 +7802,21 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, people
       <>
         <MyProfileCard people={people} addItem={addItem} updateItem={updateItem} lang={lang} t={t} />
         <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
+        <div style={{ ...card, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Aparência' : 'Appearance'}</div>
+          <div style={{ display: 'inline-flex', gap: 4, background: C.bg2, borderRadius: 10, padding: 3 }}>
+            <button onClick={() => applyTheme && applyTheme('dark')} title={lang === 'pt' ? 'Escuro' : 'Dark'} style={{ width: 34, height: 34, borderRadius: 8, cursor: 'pointer', border: 'none', background: theme !== 'light' ? C.accentSoft : 'transparent', color: theme !== 'light' ? C.accent : C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Moon size={15} /></button>
+            <button onClick={() => applyTheme && applyTheme('light')} title={lang === 'pt' ? 'Claro' : 'Light'} style={{ width: 34, height: 34, borderRadius: 8, cursor: 'pointer', border: 'none', background: theme === 'light' ? C.accentSoft : 'transparent', color: theme === 'light' ? C.accent : C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Sun size={15} /></button>
+          </div>
+        </div>
+        <div style={{ ...card, padding: 14, marginBottom: 14 }}>
+          <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Saldo na tela Hoje' : 'Balance on Today'}</div>
+          <select value={settings.todayAccountId || ''} onChange={(e) => setSettings((s) => ({ ...s, todayAccountId: e.target.value || null }))} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
+            <option value="">{lang === 'pt' ? 'Automático (conta Alelo)' : 'Auto (Alelo)'}</option>
+            {items.filter((i) => i.type === 'account').map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
+          </select>
+          <div style={{ fontSize: 11, color: C.text3, marginTop: 6, lineHeight: 1.4 }}>{lang === 'pt' ? 'Escolha qual conta ou cartão aparece no terceiro card da tela Hoje.' : 'Pick which account shows on Today.'}</div>
+        </div>
         <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4, marginTop: 6 }}>{t('editDock')}</div>
         <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
@@ -7806,26 +7832,14 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, people
         <NotificationPrefs settings={settings} setSettings={setSettings} lang={lang} />
       </>
     );
-    if (key === 'appearance') return (
-      <div style={{ ...card, padding: 14 }}>
-        <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Tema' : 'Theme'}</div>
-        <div style={{ display: 'inline-flex', gap: 4, background: C.bg2, borderRadius: 10, padding: 3 }}>
-          <button onClick={() => applyTheme && applyTheme('dark')} title={lang === 'pt' ? 'Escuro' : 'Dark'} style={{ width: 34, height: 34, borderRadius: 8, cursor: 'pointer', border: 'none', background: theme !== 'light' ? C.accentSoft : 'transparent', color: theme !== 'light' ? C.accent : C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Moon size={15} /></button>
-          <button onClick={() => applyTheme && applyTheme('light')} title={lang === 'pt' ? 'Claro' : 'Light'} style={{ width: 34, height: 34, borderRadius: 8, cursor: 'pointer', border: 'none', background: theme === 'light' ? C.accentSoft : 'transparent', color: theme === 'light' ? C.accent : C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Sun size={15} /></button>
-        </div>
-      </div>
+    if (key === 'connections') return (
+      <>
+        <Connections lang={lang} t={t} onOuraSync={onOuraSync} />
+        <TuyaAdminLink lang={lang} />
+      </>
     );
-    if (key === 'connections') return <Connections lang={lang} t={t} onOuraSync={onOuraSync} />;
     if (key === 'data') return (
       <>
-        <div style={{ ...card, padding: 14, marginBottom: 12 }}>
-          <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Saldo na tela Hoje' : 'Balance on Today'}</div>
-          <select value={settings.todayAccountId || ''} onChange={(e) => setSettings((s) => ({ ...s, todayAccountId: e.target.value || null }))} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
-            <option value="">{lang === 'pt' ? 'Automático (conta Alelo)' : 'Auto (Alelo)'}</option>
-            {items.filter((i) => i.type === 'account').map((a) => <option key={a.id} value={a.id}>{a.title}</option>)}
-          </select>
-          <div style={{ fontSize: 11, color: C.text3, marginTop: 6, lineHeight: 1.4 }}>{lang === 'pt' ? 'Escolha qual conta ou cartão aparece no terceiro card da tela Hoje.' : 'Pick which account shows on Today.'}</div>
-        </div>
         <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
         <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
         <input id="lcc-import" type="file" accept="application/json" style={{ display: 'none' }} onChange={async (e) => {

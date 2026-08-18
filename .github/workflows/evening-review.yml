@@ -1,9 +1,10 @@
 name: Evening review push
 
-# Roda todo dia às 17h30 (horário de Brasília, UTC-3, sem DST) e chama
-# /api/cron/evening-review no app publicado, que manda a notificação
-# perguntando se as tarefas de hoje foram feitas e convidando a revisar/
-# repriorizar a agenda de amanhã.
+# Roda a cada 10 minutos, o dia inteiro, e chama /api/cron/evening-review no
+# app publicado. O horário exato de disparo (e se manda ou não) é decidido
+# lá dentro, por usuário, com base em settings.notifPrefs.evening — a rota
+# só manda a notificação uma vez por dia, no horário que a pessoa escolheu
+# em Ajustes (17h30 por padrão).
 #
 # Mesmo esquema do morning-brief.yml e do mercadolivre-sync.yml. Precisa dos
 # mesmos secrets:
@@ -12,7 +13,7 @@ name: Evening review push
 
 on:
   schedule:
-    - cron: '30 20 * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
 jobs:
