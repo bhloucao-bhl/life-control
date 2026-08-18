@@ -6835,10 +6835,19 @@ function FlightMap({ flights, lang, t }) {
       if (!L) { tries++; if (tries > 40) { setFailed(true); return; } setTimeout(init, 150); return; }
       if (!elRef.current || mapRef.current) return;
       try {
-        const map = L.map(elRef.current, { attributionControl: false, zoomControl: true, scrollWheelZoom: false });
+        const map = L.map(elRef.current, {
+          attributionControl: false,
+          zoomControl: true,
+          scrollWheelZoom: false,
+          worldCopyJump: false,
+          minZoom: 2,
+          maxBounds: L.latLngBounds([-90, -180], [90, 180]),
+          maxBoundsViscosity: 1.0,
+        });
         mapRef.current = map;
         // tiles escuros (CARTO dark) — gratis, sem chave
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+        // noWrap evita que o mapa repita o mundo várias vezes lado a lado quando o contêiner é largo (desktop)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, minZoom: 2, noWrap: true }).addTo(map);
         const latlngs = keys.map((k) => [pts[k][1], pts[k][0]]);
         // marcadores (pins) das cidades/aeroportos
         keys.forEach((k) => {
