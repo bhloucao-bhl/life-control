@@ -1,0 +1,29 @@
+name: Morning brief push
+
+# Roda todo dia às 07h30 (horário de Brasília, UTC-3, sem DST) e chama
+# /api/cron/morning-brief no app publicado, que manda a notificação com o
+# resumo da manhã pra quem tem device registrado.
+#
+# Mesmo motivo do sync do Mercado Livre (ver mercadolivre-sync.yml): a Vercel
+# Hobby só permite escolher o minuto do cron nativo de forma limitada, então
+# usamos GitHub Actions. Precisa dos mesmos secrets:
+#   - APP_BASE_URL: URL pública do app (ex: https://life-control.vercel.app)
+#   - CRON_SECRET: o mesmo valor da variável de ambiente CRON_SECRET na Vercel
+
+on:
+  schedule:
+    - cron: '30 10 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  brief:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call morning-brief endpoint
+        run: |
+          curl --fail-with-body --show-error --silent \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_BASE_URL%/}/api/cron/morning-brief"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

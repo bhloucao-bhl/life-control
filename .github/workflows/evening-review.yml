@@ -1,0 +1,29 @@
+name: Evening review push
+
+# Roda todo dia às 17h30 (horário de Brasília, UTC-3, sem DST) e chama
+# /api/cron/evening-review no app publicado, que manda a notificação
+# perguntando se as tarefas de hoje foram feitas e convidando a revisar/
+# repriorizar a agenda de amanhã.
+#
+# Mesmo esquema do morning-brief.yml e do mercadolivre-sync.yml. Precisa dos
+# mesmos secrets:
+#   - APP_BASE_URL: URL pública do app (ex: https://life-control.vercel.app)
+#   - CRON_SECRET: o mesmo valor da variável de ambiente CRON_SECRET na Vercel
+
+on:
+  schedule:
+    - cron: '30 20 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call evening-review endpoint
+        run: |
+          curl --fail-with-body --show-error --silent \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_BASE_URL%/}/api/cron/evening-review"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

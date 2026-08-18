@@ -718,7 +718,7 @@ const META = {
   appointment: [['doctor', 'Médico', 'Doctor'], ['specialty', 'Especialidade', 'Specialty'], ['location', 'Local', 'Location']],
   bill: [['payee', 'Beneficiário', 'Payee']],
   maintenance: [['workshop', 'Oficina', 'Workshop'], ['km', 'KM', 'Odometer', 'number'], ['nextKm', 'Próx. revisão (km)', 'Next service (km)', 'number']],
-  person: [['relationship', 'Relação', 'Relationship'], ['role', 'Papel', 'Role'], ['company', 'Empresa', 'Company'], ['address', 'Endereço', 'Address'], ['addressComplement', 'Complemento', 'Complement'], ['birthdate', 'Nascimento', 'Birthdate', 'date']],
+  person: [['relationship', 'Relação', 'Relationship'], ['role', 'Papel', 'Role'], ['company', 'Empresa', 'Company'], ['address', 'Endereço', 'Address'], ['addressComplement', 'Complemento', 'Complement'], ['birthdate', 'Nascimento', 'Birthdate', 'date'], ['weightKg', 'Peso (kg)', 'Weight (kg)', 'number'], ['heightCm', 'Altura (cm)', 'Height (cm)', 'number']],
   account: [['institution', 'Instituição', 'Institution'], ['balance', 'Saldo atual', 'Current balance', 'number']],
   message: [['sender', 'Remetente', 'Sender']],
   income: [['source', 'Origem', 'Source']],
@@ -840,6 +840,7 @@ const monthOf = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMon
 const WD = { pt: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'], en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] };
 const isMilestoneType = (ty) => ['event', 'appointment', 'trip', 'flight', 'note'].includes(ty);
 const isKid = (p) => /filh|fil[ha]|son|daughter|child/i.test((p.meta && (p.meta.relationship || p.meta.role)) || '');
+const isMePerson = (p) => !!(p && p.meta && p.meta.isMe);
 function docCategory(i) {
   const s = (i.title + ' ' + ((i.meta && i.meta.issuer) || '')).toLowerCase();
   if (/passaporte|passport/.test(s)) return 'Passaportes';
@@ -901,7 +902,30 @@ const TUYA_SEED = {
   'eb2a81eee50d3a40e7hwjo': { show: true, alias: 'Vivo Sala', room: 'Sala de TV', kind: 'stb', ir: '04205770e868e76cda25' },
   'ebd58a13d5c1084fb1faaf': { show: true, alias: 'Ar Sala', room: 'Sala de TV', kind: 'ac', ir: '04205770e868e76cda25' },
 };
-const APP_VERSION = 'v62 · 05ago' + (process.env.GIT_SHA ? ' · ' + process.env.GIT_SHA.slice(0, 7) : '');
+// Versão exibida em Ajustes: V.{major}.{ano de desenvolvimento}.{nº do PR mergeado}.{build do TestFlight}.
+// Major/ano são marcos manuais (só mudam em versões novas de verdade); PR vem do next.config.js
+// (extraído de VERCEL_GIT_COMMIT_MESSAGE); build só existe no app nativo (CFBundleVersion, via
+// CapApp.getInfo()) — não há "build do TestFlight" no desktop/web.
+const APP_MAJOR_VERSION = 1;
+const APP_DEV_YEAR = 2026;
+function VersionFooter() {
+  const [build, setBuild] = useState(null);
+  useEffect(() => {
+    if (!isNative()) return;
+    CapApp.getInfo().then((info) => setBuild(info && info.build)).catch(() => {});
+  }, []);
+  const parts = [
+    'V.' + String(APP_MAJOR_VERSION).padStart(2, '0'),
+    String(APP_DEV_YEAR),
+    process.env.GIT_PR ? String(process.env.GIT_PR).padStart(4, '0') : '----',
+  ];
+  if (build) parts.push(String(build).padStart(4, '0'));
+  return (
+    <div style={{ fontSize: 10.5, color: C.text3, marginTop: 16, textAlign: 'center', opacity: 0.7 }}>
+      {parts.join('.')}{process.env.GIT_SHA ? ' · ' + process.env.GIT_SHA.slice(0, 7) : ''}
+    </div>
+  );
+}
 const DEFAULT_DEVICES = [
   { id: 'd1', name: 'Ar — Quarto', type: 'ac', on: false, temp: 22, fan: 2 },
   { id: 'd2', name: 'Luz — Sala', type: 'light', on: false },
@@ -6620,7 +6644,7 @@ function PersonDetail({ person, items, people, lang, t, back, backLabel, onOpen,
       <button onClick={back} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 8, padding: '4px 0' }}><ChevronLeft size={16} />{backLabel}</button>
       <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginBottom: 14 }}>
         <Avatar photo={person.meta && person.meta.photo} name={person.title} size={56} color={kid ? C.violet : C.sky} />
-        <div style={{ flex: 1 }}><div style={{ fontSize: 20, fontWeight: 600 }}>{person.title}</div><div style={{ fontSize: 13, color: C.text3 }}>{[person.meta && person.meta.relationship, person.meta && person.meta.role].filter(Boolean).join(' · ')}</div></div>
+        <div style={{ flex: 1 }}><div style={{ fontSize: 20, fontWeight: 600 }}>{person.title}{isMePerson(person) && <span style={{ color: C.accent }}> ({lang === 'pt' ? 'eu' : 'me'})</span>}</div><div style={{ fontSize: 13, color: C.text3 }}>{[person.meta && person.meta.relationship, person.meta && person.meta.role].filter(Boolean).join(' · ')}</div></div>
         <button onClick={() => setEditing(true)} style={{ ...card, padding: 8, color: C.text2, cursor: 'pointer' }}><Cog size={15} /></button>
       </div>
       {kid ? (
@@ -6677,7 +6701,7 @@ function PersonDetail({ person, items, people, lang, t, back, backLabel, onOpen,
 }
 function PeopleScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, updateItem, delItem, flash }) {
   const [adding, setAdding] = useState(false); const [sel, setSel] = useState(null); const [drill, setDrill] = useState(null);
-  const persons = items.filter((i) => i.type === 'person').sort((a, b) => a.title.localeCompare(b.title));
+  const persons = items.filter((i) => i.type === 'person').sort((a, b) => (isMePerson(b) ? 1 : 0) - (isMePerson(a) ? 1 : 0) || a.title.localeCompare(b.title));
   const current = sel && items.find((i) => i.id === sel);
   if (drill) return (
     <div>
@@ -6694,7 +6718,7 @@ function PeopleScreen({ module, items, people, lang, t, back, toggleTask, onOpen
       {persons.length === 0 ? <Empty icon={UserRound} text={t('nothingHere')} /> : persons.map((p) => (
         <div key={p.id} onClick={() => setSel(p.id)} style={{ ...card, padding: '12px 14px', marginBottom: 8, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
           <Avatar photo={p.meta && p.meta.photo} name={p.title} size={42} color={C.sky} />
-          <div style={{ flex: 1 }}><div style={{ fontSize: 14.5, fontWeight: 600 }}>{p.title}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{[p.meta && p.meta.relationship, p.meta && p.meta.role].filter(Boolean).join(' · ')}</div></div>
+          <div style={{ flex: 1 }}><div style={{ fontSize: 14.5, fontWeight: 600 }}>{p.title}{isMePerson(p) && <span style={{ color: C.accent }}> ({lang === 'pt' ? 'eu' : 'me'})</span>}</div><div style={{ fontSize: 12, color: C.text3, marginTop: 1 }}>{[p.meta && p.meta.relationship, p.meta && p.meta.role].filter(Boolean).join(' · ')}</div></div>
           <ChevronRight size={16} style={{ color: C.text3 }} />
         </div>
       ))}
@@ -6835,10 +6859,19 @@ function FlightMap({ flights, lang, t }) {
       if (!L) { tries++; if (tries > 40) { setFailed(true); return; } setTimeout(init, 150); return; }
       if (!elRef.current || mapRef.current) return;
       try {
-        const map = L.map(elRef.current, { attributionControl: false, zoomControl: true, scrollWheelZoom: false });
+        const map = L.map(elRef.current, {
+          attributionControl: false,
+          zoomControl: true,
+          scrollWheelZoom: false,
+          worldCopyJump: false,
+          minZoom: 2,
+          maxBounds: L.latLngBounds([-90, -180], [90, 180]),
+          maxBoundsViscosity: 1.0,
+        });
         mapRef.current = map;
         // tiles escuros (CARTO dark) — gratis, sem chave
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+        // noWrap evita que o mapa repita o mundo várias vezes lado a lado quando o contêiner é largo (desktop)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, minZoom: 2, noWrap: true }).addTo(map);
         const latlngs = keys.map((k) => [pts[k][1], pts[k][0]]);
         // marcadores (pins) das cidades/aeroportos
         keys.forEach((k) => {
@@ -7660,37 +7693,131 @@ function PushNotificationsSetting({ lang }) {
   );
 }
 
-function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme, applyTheme, onClose, onOuraSync }) {
-  const [name, setName] = useState(settings.name);
-  const dock = settings.dock || DEFAULT_DOCK;
-  const toggleDock = (k) => setSettings((s) => { const cur = s.dock || DEFAULT_DOCK; const has = cur.includes(k); if (has) return { ...s, dock: cur.filter((x) => x !== k) }; if (cur.length >= 5) return s; return { ...s, dock: [...cur, k] }; });
-  const exportJSON = () => { const blob = new Blob([JSON.stringify({ items, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'life-control-export.json'; a.click(); URL.revokeObjectURL(url); };
+const SETTINGS_SECTIONS = [
+  { key: 'general', icon: Cog, label: (lang) => (lang === 'pt' ? 'Geral' : 'General') },
+  { key: 'notifications', icon: Bell, label: (lang) => (lang === 'pt' ? 'Notificações' : 'Notifications') },
+  { key: 'appearance', icon: Sun, label: (lang) => (lang === 'pt' ? 'Aparência' : 'Appearance') },
+  { key: 'connections', icon: Globe, label: (lang) => (lang === 'pt' ? 'Conexões' : 'Connections') },
+  { key: 'data', icon: Download, label: (lang) => (lang === 'pt' ? 'Dados' : 'Data') },
+  { key: 'account', icon: UserRound, label: (lang) => (lang === 'pt' ? 'Conta' : 'Account') },
+];
+
+// Card "Meu perfil": nome/peso/altura/etc. viram um Contato normal (com meta.isMe), em vez de
+// campos soltos em Ajustes — abre o contato existente pra editar, ou cria um na hora se faltar.
+function MyProfileCard({ people, addItem, updateItem, lang, t }) {
+  const [editing, setEditing] = useState(false);
+  const me = people.find(isMePerson);
+  const sub = me
+    ? ([me.meta && me.meta.heightCm && `${me.meta.heightCm} cm`, me.meta && me.meta.weightKg && `${me.meta.weightKg} kg`].filter(Boolean).join(' · ') || (lang === 'pt' ? 'Editar dados pessoais' : 'Edit personal info'))
+    : (lang === 'pt' ? 'Nome, peso, altura e mais' : 'Name, weight, height and more');
   return (
-    <Modal onClose={onClose} wide>
-      <SheetHead title={t('settings')} onClose={onClose} icon={Cog} />
-      <ResponsiveGrid min={200}>
-        <Field label={t('name')}><input value={name} onChange={(e) => setName(e.target.value)} onBlur={() => setSettings((s) => ({ ...s, name }))} style={inputStyleBig} /></Field>
-        <Field label={t('height') + ' (cm)'}><input type="number" value={settings.profile && settings.profile.height || ''} onChange={(e) => setSettings((s) => ({ ...s, profile: { ...(s.profile || {}), height: e.target.value } }))} style={inputStyleBig} /></Field>
-      </ResponsiveGrid>
-      <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
-      <AppLockSetting settings={settings} setSettings={setSettings} lang={lang} />
-      <PushNotificationsSetting lang={lang} />
-      <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4 }}>{t('editDock')}</div>
-      <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
-      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 16 }}>
-        {DOCKABLE.map((k) => { const on = dock.includes(k); const Ic = navIcon(k); return (
-          <button key={k} onClick={() => toggleDock(k)} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '10px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 13, background: on ? C.accentSoft : 'transparent', color: on ? C.accent : C.text2, border: `1px solid ${on ? C.accent + '55' : C.border}` }}><Ic size={14} />{navLabel(k, t)}</button>
-        ); })}
+    <div>
+      <div onClick={() => setEditing(true)} style={{ ...card, padding: 13, marginBottom: 16, display: 'flex', gap: 12, alignItems: 'center', cursor: 'pointer' }}>
+        <Avatar photo={me && me.meta && me.meta.photo} name={(me && me.title) || '?'} size={42} color={C.sky} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 600 }}>{me ? me.title : (lang === 'pt' ? 'Meu perfil' : 'My profile')}</div>
+          <div style={{ fontSize: 11.5, color: C.text3, marginTop: 1 }}>{sub}</div>
+        </div>
+        <ChevronRight size={16} style={{ color: C.text3 }} />
       </div>
-      <div style={{ height: 1, background: C.borderSoft, margin: '8px 0 20px' }} />
-      <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{t('connections')}</div>
-      <Connections lang={lang} t={t} onOuraSync={onOuraSync} />
+      {editing && (
+        <Modal onClose={() => setEditing(false)}>
+          <SheetHead title={lang === 'pt' ? 'Meu perfil' : 'My profile'} onClose={() => setEditing(false)} icon={UserRound} />
+          <ItemForm
+            draft={me || { type: 'person', domain: 'personal', meta: { isMe: true } }}
+            allowedTypes={['person']} lang={lang} t={t} people={people}
+            onCancel={() => setEditing(false)}
+            onSave={(x) => { if (me) updateItem(me.id, x); else addItem({ ...x, meta: { ...(x.meta || {}), isMe: true } }); setEditing(false); }}
+          />
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+function NotificationPrefs({ settings, setSettings, lang }) {
+  const morning = { on: true, work: true, groceries: true, tasks: true, ...(settings.notifPrefs && settings.notifPrefs.morning) };
+  const evening = { on: true, ...(settings.notifPrefs && settings.notifPrefs.evening) };
+  const setMorning = (patch) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), morning: { ...morning, ...patch } } }));
+  const setEvening = (patch) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), evening: { ...evening, ...patch } } }));
+  const Row = ({ on, onClick, label, disabled, master }) => (
+    <button onClick={disabled ? undefined : onClick} disabled={disabled} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', background: 'none', border: 'none', cursor: disabled ? 'default' : 'pointer', textAlign: 'left', opacity: disabled ? 0.45 : 1 }}>
+      <span style={{ flex: 1, fontSize: 13, color: C.text, fontWeight: master ? 600 : 500 }}>{label}</span>
+      <span style={{ width: 36, height: 21, borderRadius: 999, background: on ? C.accent : C.borderSoft, position: 'relative', flexShrink: 0, transition: 'background .15s' }}>
+        <span style={{ width: 17, height: 17, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: on ? 17 : 2, transition: 'left .15s' }} />
+      </span>
+    </button>
+  );
+  return (
+    <div style={{ ...card, padding: '2px 14px', marginBottom: 16 }}>
+      <Row master on={morning.on} onClick={() => setMorning({ on: !morning.on })} label={lang === 'pt' ? 'Resumo da manhã (07h30)' : 'Morning brief (7:30am)'} />
+      <div style={{ paddingLeft: 14, borderLeft: `2px solid ${C.borderSoft}`, marginLeft: 2 }}>
+        <Row on={morning.work} disabled={!morning.on} onClick={() => setMorning({ work: !morning.work })} label={lang === 'pt' ? 'Compromissos de trabalho' : 'Work commitments'} />
+        <Row on={morning.groceries} disabled={!morning.on} onClick={() => setMorning({ groceries: !morning.groceries })} label={lang === 'pt' ? 'Lista de compras' : 'Shopping list'} />
+        <Row on={morning.tasks} disabled={!morning.on} onClick={() => setMorning({ tasks: !morning.tasks })} label={lang === 'pt' ? 'Tarefas importantes' : 'Important tasks'} />
+      </div>
+      <div style={{ height: 1, background: C.borderSoft, margin: '4px 0' }} />
+      <Row master on={evening.on} onClick={() => setEvening({ on: !evening.on })} label={lang === 'pt' ? 'Revisão de fim de dia (17h30)' : 'Evening review (5:30pm)'} />
+    </div>
+  );
+}
+
+// Ferramentas de troubleshooting da Casa Inteligente — fora do fluxo normal de Ajustes,
+// só pra quem realmente precisa (enquanto o app estiver em versão de teste).
+function DiagnosticsView({ lang, t, onBack }) {
+  return (
+    <Modal onClose={onBack} wide>
+      <button onClick={onBack} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontSize: 13, marginBottom: 10, padding: '4px 0' }}><ChevronLeft size={16} />{lang === 'pt' ? 'Ajustes' : 'Settings'}</button>
+      <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 4, display: 'flex', gap: 8, alignItems: 'center' }}><Wrench size={16} style={{ color: C.accent }} />{lang === 'pt' ? 'Diagnósticos' : 'Diagnostics'}</div>
+      <div style={{ fontSize: 12, color: C.text3, marginBottom: 14, lineHeight: 1.5 }}>{lang === 'pt' ? 'Ferramentas de suporte da Casa Inteligente — pra ajudar no troubleshooting enquanto o app estiver em versão de teste.' : 'Smart-home troubleshooting tools — kept around to help while the app is still in testing.'}</div>
       <TuyaAdminLink lang={lang} />
       <TuyaIrDiag t={t} lang={lang} />
       <LgDiag t={t} lang={lang} />
-      <div style={{ height: 1, background: C.borderSoft, margin: '20px 0' }} />
-      <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', margin: '4px 0 12px', fontWeight: 700 }}>{lang === 'pt' ? 'Dados' : 'Data'}</div>
-      <ResponsiveGrid min={230}>
+    </Modal>
+  );
+}
+
+function SettingsSheet({ settings, setSettings, lang, t, items, setItems, people, addItem, updateItem, theme, applyTheme, onClose, onOuraSync, wide }) {
+  const [section, setSection] = useState('general');
+  const [diagOpen, setDiagOpen] = useState(false);
+  const dock = settings.dock || DEFAULT_DOCK;
+  const toggleDock = (k) => setSettings((s) => { const cur = s.dock || DEFAULT_DOCK; const has = cur.includes(k); if (has) return { ...s, dock: cur.filter((x) => x !== k) }; if (cur.length >= 5) return s; return { ...s, dock: [...cur, k] }; });
+  const exportJSON = () => { const blob = new Blob([JSON.stringify({ items, exportedAt: new Date().toISOString() }, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'life-control-export.json'; a.click(); URL.revokeObjectURL(url); };
+
+  if (diagOpen) return <DiagnosticsView lang={lang} t={t} onBack={() => setDiagOpen(false)} />;
+
+  const renderSection = (key) => {
+    if (key === 'general') return (
+      <>
+        <MyProfileCard people={people} addItem={addItem} updateItem={updateItem} lang={lang} t={t} />
+        <Field label={t('language')}><div style={{ display: 'flex', gap: 8 }}><Chip active={lang === 'pt'} onClick={() => setSettings((s) => ({ ...s, lang: 'pt' }))}>Português (BR)</Chip><Chip active={lang === 'en'} onClick={() => setSettings((s) => ({ ...s, lang: 'en' }))}>English (US)</Chip></div></Field>
+        <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 4, marginTop: 6 }}>{t('editDock')}</div>
+        <div style={{ fontSize: 11.5, color: C.text3, marginBottom: 8 }}>{t('dockHint')} ({dock.length}/5)</div>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+          {DOCKABLE.map((k) => { const on = dock.includes(k); const Ic = navIcon(k); return (
+            <button key={k} onClick={() => toggleDock(k)} style={{ display: 'flex', gap: 6, alignItems: 'center', padding: '10px 14px', borderRadius: 999, cursor: 'pointer', fontSize: 13, background: on ? C.accentSoft : 'transparent', color: on ? C.accent : C.text2, border: `1px solid ${on ? C.accent + '55' : C.border}` }}><Ic size={14} />{navLabel(k, t)}</button>
+          ); })}
+        </div>
+      </>
+    );
+    if (key === 'notifications') return (
+      <>
+        <PushNotificationsSetting lang={lang} />
+        <NotificationPrefs settings={settings} setSettings={setSettings} lang={lang} />
+      </>
+    );
+    if (key === 'appearance') return (
+      <div style={{ ...card, padding: 14 }}>
+        <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Tema' : 'Theme'}</div>
+        <div style={{ display: 'inline-flex', gap: 4, background: C.bg2, borderRadius: 10, padding: 3 }}>
+          <button onClick={() => applyTheme && applyTheme('dark')} title={lang === 'pt' ? 'Escuro' : 'Dark'} style={{ width: 34, height: 34, borderRadius: 8, cursor: 'pointer', border: 'none', background: theme !== 'light' ? C.accentSoft : 'transparent', color: theme !== 'light' ? C.accent : C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Moon size={15} /></button>
+          <button onClick={() => applyTheme && applyTheme('light')} title={lang === 'pt' ? 'Claro' : 'Light'} style={{ width: 34, height: 34, borderRadius: 8, cursor: 'pointer', border: 'none', background: theme === 'light' ? C.accentSoft : 'transparent', color: theme === 'light' ? C.accent : C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Sun size={15} /></button>
+        </div>
+      </div>
+    );
+    if (key === 'connections') return <Connections lang={lang} t={t} onOuraSync={onOuraSync} />;
+    if (key === 'data') return (
+      <>
         <div style={{ ...card, padding: 14, marginBottom: 12 }}>
           <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 8, fontWeight: 600 }}>{lang === 'pt' ? 'Saldo na tela Hoje' : 'Balance on Today'}</div>
           <select value={settings.todayAccountId || ''} onChange={(e) => setSettings((s) => ({ ...s, todayAccountId: e.target.value || null }))} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none' }}>
@@ -7699,31 +7826,68 @@ function SettingsSheet({ settings, setSettings, lang, t, items, setItems, theme,
           </select>
           <div style={{ fontSize: 11, color: C.text3, marginTop: 6, lineHeight: 1.4 }}>{lang === 'pt' ? 'Escolha qual conta ou cartão aparece no terceiro card da tela Hoje.' : 'Pick which account shows on Today.'}</div>
         </div>
-        <div style={{ ...card, padding: 14, marginBottom: 12 }}>
-          <div style={{ fontSize: 12.5, color: C.text2, marginBottom: 10, fontWeight: 600 }}>{lang === 'pt' ? 'Aparência' : 'Appearance'}</div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={() => applyTheme && applyTheme('dark')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme !== 'light' ? C.accent : C.border}`, color: theme !== 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Moon size={15} />{lang === 'pt' ? 'Escuro' : 'Dark'}</button>
-            <button onClick={() => applyTheme && applyTheme('light')} style={{ flex: 1, ...card, padding: '11px', cursor: 'pointer', border: `1px solid ${theme === 'light' ? C.accent : C.border}`, color: theme === 'light' ? C.accent : C.text2, display: 'flex', gap: 7, justifyContent: 'center', alignItems: 'center', fontSize: 13, fontWeight: 600 }}><Sun size={15} />{lang === 'pt' ? 'Claro' : 'Light'}</button>
+        <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
+        <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
+        <input id="lcc-import" type="file" accept="application/json" style={{ display: 'none' }} onChange={async (e) => {
+          const f = e.target.files[0]; if (!f) return;
+          try { const txt = await f.text(); const n = await importExportedJson(txt); alert((lang === 'pt' ? 'Importados: ' : 'Imported: ') + n); window.location.reload(); }
+          catch (err) { alert('Erro: ' + err.message); }
+          e.target.value = '';
+        }} />
+      </>
+    );
+    if (key === 'account') return (
+      <>
+        <AppLockSetting settings={settings} setSettings={setSettings} lang={lang} />
+        <Btn kind="soft" onClick={() => setDiagOpen(true)} style={{ width: '100%', marginBottom: 16, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Wrench size={15} />{lang === 'pt' ? 'Diagnósticos' : 'Diagnostics'}</Btn>
+        <Btn kind="soft" onClick={() => { if (confirm(lang === 'pt' ? 'Apagar TODOS os dados do app e começar do zero? As conexões (Google, Oura, TickTick, Tuya, LG) permanecem.' : 'Erase all app data and start fresh? Connections stay.')) { setItems([]); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', color: C.rose }}><Trash2 size={15} />{lang === 'pt' ? 'Zerar app (começar do zero)' : 'Reset app'}</Btn>
+        <Btn kind="ghost" onClick={async () => {
+          if (isNative()) { try { const { token } = await FirebaseMessaging.getToken(); if (token) await authFetch('/api/push/register', { method: 'DELETE', body: JSON.stringify({ token }) }); } catch (e) {} }
+          await supabase.auth.signOut(); window.location.reload();
+        }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{lang === 'pt' ? 'Sair da conta' : 'Sign out'}</Btn>
+        <Btn kind="danger" onClick={() => { if (confirm(t('clearConfirm'))) { setItems([]); persistSeeded(); onClose(); } }} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Trash2 size={15} />{t('clearData')}</Btn>
+        {!hasStore() && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 14, textAlign: 'center' }}>{t('noPersist')}</div>}
+        <VersionFooter />
+      </>
+    );
+    return null;
+  };
+
+  if (wide) {
+    return (
+      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50 }}>
+        <div onClick={(e) => e.stopPropagation()} style={{ background: C.surface, borderRadius: 20, border: `1px solid ${C.border}`, width: '100%', maxWidth: 900, height: 640, maxHeight: '85vh', display: 'flex', overflow: 'hidden', boxSizing: 'border-box' }}>
+          <div style={{ width: 210, flexShrink: 0, borderRight: `1px solid ${C.borderSoft}`, padding: 14, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
+            <div style={{ fontSize: 15, fontWeight: 700, margin: '4px 8px 14px', display: 'flex', alignItems: 'center', gap: 8 }}><Cog size={16} style={{ color: C.accent }} />{t('settings')}</div>
+            {SETTINGS_SECTIONS.map((sec) => {
+              const active = section === sec.key; const Ic = sec.icon;
+              return (
+                <button key={sec.key} onClick={() => setSection(sec.key)} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 11px', borderRadius: 9, border: 'none', cursor: 'pointer', background: active ? C.accentSoft : 'transparent', color: active ? C.accent : C.text2, fontSize: 13.5, fontWeight: active ? 600 : 500, textAlign: 'left' }}>
+                  <Ic size={15} />{sec.label(lang)}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ flex: 1, minWidth: 0, padding: '18px 24px', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer' }}><X size={20} /></button>
+            </div>
+            {renderSection(section)}
           </div>
         </div>
-      </ResponsiveGrid>
-      <div style={{ marginBottom: 12 }}><HintCard icon={Activity} text={t('appleHealth')} /></div>
-      <Btn kind="soft" onClick={() => { if (confirm(lang === 'pt' ? 'Apagar TODOS os dados do app e começar do zero? As conexões (Google, Oura, TickTick, Tuya, LG) permanecem.' : 'Erase all app data and start fresh? Connections stay.')) { setItems([]); onClose(); } }} style={{ width: '100%', marginBottom: 12, padding: '13px', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center', color: C.rose }}><Trash2 size={15} />{lang === 'pt' ? 'Zerar app (começar do zero)' : 'Reset app'}</Btn>
-      <Btn kind="soft" onClick={exportJSON} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Download size={15} />{t('exportData')}</Btn>
-      <Btn kind="soft" onClick={() => document.getElementById('lcc-import').click()} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Paperclip size={15} />{lang === 'pt' ? 'Importar JSON' : 'Import JSON'}</Btn>
-      <input id="lcc-import" type="file" accept="application/json" style={{ display: 'none' }} onChange={async (e) => {
-        const f = e.target.files[0]; if (!f) return;
-        try { const txt = await f.text(); const n = await importExportedJson(txt); alert((lang === 'pt' ? 'Importados: ' : 'Imported: ') + n); window.location.reload(); }
-        catch (err) { alert('Erro: ' + err.message); }
-        e.target.value = '';
-      }} />
-      <Btn kind="ghost" onClick={async () => {
-        if (isNative()) { try { const { token } = await FirebaseMessaging.getToken(); if (token) await authFetch('/api/push/register', { method: 'DELETE', body: JSON.stringify({ token }) }); } catch (e) {} }
-        await supabase.auth.signOut(); window.location.reload();
-      }} style={{ width: '100%', marginBottom: 10, display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{lang === 'pt' ? 'Sair da conta' : 'Sign out'}</Btn>
-      <Btn kind="danger" onClick={() => { if (confirm(t('clearConfirm'))) { setItems([]); persistSeeded(); onClose(); } }} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}><Trash2 size={15} />{t('clearData')}</Btn>
-      {!hasStore() && <div style={{ fontSize: 11.5, color: C.text3, marginTop: 14, textAlign: 'center' }}>{t('noPersist')}</div>}
-      <div style={{ fontSize: 10.5, color: C.text3, marginTop: 16, textAlign: 'center', opacity: 0.7 }}>{APP_VERSION}</div>
+      </div>
+    );
+  }
+
+  return (
+    <Modal onClose={onClose} wide>
+      <SheetHead title={t('settings')} onClose={onClose} icon={Cog} />
+      {SETTINGS_SECTIONS.map((sec, idx) => (
+        <div key={sec.key} style={{ marginTop: idx ? 22 : 0 }}>
+          <div style={{ fontSize: 12, color: C.text, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12, fontWeight: 700 }}>{sec.label(lang)}</div>
+          {renderSection(sec.key)}
+        </div>
+      ))}
     </Modal>
   );
 }
@@ -7828,10 +7992,40 @@ function AppLockScreen({ lang, onUnlock }) {
     </div>
   );
 }
+// Primeiro login de verdade (conta sem nenhum settings/item salvo ainda): convite pra preencher
+// os dados pessoais como um Contato "(eu)", em vez de campos soltos em Ajustes.
+function OnboardingProfile({ lang, addItem, onSkip }) {
+  const tt = makeT(lang);
+  return (
+    <div style={{ background: '#0A0E17', color: '#FFFFFF', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 24, fontFamily: 'ui-sans-serif, system-ui, -apple-system, sans-serif', overflowY: 'auto' }}>
+      <div style={{ width: '100%', maxWidth: 420 }}>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+          <img src="/logo.svg" width={48} height={48} alt="" style={{ borderRadius: 12 }} />
+        </div>
+        <h1 style={{ fontSize: 20, fontWeight: 700, textAlign: 'center', marginBottom: 6 }}>{lang === 'pt' ? 'Bem-vindo! 👋' : 'Welcome! 👋'}</h1>
+        <p style={{ color: '#94A3B8', fontSize: 13.5, lineHeight: 1.5, textAlign: 'center', marginBottom: 20 }}>
+          {lang === 'pt' ? 'Vamos guardar seus dados pessoais como um Contato seu — assim eles ficam à mão em qualquer parte do app.' : "Let's save your personal info as your own Contact, so it's on hand anywhere in the app."}
+        </p>
+        <div style={{ background: '#131B2A', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 16, padding: 16 }}>
+          <ItemForm
+            draft={{ type: 'person', domain: 'personal', meta: { isMe: true } }}
+            allowedTypes={['person']} lang={lang} t={tt} people={[]}
+            onCancel={onSkip}
+            onSave={(x) => addItem({ ...x, meta: { ...(x.meta || {}), isMe: true } })}
+          />
+        </div>
+        <p style={{ color: '#5B6474', fontSize: 11.5, textAlign: 'center', marginTop: 12 }}>
+          {lang === 'pt' ? 'Pode preencher isso depois, em Ajustes → Meu perfil.' : 'You can fill this in later, from Settings → My profile.'}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 /* ---------------- App ---------------- */
 function App() {
   const [ready, setReady] = useState(false);
+  const [firstEverLogin, setFirstEverLogin] = useState(false);
   const [wide, setWide] = useState(false);
   // breakpoint extra pra telas grandes (ex: iPad Pro 13" em paisagem, ~1366pt) — usa mais a largura disponível
   // em vez de ficar com a mesma largura de conteúdo de um iPad Mini/Air em paisagem.
@@ -7907,6 +8101,14 @@ function App() {
   }, []);
   const lang = settings.lang; const t = makeT(lang);
   const people = items.filter((i) => i.type === 'person');
+  // peso/altura moram no contato "(eu)" quando ele existe; settings.profile fica só de
+  // fallback pra quem ainda não tem esse contato (conta antiga, ou onboarding pulado).
+  const meContact = people.find(isMePerson);
+  const healthProfile = {
+    ...(settings.profile || {}),
+    weight: (meContact && meContact.meta && meContact.meta.weightKg) || (settings.profile && settings.profile.weight),
+    height: (meContact && meContact.meta && meContact.meta.heightCm) || (settings.profile && settings.profile.height),
+  };
   const dock = settings.dock && settings.dock.length ? settings.dock : DEFAULT_DOCK;
   // Bloqueio por Face ID/Touch ID (opcional, só no app nativo): tranca ao abrir/voltar do
   // segundo plano; settings.appLock só existe depois que os settings carregam (ready).
@@ -7972,6 +8174,9 @@ function App() {
   };
   useEffect(() => { (async () => {
     const s = await loadState();
+    // nenhuma linha de settings salva ainda e nenhum item: primeiro login de verdade dessa conta
+    // (capturado aqui, antes do nome-por-e-mail abaixo preencher settings.name sozinho).
+    if (!s.settings && (!s.items || !s.items.length)) setFirstEverLogin(true);
     if (s.items && s.items.length) setItems(s.items);
     else setItems([]); // comeca vazio: sem dados de exemplo
     // sem nome salvo ainda (usuário novo): usa o e-mail de login como saudação
@@ -7988,6 +8193,15 @@ function App() {
     }
     setReady(true);
   })(); }, []);
+  // Backfill silencioso: conta que já tinha nome/perfil/itens salvos (de antes do contato "(eu)"
+  // existir) ganha esse contato automaticamente, sem popup — só quem realmente nunca usou o app
+  // (firstEverLogin) vê o wizard de boas-vindas.
+  useEffect(() => {
+    if (!ready || firstEverLogin || settings.onboarded || meContact) return;
+    addItem({ type: 'person', domain: 'personal', title: settings.name || (lang === 'pt' ? 'Eu' : 'Me'), meta: { isMe: true, weightKg: settings.profile && settings.profile.weight, heightCm: settings.profile && settings.profile.height } });
+    setSettings((s) => ({ ...s, onboarded: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready]);
   useEffect(() => {
     if (!ready) return;
     let alive = true;
@@ -8116,14 +8330,19 @@ function App() {
     setItems((p) => persistNow([...withIds, ...p]));
     // qualquer evento/compromisso novo com convidados pendentes já dispara o convite de verdade
     withIds.forEach((it) => maybeSendInvites(it, people, updateItem, lang));
+    // o contato "(eu)" é a fonte da verdade do nome — mantém settings.name (usado na saudação) em dia
+    const me = withIds.find(isMePerson);
+    if (me && me.title) setSettings((s) => (s.name === me.title ? s : { ...s, name: me.title }));
     return withIds;
   };
   const addItem = (x) => addItems([x]);
   const updateItem = (id, patch) => {
     const prev = items.find((i) => i.id === id);
     setItems((p) => persistNow(p.map((i) => (i.id === id ? { ...i, ...patch } : i))));
+    const merged = prev && { ...prev, ...patch, meta: { ...prev.meta, ...(patch.meta || {}) } };
     // idem quando o item é editado (ex.: adicionou uma pessoa a um compromisso já existente)
-    if (prev) maybeSendInvites({ ...prev, ...patch, meta: { ...prev.meta, ...(patch.meta || {}) } }, people, updateItem, lang);
+    if (merged) maybeSendInvites(merged, people, updateItem, lang);
+    if (merged && isMePerson(merged) && merged.title) setSettings((s) => (s.name === merged.title ? s : { ...s, name: merged.title }));
   };
   const toggleTask = (id) => {
     if (String(id).startsWith('tt_')) { const it = ttItems.find((x) => x.id === id); if (it && it.status !== 'done') ttComplete(it); return; }
@@ -8137,11 +8356,17 @@ function App() {
   const setHealthSummary = (v) => setSettings((s) => ({ ...s, healthSummary: v }));
   const setDietSummary = (v) => setSettings((s) => ({ ...s, dietSummary: v }));
   const setProfile = (fn) => setSettings((s) => ({ ...s, profile: typeof fn === 'function' ? fn(s.profile || {}) : fn }));
-  const addWeight = (kg) => setSettings((s) => {
-    const d = todayISO();
-    const list = (s.weights || []).filter((x) => x.date !== d).concat([{ date: d, kg }]);
-    return { ...s, weights: list.slice(-120), profile: { ...(s.profile || {}), weight: kg } };
-  });
+  const addWeight = (kg) => {
+    setSettings((s) => {
+      const d = todayISO();
+      const list = (s.weights || []).filter((x) => x.date !== d).concat([{ date: d, kg }]);
+      return { ...s, weights: list.slice(-120), profile: { ...(s.profile || {}), weight: kg } };
+    });
+    // o peso atual mora no contato "(eu)" quando ele existe — settings.profile.weight acima
+    // fica só de fallback pra quem ainda não tem esse contato criado.
+    const me = people.find(isMePerson);
+    if (me) updateItem(me.id, { meta: { ...me.meta, weightKg: kg } });
+  };
   const setDevices = (fn) => setSettings((s) => ({ ...s, devices: typeof fn === 'function' ? fn(s.devices || DEFAULT_DEVICES) : fn }));
   // lista de compras da semana (widget da Hoje, versão wide) — vive em settings, igual pesos/dieta
   const toggleGroceryItem = (id) => setSettings((s) => ({ ...s, groceryList: (s.groceryList || []).map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)) }));
@@ -8193,6 +8418,9 @@ function App() {
     <div style={{ fontSize: 12, color: C.text3, letterSpacing: '.08em', textTransform: 'uppercase' }}>Life in Control</div>
   </div>;
   if (appLockOn && locked) return <AppLockScreen lang={lang} onUnlock={unlockApp} />;
+  if (firstEverLogin && !settings.onboarded && !meContact) {
+    return <OnboardingProfile lang={lang} addItem={(x) => { addItem(x); setSettings((s) => ({ ...s, onboarded: true })); }} onSkip={() => setSettings((s) => ({ ...s, onboarded: true }))} />;
+  }
 
   const ttItems = (ticktick.tasks || []).map((t) => ({
     id: 'tt_' + t.id, ttId: t.id, ttProject: t.projectId, type: 'task', domain: 'personal',
@@ -8221,7 +8449,7 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
+    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={healthProfile} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -8362,7 +8590,7 @@ function App() {
 
       {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
       {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
-      {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} onOuraSync={applyOuraData} />}
+      {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} people={people} addItem={addItem} updateItem={updateItem} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} onOuraSync={applyOuraData} wide={wide} />}
       {detail && <ErrorBoundary fallback={() => <Modal onClose={() => setDetail(null)}><SheetHead title={lang === 'pt' ? 'Erro' : 'Error'} onClose={() => setDetail(null)} icon={AlertTriangle} /><div style={{ ...card, padding: 16, fontSize: 13, color: C.text2 }}>{lang === 'pt' ? 'Não consegui abrir este item. Tente novamente ou edite-o pela lista.' : "Couldn't open this item."}</div></Modal>}><ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} allItems={allItems} addItem={addItem} /></ErrorBoundary>}
       {newsReader && <NewsReaderModal item={newsReader} lang={lang} t={t} onClose={() => setNewsReader(null)}
         isSaved={(n) => items.some((i) => i.type === 'note' && i.meta && i.meta.source === 'news' && i.meta.link === n.link)}
