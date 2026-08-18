@@ -7739,9 +7739,11 @@ function NotificationPrefs({ settings, setSettings, lang }) {
   const morning = { on: true, work: true, groceries: true, tasks: true, time: '07:30', ...prefs.morning };
   const evening = { on: true, time: '17:30', ...prefs.evening };
   const weekends = prefs.weekends !== false; // default ligado
+  const eventReminders = { on: true, ...prefs.eventReminders };
   const setMorning = (patch) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), morning: { ...morning, ...patch } } }));
   const setEvening = (patch) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), evening: { ...evening, ...patch } } }));
   const setWeekends = (v) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), weekends: v } }));
+  const setEventReminders = (patch) => setSettings((s) => ({ ...s, notifPrefs: { ...(s.notifPrefs || {}), eventReminders: { ...eventReminders, ...patch } } }));
   const Row = ({ on, onClick, label, disabled, master }) => (
     <button onClick={disabled ? undefined : onClick} disabled={disabled} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', background: 'none', border: 'none', cursor: disabled ? 'default' : 'pointer', textAlign: 'left', opacity: disabled ? 0.45 : 1 }}>
       <span style={{ flex: 1, fontSize: 13, color: C.text, fontWeight: master ? 600 : 500 }}>{label}</span>
@@ -7770,6 +7772,9 @@ function NotificationPrefs({ settings, setSettings, lang }) {
       <TimeRow disabled={!evening.on} value={evening.time} onChange={(v) => setEvening({ time: v })} label={lang === 'pt' ? 'Horário' : 'Time'} />
       <div style={{ height: 1, background: C.borderSoft, margin: '4px 0' }} />
       <Row master on={weekends} onClick={() => setWeekends(!weekends)} label={lang === 'pt' ? 'Notificar também nos fins de semana' : 'Also notify on weekends'} />
+      <div style={{ height: 1, background: C.borderSoft, margin: '4px 0' }} />
+      <Row master on={eventReminders.on} onClick={() => setEventReminders({ on: !eventReminders.on })} label={lang === 'pt' ? 'Alerta de compromissos (10 min antes)' : 'Event alerts (10 min before)'} />
+      <div style={{ fontSize: 11, color: C.text3, padding: '0 0 8px' }}>{lang === 'pt' ? 'Igual ao alarme de reunião do Outlook — avisa pouco antes de cada evento/compromisso começar.' : 'Like an Outlook meeting alarm — a heads-up shortly before each event starts.'}</div>
     </div>
   );
 }
