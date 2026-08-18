@@ -1,8 +1,10 @@
 name: Morning brief push
 
-# Roda todo dia às 07h30 (horário de Brasília, UTC-3, sem DST) e chama
-# /api/cron/morning-brief no app publicado, que manda a notificação com o
-# resumo da manhã pra quem tem device registrado.
+# Roda a cada 10 minutos, o dia inteiro, e chama /api/cron/morning-brief no
+# app publicado. O horário exato de disparo (e se manda ou não) é decidido
+# lá dentro, por usuário, com base em settings.notifPrefs.morning — a rota
+# só manda a notificação uma vez por dia, no horário que a pessoa escolheu
+# em Ajustes (07h30 por padrão).
 #
 # Mesmo motivo do sync do Mercado Livre (ver mercadolivre-sync.yml): a Vercel
 # Hobby só permite escolher o minuto do cron nativo de forma limitada, então
@@ -12,7 +14,7 @@ name: Morning brief push
 
 on:
   schedule:
-    - cron: '30 10 * * *'
+    - cron: '*/10 * * * *'
   workflow_dispatch: {}
 
 jobs:
