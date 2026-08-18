@@ -1,0 +1,28 @@
+name: Event reminders push
+
+# Roda a cada 10 minutos, o dia inteiro, e chama /api/cron/event-reminders no app
+# publicado — que manda um alerta tipo agenda/Outlook pra cada compromisso que vai
+# começar nos próximos 10 minutos, só pra quem tem esse alerta ligado em Ajustes
+# (settings.notifPrefs.eventReminders).
+#
+# Mesmo esquema do morning-brief.yml/evening-review.yml. Precisa dos mesmos secrets:
+#   - APP_BASE_URL: URL pública do app (ex: https://life-control.vercel.app)
+#   - CRON_SECRET: o mesmo valor da variável de ambiente CRON_SECRET na Vercel
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call event-reminders endpoint
+        run: |
+          curl --fail-with-body --show-error --silent \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_BASE_URL%/}/api/cron/event-reminders"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
