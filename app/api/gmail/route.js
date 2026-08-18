@@ -4,6 +4,18 @@ import { brDateTime } from '../../../lib/tz';
 export const runtime = 'nodejs';
 
 const G = 'https://gmail.googleapis.com/gmail/v1/users/me';
+const WORK_LABEL_NAME = '(M) Moura Backup';
+
+/** Acha o ID interno da label pelo nome. Busca por "q=label:nome" não é confiável pra
+ * nomes com espaço/parênteses (mesmo entre aspas) — o jeito robusto é filtrar por
+ * labelIds, que exige o ID em vez do nome. */
+async function findLabelId(h, name) {
+  const r = await fetch(`${G}/labels`, { headers: h, cache: 'no-store' });
+  if (!r.ok) return null;
+  const j = await r.json();
+  const found = (j.labels || []).find((l) => l.name === name);
+  return found ? found.id : null;
+}
 
 function header(payload, name) {
   const hs = (payload && payload.headers) || [];
@@ -62,11 +74,15 @@ export async function GET(req) {
 
   try {
     // Busca 1: não lidos recentes (pessoais). Busca 2: label corporativa "(M) Moura Backup" (lidos/arquivados pela regra do Gmail), sem limite de tempo — mantém os últimos 25 independente da hora.
+    // Filtra por labelIds (ID da label), não por "q=label:nome" — nomes com espaço/parênteses não
+    // batem de forma confiável na busca por texto do Gmail, mesmo entre aspas.
     const q = encodeURIComponent('is:unread newer_than:1d');
-    const qWork = encodeURIComponent('label:"(M) Moura Backup"');
+    const workLabelId = await findLabelId(h, WORK_LABEL_NAME);
     const [r, rWork] = await Promise.all([
       fetch(`${G}/messages?q=${q}&maxResults=25`, { headers: h, cache: 'no-store' }),
-      fetch(`${G}/messages?q=${qWork}&maxResults=25`, { headers: h, cache: 'no-store' }),
+      workLabelId
+        ? fetch(`${G}/messages?labelIds=${encodeURIComponent(workLabelId)}&maxResults=25`, { headers: h, cache: 'no-store' })
+        : Promise.resolve({ ok: true, json: async () => ({ messages: [] }) }),
     ]);
     if (!r.ok) {
       const txt = await r.text();
