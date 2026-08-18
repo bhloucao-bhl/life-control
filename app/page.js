@@ -7564,14 +7564,27 @@ function TuyaAdminLink({ lang }) {
     } catch (e) { setMsg('Erro: ' + String(e)); }
     setBusy(false);
   };
+  const steps = lang === 'pt' ? [
+    <>Abra <a href="https://iot.tuya.com" target="_blank" rel="noreferrer" style={{ color: C.accent }}>iot.tuya.com</a> e entre no projeto <b>Smartlife</b>.</>,
+    <>Vá em <b>Devices → Link App Account</b>.</>,
+    <>Clique em <b>Add App Account</b> — vai aparecer um QR code novo.</>,
+    <>Peça pra pessoa abrir o app <b>Smart Life</b> dela e escanear esse QR.</>,
+    <>Depois que ela escanear, o painel mostra uma linha nova na tabela com o <b>UID</b> dela — copie esse valor.</>,
+    <>Cole o e-mail dela (o login dela aqui no app) e o UID nos campos abaixo, e clique em Vincular.</>,
+  ] : [
+    <>Open <a href="https://iot.tuya.com" target="_blank" rel="noreferrer" style={{ color: C.accent }}>iot.tuya.com</a> and enter the <b>Smartlife</b> project.</>,
+    <>Go to <b>Devices → Link App Account</b>.</>,
+    <>Click <b>Add App Account</b> — a fresh QR code shows up.</>,
+    <>Have the person open their <b>Smart Life</b> app and scan that QR.</>,
+    <>Once they scan it, the console shows a new row with their <b>UID</b> — copy that value.</>,
+    <>Paste their email (their login here) and the UID below, then click Link.</>,
+  ];
   return (
     <div style={{ ...card, padding: 14, marginTop: 10 }}>
-      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 6 }}>{lang === 'pt' ? 'Vincular Tuya (admin)' : 'Link Tuya (admin)'}</div>
-      <div style={{ fontSize: 11, color: C.text3, marginBottom: 10, lineHeight: 1.4 }}>
-        {lang === 'pt'
-          ? 'Depois que a pessoa escanear o QR em Devices → Link App Account no painel Tuya, cole aqui o e-mail dela (o login dela neste app) e o UID que apareceu no painel.'
-          : "After the person scans the QR under Devices → Link App Account in the Tuya console, paste their email (their login here) and the UID shown in the console."}
-      </div>
+      <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 8 }}>{lang === 'pt' ? 'Vincular Tuya (admin)' : 'Link Tuya (admin)'}</div>
+      <ol style={{ margin: '0 0 12px', paddingLeft: 18, fontSize: 11, color: C.text3, lineHeight: 1.6 }}>
+        {steps.map((s, i) => <li key={i}>{s}</li>)}
+      </ol>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input placeholder={lang === 'pt' ? 'e-mail da pessoa' : 'person email'} value={email} onChange={(e) => setEmail(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
         <input placeholder="UID (ex: az1626805279...)" value={uidVal} onChange={(e) => setUidVal(e.target.value)} style={{ ...inputStyle, flex: 1, minWidth: 160 }} />
