@@ -1913,6 +1913,8 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
   };
   const run = async () => { if (!text.trim()) return; setLoading(true);
     try {
+      const scene = await tryScene(text.trim(), lang);
+      if (scene.handled) { flash(scene.message); setText(''); setLoading(false); return; }
       const dev = await tryDeviceCommand(text.trim(), lang);
       if (dev.handled) { flash(dev.message); setText(''); setLoading(false); return; }
       setDrafts(await classifyCapture(text.trim(), lang));
@@ -6285,6 +6287,88 @@ function tuyaSwitchCode(status) {
   // prioridade: switch_led (lâmpadas), switch_1 (tomadas), switch, qualquer switch*
   return keys.find((k) => k === 'switch_led') || keys.find((k) => k === 'switch_1') || keys.find((k) => k === 'switch') || keys.find((k) => k.startsWith('switch')) || null;
 }
+
+/**
+ * Cenas: cada step guarda tudo que precisa pra ser executado sozinho (sem
+ * depender de a tela Casa estar aberta com os dispositivos carregados) —
+ * inclusive os codes/host resolvidos no momento em que a cena foi criada,
+ * do mesmo jeito que TuyaLight/TuyaACCard/LgCard já mandam comando.
+ */
+function acModeToTuya(mode) { return mode === 'heat' ? 'hot' : mode === 'fan' ? 'wind' : 'cold'; }
+function acModeToLg(mode) { return mode === 'heat' ? 'HEAT' : mode === 'fan' ? 'FAN' : 'COOL'; }
+function windToLg(wind) { return wind === 'high' ? 'HIGH' : wind === 'low' ? 'LOW' : wind === 'mid' ? 'MID' : null; }
+
+function describeSceneStep(s, lang) {
+  const a = s.action || {};
+  if (!a.power) return lang === 'pt' ? 'Desligar' : 'Turn off';
+  if (s.kind === 'light') {
+    const cor = a.mode === 'colour' ? (lang === 'pt' ? 'cor' : 'color') : (lang === 'pt' ? 'branca' : 'white');
+    return `${lang === 'pt' ? 'Ligar' : 'Turn on'} · ${cor} · ${a.percent}%`;
+  }
+  if (s.kind === 'ac') {
+    const modo = a.mode === 'heat' ? (lang === 'pt' ? 'Quente' : 'Heat') : a.mode === 'fan' ? (lang === 'pt' ? 'Ventilar' : 'Fan') : (lang === 'pt' ? 'Frio' : 'Cool');
+    return `${modo} · ${a.temp}°`;
+  }
+  return lang === 'pt' ? 'Ligar' : 'Turn on';
+}
+
+async function runSceneStep(s) {
+  const a = s.action || {};
+  if (s.target === 'tuya' && s.kind === 'ac') {
+    await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'ac', infrared_id: s.irId, remote_id: s.deviceId, acCode: 'all', acValue: { power: a.power ? 1 : 0, mode: acModeToTuya(a.mode), temp: a.temp, wind: a.wind || 'auto' } }) });
+    await new Promise((res) => setTimeout(res, 1200)); // dá tempo do IR transmitir
+    return;
+  }
+  if (s.target === 'tuya') {
+    await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, code: s.switchCode, value: !!a.power }) });
+    if (a.power && s.kind === 'light') {
+      if (a.mode === 'colour') {
+        await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, code: 'work_mode', value: 'colour' }) });
+        await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, code: s.colourCode, value: { h: a.hue, s: 1000, v: 1000 } }) });
+      } else {
+        await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, code: 'work_mode', value: 'white' }) });
+      }
+      const briMax = s.briCode === 'bright_value_v2' ? 1000 : 255;
+      await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, code: s.briCode, value: Math.round((a.percent / 100) * briMax) }) });
+    }
+    return;
+  }
+  if (s.target === 'lg') {
+    await authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, host: s.host, op: 'power', value: !!a.power }) });
+    if (a.power) {
+      await authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, host: s.host, op: 'mode', value: acModeToLg(a.mode) }) });
+      if (a.temp != null) await authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, host: s.host, op: 'temp', value: a.temp }) });
+      const w = windToLg(a.wind);
+      if (w) await authFetch('/api/lg', { method: 'POST', body: JSON.stringify({ deviceId: s.deviceId, host: s.host, op: 'wind', value: w }) });
+    }
+  }
+}
+
+async function runScene(scene) {
+  for (const s of (scene.steps || [])) {
+    try { await runSceneStep(s); } catch (e) { /* segue tentando os próximos passos da cena */ }
+  }
+}
+
+/** Tenta reconhecer o nome de uma cena salva dentro do texto/voz digitado e, se achar, dispara ela. */
+async function tryScene(raw, lang) {
+  const scenes = (typeof window !== 'undefined' && window.__lccScenes) || [];
+  if (!scenes.length) return { handled: false };
+  const norm = normDevText(raw);
+  let best = null;
+  scenes.forEach((sc) => {
+    const nameNorm = normDevText(sc.name);
+    if (nameNorm && norm.includes(nameNorm) && (!best || nameNorm.length > normDevText(best.name).length)) best = sc;
+  });
+  if (!best) return { handled: false };
+  try {
+    await runScene(best);
+    return { handled: true, message: `${best.name} ✓` };
+  } catch (e) {
+    return { handled: true, message: (lang === 'pt' ? 'Erro ao rodar a cena ' : 'Scene failed: ') + best.name };
+  }
+}
+
 function TuyaACCard({ device, nome, irId, t, lang, onOpen, remote, onCloseRemote, Ic, lastState, onStateChange }) {
   const saved = lastState || {};
   const [temp, setTemp] = useState(saved.temp != null ? saved.temp : 23);
@@ -6457,7 +6541,194 @@ function HouseEmailReviewCard({ x, lang, t, people = [], onTask, onEvent, onIgno
     </div>
   );
 }
-function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs, setPendingCount }) {
+const SCENE_COLOURS = [['Vermelho', 0], ['Laranja', 30], ['Amarelo', 60], ['Verde', 120], ['Ciano', 180], ['Azul', 240], ['Roxo', 280], ['Rosa', 320]];
+
+/** Formulário de uma cena: nome + lista de dispositivos, cada um com sua própria configuração (liga/desliga, cor/brilho, ou modo/temp/ventilação). */
+function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t, onClose, onSave, onDelete }) {
+  const [name, setName] = useState((scene && scene.name) || '');
+  const [steps, setSteps] = useState((scene && scene.steps) || []);
+  const [picking, setPicking] = useState(false);
+  const [configuring, setConfiguring] = useState(null);
+
+  const pickable = [
+    ...tuyaDevices.filter((d) => !isBlockedTuya(d)).map((d) => ({
+      target: 'tuya', deviceId: d.id, name: tuyaLabel(d, tuyaPrefs), kindRaw: tuyaKind(d, tuyaPrefs), status: d.status || {},
+      irId: (tuyaPrefs[d.id] && tuyaPrefs[d.id].ir) || null, room: (tuyaPrefs[d.id] && tuyaPrefs[d.id].room) || '',
+    })).filter((d) => ['light', 'plug', 'switch', 'climate'].includes(d.kindRaw)).filter((d) => d.kindRaw !== 'climate' || d.irId),
+    ...lgDevices.filter((d) => d.type === 'DEVICE_AIR_CONDITIONER').map((d) => ({
+      target: 'lg', deviceId: d.id, name: (tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].alias) || d.name, kindRaw: 'climate', host: lgHost,
+      room: (tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].room) || '',
+    })),
+  ];
+
+  const selectDevice = (dv) => {
+    const kind = dv.kindRaw === 'plug' || dv.kindRaw === 'switch' ? 'switch' : dv.kindRaw === 'climate' ? 'ac' : 'light';
+    setConfiguring({ ...dv, kind, action: kind === 'ac' ? { power: true, mode: 'cool', temp: 23, wind: 'auto' } : kind === 'light' ? { power: true, mode: 'white', percent: 100, hue: 0 } : { power: true } });
+    setPicking(false);
+  };
+
+  const addStep = () => {
+    const c = configuring;
+    const step = { target: c.target, deviceId: c.deviceId, kind: c.kind, deviceName: c.name, action: c.action };
+    if (c.kind === 'ac' && c.target === 'tuya') step.irId = c.irId;
+    if (c.target === 'lg') step.host = c.host;
+    if (c.kind === 'light' || c.kind === 'switch') step.switchCode = tuyaSwitchCode(c.status) || (c.kind === 'light' ? 'switch_led' : 'switch_1');
+    if (c.kind === 'light') {
+      step.briCode = (c.status && c.status.bright_value_v2 == null && c.status.bright_value != null) ? 'bright_value' : 'bright_value_v2';
+      step.colourCode = (c.status && c.status.colour_data_v2 === undefined && c.status.colour_data !== undefined) ? 'colour_data' : 'colour_data_v2';
+    }
+    setSteps((prev) => [...prev, step]);
+    setConfiguring(null);
+  };
+
+  const save = () => { if (!name.trim() || !steps.length) return; onSave({ id: (scene && scene.id) || uid(), name: name.trim(), steps }); };
+
+  if (configuring) {
+    const a = configuring.action;
+    return (
+      <Modal onClose={onClose}>
+        <SheetHead title={configuring.name} onClose={onClose} icon={Sparkles} />
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+          <Chip active={a.power} onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, power: true } }))}>{lang === 'pt' ? 'Ligar' : 'Turn on'}</Chip>
+          <Chip active={!a.power} onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, power: false } }))}>{lang === 'pt' ? 'Desligar' : 'Turn off'}</Chip>
+        </div>
+        {a.power && configuring.kind === 'light' && (
+          <>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8 }}>{lang === 'pt' ? 'Cor' : 'Color'}</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginBottom: 16 }}>
+              <button onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, mode: 'white' } }))} title={lang === 'pt' ? 'Branca' : 'White'} style={{ height: 38, borderRadius: 10, border: `2px solid ${a.mode === 'white' ? C.accent : C.border}`, background: '#fff', cursor: 'pointer' }} />
+              {SCENE_COLOURS.map(([nome, h]) => (
+                <button key={h} onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, mode: 'colour', hue: h } }))} title={nome} style={{ height: 38, borderRadius: 10, border: `2px solid ${a.mode === 'colour' && a.hue === h ? C.accent : 'transparent'}`, background: `hsl(${h} 85% 55%)`, cursor: 'pointer' }} />
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8 }}>{lang === 'pt' ? 'Intensidade' : 'Brightness'} — {a.percent}%</div>
+            <input type="range" min="1" max="100" value={a.percent} onChange={(e) => setConfiguring((p) => ({ ...p, action: { ...p.action, percent: Number(e.target.value) } }))} style={{ width: '100%', accentColor: C.accent, marginBottom: 18 }} />
+          </>
+        )}
+        {a.power && configuring.kind === 'ac' && (
+          <>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8 }}>{lang === 'pt' ? 'Modo' : 'Mode'}</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {[['cool', lang === 'pt' ? 'Frio' : 'Cool'], ['heat', lang === 'pt' ? 'Quente' : 'Heat'], ['fan', lang === 'pt' ? 'Ventilar' : 'Fan']].map(([k, lab]) => (
+                <Chip key={k} active={a.mode === k} onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, mode: k } }))}>{lab}</Chip>
+              ))}
+            </div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8 }}>{lang === 'pt' ? 'Temperatura' : 'Temperature'}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+              <button onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, temp: Math.max(16, p.action.temp - 1) } }))} style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 18, cursor: 'pointer' }}>−</button>
+              <div style={{ fontSize: 20, fontWeight: 700, minWidth: 44, textAlign: 'center' }}>{a.temp}°</div>
+              <button onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, temp: Math.min(30, p.action.temp + 1) } }))} style={{ width: 34, height: 34, borderRadius: 9, border: `1px solid ${C.border}`, background: C.surface2, color: C.text, fontSize: 18, cursor: 'pointer' }}>＋</button>
+            </div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 8 }}>{lang === 'pt' ? 'Ventilação' : 'Fan speed'}</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+              {[['low', lang === 'pt' ? 'Baixa' : 'Low'], ['mid', lang === 'pt' ? 'Média' : 'Mid'], ['high', lang === 'pt' ? 'Alta' : 'High'], ['auto', 'Auto']].map(([k, lab]) => (
+                <Chip key={k} active={a.wind === k} onClick={() => setConfiguring((p) => ({ ...p, action: { ...p.action, wind: k } }))}>{lab}</Chip>
+              ))}
+            </div>
+          </>
+        )}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Btn kind="ghost" onClick={() => setConfiguring(null)} style={{ flex: 1 }}>{t('cancel')}</Btn>
+          <Btn onClick={addStep} style={{ flex: 1.4 }}>{lang === 'pt' ? 'Adicionar à cena' : 'Add to scene'}</Btn>
+        </div>
+      </Modal>
+    );
+  }
+
+  if (picking) {
+    return (
+      <Modal onClose={onClose}>
+        <SheetHead title={lang === 'pt' ? 'Selecionar dispositivo' : 'Select device'} onClose={() => setPicking(false)} icon={Power} />
+        <div style={{ maxHeight: '55vh', overflowY: 'auto' }}>
+          {pickable.length === 0 ? (
+            <div style={{ fontSize: 12.5, color: C.text3, textAlign: 'center', padding: 20 }}>{lang === 'pt' ? 'Nenhum aparelho disponível.' : 'No devices available.'}</div>
+          ) : pickable.map((dv) => (
+            <button key={dv.target + dv.deviceId} onClick={() => selectDevice(dv)} style={{ ...card, width: '100%', padding: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', textAlign: 'left' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{dv.name}</div>
+                <div style={{ fontSize: 10.5, color: C.text3, marginTop: 2 }}>{dv.room ? dv.room + ' · ' : ''}{dv.target === 'lg' ? 'LG' : 'SmartLife'}</div>
+              </div>
+              <ChevronRight size={16} style={{ color: C.text3, flexShrink: 0 }} />
+            </button>
+          ))}
+        </div>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <SheetHead title={scene ? (lang === 'pt' ? 'Editar cena' : 'Edit scene') : (lang === 'pt' ? 'Nova cena' : 'New scene')} onClose={onClose} icon={Sparkles} />
+      <Field label={lang === 'pt' ? 'Nome da cena' : 'Scene name'}>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder={lang === 'pt' ? 'ex.: Preparar Suíte' : 'e.g. Prep bedroom'} style={inputStyleBig} />
+      </Field>
+      <div style={{ fontSize: 11.5, color: C.text3, textTransform: 'uppercase', letterSpacing: '.06em', margin: '18px 0 8px' }}>{lang === 'pt' ? 'Aparelhos' : 'Devices'} ({steps.length})</div>
+      {steps.length === 0 ? (
+        <div style={{ ...card, padding: 14, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12 }}>{lang === 'pt' ? 'Nenhum aparelho adicionado ainda.' : 'No devices added yet.'}</div>
+      ) : steps.map((s, i) => (
+        <div key={i} style={{ ...card, padding: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{s.deviceName}</div>
+            <div style={{ fontSize: 10.5, color: C.text3, marginTop: 2 }}>{describeSceneStep(s, lang)}</div>
+          </div>
+          <button onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', padding: 4 }}><Trash2 size={14} /></button>
+        </div>
+      ))}
+      <Btn kind="soft" onClick={() => setPicking(true)} style={{ width: '100%', marginBottom: 18, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={15} />{lang === 'pt' ? 'Adicionar dispositivo' : 'Add device'}</Btn>
+      <div style={{ display: 'flex', gap: 8 }}>
+        {onDelete && <Btn kind="ghost" onClick={onDelete} style={{ color: C.rose, padding: '10px 14px' }}><Trash2 size={14} /></Btn>}
+        <Btn onClick={save} disabled={!name.trim() || !steps.length} style={{ flex: 1 }}>{t('save')}</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+/** Seção "Cenas" na tela Casa: um botão por cena (um toque dispara todos os passos em sequência) + editor. */
+function ScenesSection({ scenes, setScenes, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t, flash }) {
+  const [editing, setEditing] = useState(null);
+  const [running, setRunning] = useState(null);
+  if (!tuyaDevices.length && !lgDevices.length && !(scenes && scenes.length)) return null;
+  const trigger = async (sc) => {
+    setRunning(sc.id); haptic(15);
+    try { await runScene(sc); flash(`${sc.name} ✓`); } catch (e) { flash(lang === 'pt' ? 'Erro ao rodar a cena.' : 'Scene failed.'); }
+    setRunning(null);
+  };
+  const save = (sc) => {
+    setScenes((prev) => { const list = prev || []; const i = list.findIndex((x) => x.id === sc.id); if (i === -1) return [...list, sc]; const next = [...list]; next[i] = sc; return next; });
+    setEditing(null);
+  };
+  const remove = (id) => setScenes((prev) => (prev || []).filter((x) => x.id !== id));
+  return (
+    <div style={{ marginBottom: 6 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <SectionTitle icon={Sparkles} label={lang === 'pt' ? 'Cenas' : 'Scenes'} color={C.violet} />
+        <button onClick={() => setEditing('new')} style={{ ...card, padding: '6px 11px', color: C.text2, cursor: 'pointer', display: 'flex', gap: 5, alignItems: 'center', fontSize: 11.5 }}><Plus size={12} />{lang === 'pt' ? 'Nova cena' : 'New scene'}</button>
+      </div>
+      {(!scenes || !scenes.length) ? (
+        <div style={{ ...card, padding: 14, marginBottom: 14, textAlign: 'center', color: C.text3, fontSize: 12 }}>{lang === 'pt' ? 'Nenhuma cena criada ainda.' : 'No scenes yet.'}</div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+          {scenes.map((sc) => (
+            <div key={sc.id} style={{ ...card, padding: 13, position: 'relative' }}>
+              <button onClick={() => trigger(sc)} disabled={running === sc.id} style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 9, background: C.violet + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+                  {running === sc.id ? <Loader2 size={17} className="spin" style={{ color: C.violet }} /> : <Sparkles size={17} style={{ color: C.violet }} />}
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 20 }}>{sc.name}</div>
+                <div style={{ fontSize: 10.5, color: C.text3, marginTop: 2 }}>{sc.steps.length} {lang === 'pt' ? (sc.steps.length === 1 ? 'aparelho' : 'aparelhos') : (sc.steps.length === 1 ? 'device' : 'devices')}</div>
+              </button>
+              <button onClick={() => setEditing(sc)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 4 }}><Pencil size={13} /></button>
+            </div>
+          ))}
+        </div>
+      )}
+      {editing && <SceneEditor scene={editing === 'new' ? null : editing} tuyaDevices={tuyaDevices} lgDevices={lgDevices} tuyaPrefs={tuyaPrefs} lgHost={lgHost} lang={lang} t={t} onClose={() => setEditing(null)} onSave={save}
+        onDelete={editing !== 'new' ? () => { remove(editing.id); setEditing(null); } : null} />}
+    </div>
+  );
+}
+
+function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs, scenes, setScenes, setPendingCount }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
   const [zScan, setZScan] = useState({ loading: false, pending: [] });
   const itemsRef = useRef(items);
@@ -6594,6 +6865,8 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
         <><HintCard icon={Power} text={t('deviceHint')} />
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{devices.map((d) => <DeviceCard key={d.id} device={d} onChange={upd} />)}</div></>
       )}
+
+      <ScenesSection scenes={scenes || []} setScenes={setScenes} tuyaDevices={tuya.devices} lgDevices={lg.devices} tuyaPrefs={tuyaPrefs} lgHost={lg.host} lang={lang} t={t} flash={flash} />
 
       <SectionTitle icon={Wallet} label={t('houseCosts')} color={C.green} />
       <div style={{ ...card, padding: 16, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -8395,6 +8668,9 @@ function App() {
   const setWideLayout = (l) => setSettings((s) => ({ ...s, wideLayout: l }));
   const setWideHidden = (ids) => setSettings((s) => ({ ...s, wideHidden: ids }));
   const setTuyaPrefs = (fn) => setSettings((s) => ({ ...s, tuyaPrefs: typeof fn === 'function' ? fn(s.tuyaPrefs || {}) : fn }));
+  const setScenes = (fn) => setSettings((s) => ({ ...s, scenes: typeof fn === 'function' ? fn(s.scenes || []) : fn }));
+  // cenas ficam num global pra tryScene() (chamado fora de qualquer componente, no QuickCapture) achar o texto/voz digitado sem precisar de prop-drilling por todas as telas
+  useEffect(() => { if (typeof window !== 'undefined') window.__lccScenes = settings.scenes || []; }, [settings.scenes]);
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
   const openAccount = (accId) => { if (typeof window !== 'undefined') window.__lccOpenAccount = accId; setActive({ screen: 'dashboard', module: moduleByKey('finance') }); };
   const greeting = () => { const h = new Date().getHours(); return h < 12 ? t('goodMorning') : h < 18 ? t('goodAfternoon') : t('goodEvening'); };
@@ -8468,8 +8744,8 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={healthProfile} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
-    if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} /></ErrorBoundary>;
+    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
+    if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} scenes={settings.scenes || []} setScenes={setScenes} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} state={gmail} setState={setGmail} load={loadGmail} />;
