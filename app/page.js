@@ -6042,7 +6042,7 @@ function IRBtn({ children, onClick, wide, accent }) {
 // Para controles IR "universais" da Tuya, os comandos vao pelo code padrao.
 // Como cada remoto aprendido pode variar, usamos os codes comuns e deixamos claro
 // que ajustamos caso algum botao nao responda.
-function TuyaRemote({ device, kind, label, irId, t, lang, onClose, acState, onAcChange }) {
+function TuyaRemote({ device, kind, label, irId, t, lang, onClose, acState, onAcChange, onPick }) {
   const [keys, setKeys] = useState(null); const [meta, setMeta] = useState({}); const [err, setErr] = useState(null); const [sending, setSending] = useState(''); const [showAll, setShowAll] = useState(false);
   const acSaved = acState || {};
   const [temp, setTemp] = useState(acSaved.temp != null ? acSaved.temp : 23);
@@ -6062,6 +6062,7 @@ function TuyaRemote({ device, kind, label, irId, t, lang, onClose, acState, onAc
   }, [irId, device.id, kind]);
 
   const sendKey = async (keyObj) => {
+    if (onPick) { onPick(keyObj, meta); return; } // modo "escolher botão pra uma cena" — não transmite agora
     setSending(keyObj.key_id || keyObj.key || keyObj.key_name);
     try {
       const r = await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'key', infrared_id: irId, remote_id: device.id, key: keyObj.key || keyObj.key_name, key_id: keyObj.key_id, category_id: meta.category_id, remote_index: meta.remote_index }) });
@@ -6300,6 +6301,7 @@ function windToLg(wind) { return wind === 'high' ? 'HIGH' : wind === 'low' ? 'LO
 
 function describeSceneStep(s, lang) {
   const a = s.action || {};
+  if (s.kind === 'ir_key') return (lang === 'pt' ? 'Botão: ' : 'Button: ') + (a.label || a.key);
   if (!a.power) return lang === 'pt' ? 'Desligar' : 'Turn off';
   if (s.kind === 'light') {
     const cor = a.mode === 'colour' ? (lang === 'pt' ? 'cor' : 'color') : (lang === 'pt' ? 'branca' : 'white');
@@ -6314,6 +6316,11 @@ function describeSceneStep(s, lang) {
 
 async function runSceneStep(s) {
   const a = s.action || {};
+  if (s.target === 'tuya' && s.kind === 'ir_key') {
+    await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'key', infrared_id: s.irId, remote_id: s.deviceId, key: a.key, key_id: a.key_id, category_id: a.category_id, remote_index: a.remote_index }) });
+    await new Promise((res) => setTimeout(res, 800)); // dá tempo do IR transmitir
+    return;
+  }
   if (s.target === 'tuya' && s.kind === 'ac') {
     await authFetch('/api/tuya', { method: 'POST', body: JSON.stringify({ ir: 'ac', infrared_id: s.irId, remote_id: s.deviceId, acCode: 'all', acValue: { power: a.power ? 1 : 0, mode: acModeToTuya(a.mode), temp: a.temp, wind: a.wind || 'auto' } }) });
     await new Promise((res) => setTimeout(res, 1200)); // dá tempo do IR transmitir
@@ -6550,11 +6557,15 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
   const [picking, setPicking] = useState(false);
   const [configuring, setConfiguring] = useState(null);
 
+  // dispositivos por IR (TV/STB/receiver) precisam do hub configurado (irId) — sem isso não tem
+  // como mandar comando nenhum. AC entra tanto como 'ac' (kind seedado/escolhido à mão) quanto
+  // 'climate' (inferido por categoria quando não há kind salvo) — as duas contam como ar-condicionado.
+  const IR_KINDS = ['ac', 'climate', 'tv', 'stb', 'receiver'];
   const pickable = [
-    ...tuyaDevices.filter((d) => !isBlockedTuya(d)).map((d) => ({
+    ...tuyaDevices.filter((d) => !isBlockedTuya(d)).filter((d) => d.category !== 'wnykq' && d.category !== 'infrared').map((d) => ({
       target: 'tuya', deviceId: d.id, name: tuyaLabel(d, tuyaPrefs), kindRaw: tuyaKind(d, tuyaPrefs), status: d.status || {},
       irId: (tuyaPrefs[d.id] && tuyaPrefs[d.id].ir) || null, room: (tuyaPrefs[d.id] && tuyaPrefs[d.id].room) || '',
-    })).filter((d) => ['light', 'plug', 'switch', 'climate'].includes(d.kindRaw)).filter((d) => d.kindRaw !== 'climate' || d.irId),
+    })).filter((d) => ['light', 'plug', 'switch', ...IR_KINDS].includes(d.kindRaw)).filter((d) => !IR_KINDS.includes(d.kindRaw) || d.irId),
     ...lgDevices.filter((d) => d.type === 'DEVICE_AIR_CONDITIONER').map((d) => ({
       target: 'lg', deviceId: d.id, name: (tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].alias) || d.name, kindRaw: 'climate', host: lgHost,
       room: (tuyaPrefs['lg_' + d.id] && tuyaPrefs['lg_' + d.id].room) || '',
@@ -6562,9 +6573,22 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
   ];
 
   const selectDevice = (dv) => {
-    const kind = dv.kindRaw === 'plug' || dv.kindRaw === 'switch' ? 'switch' : dv.kindRaw === 'climate' ? 'ac' : 'light';
+    const kind = dv.kindRaw === 'plug' || dv.kindRaw === 'switch' ? 'switch'
+      : (dv.kindRaw === 'ac' || dv.kindRaw === 'climate') ? 'ac'
+      : ['tv', 'stb', 'receiver'].includes(dv.kindRaw) ? dv.kindRaw
+      : 'light';
     setConfiguring({ ...dv, kind, action: kind === 'ac' ? { power: true, mode: 'cool', temp: 23, wind: 'auto' } : kind === 'light' ? { power: true, mode: 'white', percent: 100, hue: 0 } : { power: true } });
     setPicking(false);
+  };
+
+  const addIrKeyStep = (keyObj, meta) => {
+    const c = configuring;
+    const label = keyObj.key_name || keyObj.key;
+    setSteps((prev) => [...prev, {
+      target: 'tuya', deviceId: c.deviceId, kind: 'ir_key', deviceName: c.name, irId: c.irId,
+      action: { key: keyObj.key || keyObj.key_name, key_id: keyObj.key_id, category_id: meta && meta.category_id, remote_index: meta && meta.remote_index, label },
+    }]);
+    setConfiguring(null);
   };
 
   const addStep = () => {
@@ -6582,6 +6606,16 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
   };
 
   const save = () => { if (!name.trim() || !steps.length) return; onSave({ id: (scene && scene.id) || uid(), name: name.trim(), steps }); };
+
+  // TV/STB/receiver: reaproveita o mapeamento de botões nomeados (Power, Volume, Canais,
+  // teclado numérico, D-pad, entradas...) que já existe no controle remoto ao vivo — em vez
+  // de mandar o comando na hora, onPick guarda o botão escolhido como um passo da cena.
+  if (configuring && ['tv', 'stb', 'receiver'].includes(configuring.kind)) {
+    return (
+      <TuyaRemote device={{ id: configuring.deviceId }} kind={configuring.kind} label={configuring.name} irId={configuring.irId} t={t} lang={lang}
+        onClose={() => setConfiguring(null)} onPick={addIrKeyStep} />
+    );
+  }
 
   if (configuring) {
     const a = configuring.action;
