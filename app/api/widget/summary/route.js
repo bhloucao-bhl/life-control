@@ -84,7 +84,12 @@ export async function GET(req) {
     .slice(0, 10)
     .map((p) => ({ id: p.id, title: p.title, store: (p.meta && p.meta.store) || null, etaDate: (p.meta && p.meta.etaDate) || null, stage: p.meta.stage, tracking: (p.meta && p.meta.tracking) || null }));
 
-  return Response.json({ today, health, tasks, event, diet, finance: { accounts }, purchases }, {
+  // cenas de casa: um botão por cena, sem estado de "ligada/desligada" (não existe "desligar uma
+  // cena") — só qual foi a última disparada, pra marcar no widget.
+  const scenes = (settings.scenes || []).map((s) => ({ id: s.id, name: s.name, steps: (s.steps || []).length }));
+  const lastScene = settings.lastSceneRun && settings.lastSceneRun.id ? settings.lastSceneRun : null;
+
+  return Response.json({ today, health, tasks, event, diet, finance: { accounts }, purchases, scenes, lastScene }, {
     headers: { 'Cache-Control': 'private, no-store' },
   });
 }

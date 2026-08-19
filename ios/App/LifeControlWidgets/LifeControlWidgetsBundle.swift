@@ -8,5 +8,7 @@ struct LifeControlWidgetsBundle: WidgetBundle {
         DietWidget()
         FinanceWidget()
         PurchasesWidget()
+        ScenesWidget()
+        SceneLockWidget()
     }
 }

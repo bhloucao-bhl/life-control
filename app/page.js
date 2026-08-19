@@ -6737,13 +6737,19 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
 }
 
 /** Seção "Cenas" na tela Casa: um botão por cena (um toque dispara todos os passos em sequência) + editor. */
-function ScenesSection({ scenes, setScenes, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t, flash }) {
+function ScenesSection({ scenes, setScenes, lastScene, setLastScene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t, flash }) {
   const [editing, setEditing] = useState(null);
   const [running, setRunning] = useState(null);
   if (!tuyaDevices.length && !lgDevices.length && !(scenes && scenes.length)) return null;
   const trigger = async (sc) => {
     setRunning(sc.id); haptic(15);
-    try { await runScene(sc); flash(`${sc.name} ✓`); } catch (e) { flash(lang === 'pt' ? 'Erro ao rodar a cena.' : 'Scene failed.'); }
+    try {
+      await runScene(sc);
+      flash(`${sc.name} ✓`);
+      // mesmo campo que o widget/Lock Screen atualiza ao tocar uma cena — assim "última tocada"
+      // fica certo não importa de onde a cena foi disparada.
+      if (setLastScene) setLastScene({ id: sc.id, name: sc.name, at: new Date().toISOString() });
+    } catch (e) { flash(lang === 'pt' ? 'Erro ao rodar a cena.' : 'Scene failed.'); }
     setRunning(null);
   };
   const save = (sc) => {
@@ -6761,18 +6767,24 @@ function ScenesSection({ scenes, setScenes, tuyaDevices, lgDevices, tuyaPrefs, l
         <div style={{ ...card, padding: 14, marginBottom: 14, textAlign: 'center', color: C.text3, fontSize: 12 }}>{lang === 'pt' ? 'Nenhuma cena criada ainda.' : 'No scenes yet.'}</div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
-          {scenes.map((sc) => (
-            <div key={sc.id} style={{ ...card, padding: 13, position: 'relative' }}>
+          {scenes.map((sc) => {
+            const isLast = lastScene && lastScene.id === sc.id;
+            return (
+            <div key={sc.id} style={{ ...card, padding: 13, position: 'relative', border: isLast ? `1px solid ${C.green}55` : undefined }}>
               <button onClick={() => trigger(sc)} disabled={running === sc.id} style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0 }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: C.violet + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                   {running === sc.id ? <Loader2 size={17} className="spin" style={{ color: C.violet }} /> : <Sparkles size={17} style={{ color: C.violet }} />}
                 </div>
                 <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', paddingRight: 20 }}>{sc.name}</div>
-                <div style={{ fontSize: 10.5, color: C.text3, marginTop: 2 }}>{sc.steps.length} {lang === 'pt' ? (sc.steps.length === 1 ? 'aparelho' : 'aparelhos') : (sc.steps.length === 1 ? 'device' : 'devices')}</div>
+                <div style={{ fontSize: 10.5, color: isLast ? C.green : C.text3, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {isLast && <CircleCheck size={11} />}
+                  {isLast ? (lang === 'pt' ? 'Última tocada' : 'Last triggered') : `${sc.steps.length} ${lang === 'pt' ? (sc.steps.length === 1 ? 'aparelho' : 'aparelhos') : (sc.steps.length === 1 ? 'device' : 'devices')}`}
+                </div>
               </button>
               <button onClick={() => setEditing(sc)} style={{ position: 'absolute', top: 10, right: 10, background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 4 }}><Pencil size={13} /></button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
       {editing && <SceneEditor scene={editing === 'new' ? null : editing} tuyaDevices={tuyaDevices} lgDevices={lgDevices} tuyaPrefs={tuyaPrefs} lgHost={lgHost} lang={lang} t={t} onClose={() => setEditing(null)} onSave={save}
@@ -6781,7 +6793,7 @@ function ScenesSection({ scenes, setScenes, tuyaDevices, lgDevices, tuyaPrefs, l
   );
 }
 
-function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs, scenes, setScenes, setPendingCount }) {
+function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, addItems, updateItem, delItem, flash, devices, setDevices, tuyaPrefs, setTuyaPrefs, scenes, setScenes, lastScene, setLastScene, setPendingCount }) {
   const [adding, setAdding] = useState(false); const [filterAll, setFilterAll] = useState(false);
   const [zScan, setZScan] = useState({ loading: false, pending: [] });
   const itemsRef = useRef(items);
@@ -6919,7 +6931,7 @@ function HouseScreen({ module, items, people, lang, t, back, toggleTask, onOpen,
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>{devices.map((d) => <DeviceCard key={d.id} device={d} onChange={upd} />)}</div></>
       )}
 
-      <ScenesSection scenes={scenes || []} setScenes={setScenes} tuyaDevices={tuya.devices} lgDevices={lg.devices} tuyaPrefs={tuyaPrefs} lgHost={lg.host} lang={lang} t={t} flash={flash} />
+      <ScenesSection scenes={scenes || []} setScenes={setScenes} lastScene={lastScene} setLastScene={setLastScene} tuyaDevices={tuya.devices} lgDevices={lg.devices} tuyaPrefs={tuyaPrefs} lgHost={lg.host} lang={lang} t={t} flash={flash} />
 
       <SectionTitle icon={Wallet} label={t('houseCosts')} color={C.green} />
       <div style={{ ...card, padding: 16, marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -8722,6 +8734,9 @@ function App() {
   const setWideHidden = (ids) => setSettings((s) => ({ ...s, wideHidden: ids }));
   const setTuyaPrefs = (fn) => setSettings((s) => ({ ...s, tuyaPrefs: typeof fn === 'function' ? fn(s.tuyaPrefs || {}) : fn }));
   const setScenes = (fn) => setSettings((s) => ({ ...s, scenes: typeof fn === 'function' ? fn(s.scenes || []) : fn }));
+  // mesmo campo que o widget de Cenas (iOS) e o de Lock Screen gravam ao tocar uma cena de lá —
+  // assim "última tocada" fica certo não importa de onde veio o toque.
+  const setLastSceneRun = (v) => setSettings((s) => ({ ...s, lastSceneRun: v }));
   // cenas ficam num global pra tryScene() (chamado fora de qualquer componente, no QuickCapture) achar o texto/voz digitado sem precisar de prop-drilling por todas as telas
   useEffect(() => { if (typeof window !== 'undefined') window.__lccScenes = settings.scenes || []; }, [settings.scenes]);
   const openModuleKey = (key) => setActive({ screen: 'dashboard', module: moduleByKey(key) });
@@ -8798,7 +8813,7 @@ function App() {
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
-    if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} scenes={settings.scenes || []} setScenes={setScenes} /></ErrorBoundary>;
+    if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} scenes={settings.scenes || []} setScenes={setScenes} lastScene={settings.lastSceneRun || null} setLastScene={setLastSceneRun} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} state={gmail} setState={setGmail} load={loadGmail} />;
