@@ -6581,13 +6581,18 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
     setPicking(false);
   };
 
+  const commitStep = (step, editIndex) => setSteps((prev) => {
+    if (editIndex == null) return [...prev, step];
+    const next = [...prev]; next[editIndex] = step; return next;
+  });
+
   const addIrKeyStep = (keyObj, meta) => {
     const c = configuring;
     const label = keyObj.key_name || keyObj.key;
-    setSteps((prev) => [...prev, {
-      target: 'tuya', deviceId: c.deviceId, kind: 'ir_key', deviceName: c.name, irId: c.irId,
+    commitStep({
+      target: 'tuya', deviceId: c.deviceId, kind: 'ir_key', deviceKind: c.kind, deviceName: c.name, irId: c.irId,
       action: { key: keyObj.key || keyObj.key_name, key_id: keyObj.key_id, category_id: meta && meta.category_id, remote_index: meta && meta.remote_index, label },
-    }]);
+    }, c._editIndex);
     setConfiguring(null);
   };
 
@@ -6596,13 +6601,24 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
     const step = { target: c.target, deviceId: c.deviceId, kind: c.kind, deviceName: c.name, action: c.action };
     if (c.kind === 'ac' && c.target === 'tuya') step.irId = c.irId;
     if (c.target === 'lg') step.host = c.host;
-    if (c.kind === 'light' || c.kind === 'switch') step.switchCode = tuyaSwitchCode(c.status) || (c.kind === 'light' ? 'switch_led' : 'switch_1');
+    // se veio de uma edição, reaproveita os codes já resolvidos (não tem status ao vivo pra reconsultar)
+    if (c.kind === 'light' || c.kind === 'switch') step.switchCode = tuyaSwitchCode(c.status) || c.switchCode || (c.kind === 'light' ? 'switch_led' : 'switch_1');
     if (c.kind === 'light') {
-      step.briCode = (c.status && c.status.bright_value_v2 == null && c.status.bright_value != null) ? 'bright_value' : 'bright_value_v2';
-      step.colourCode = (c.status && c.status.colour_data_v2 === undefined && c.status.colour_data !== undefined) ? 'colour_data' : 'colour_data_v2';
+      step.briCode = c.briCode || ((c.status && c.status.bright_value_v2 == null && c.status.bright_value != null) ? 'bright_value' : 'bright_value_v2');
+      step.colourCode = c.colourCode || ((c.status && c.status.colour_data_v2 === undefined && c.status.colour_data !== undefined) ? 'colour_data' : 'colour_data_v2');
     }
-    setSteps((prev) => [...prev, step]);
+    commitStep(step, c._editIndex);
     setConfiguring(null);
+  };
+
+  // reabre a configuração de um passo já salvo, pré-preenchida, pra editar sem precisar remover e recriar
+  const startEditStep = (i) => {
+    const s = steps[i];
+    if (s.kind === 'ir_key') {
+      setConfiguring({ target: 'tuya', deviceId: s.deviceId, name: s.deviceName, kind: s.deviceKind || 'tv', irId: s.irId, _editIndex: i });
+    } else {
+      setConfiguring({ target: s.target, deviceId: s.deviceId, name: s.deviceName, kind: s.kind, action: s.action, irId: s.irId, host: s.host, switchCode: s.switchCode, briCode: s.briCode, colourCode: s.colourCode, _editIndex: i });
+    }
   };
 
   const save = () => { if (!name.trim() || !steps.length) return; onSave({ id: (scene && scene.id) || uid(), name: name.trim(), steps }); };
@@ -6663,7 +6679,7 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
         )}
         <div style={{ display: 'flex', gap: 8 }}>
           <Btn kind="ghost" onClick={() => setConfiguring(null)} style={{ flex: 1 }}>{t('cancel')}</Btn>
-          <Btn onClick={addStep} style={{ flex: 1.4 }}>{lang === 'pt' ? 'Adicionar à cena' : 'Add to scene'}</Btn>
+          <Btn onClick={addStep} style={{ flex: 1.4 }}>{configuring._editIndex != null ? (lang === 'pt' ? 'Salvar alteração' : 'Save change') : (lang === 'pt' ? 'Adicionar à cena' : 'Add to scene')}</Btn>
         </div>
       </Modal>
     );
@@ -6701,11 +6717,14 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
         <div style={{ ...card, padding: 14, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12 }}>{lang === 'pt' ? 'Nenhum aparelho adicionado ainda.' : 'No devices added yet.'}</div>
       ) : steps.map((s, i) => (
         <div key={i} style={{ ...card, padding: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
+          <button onClick={() => startEditStep(i)} style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{s.deviceName}</div>
             <div style={{ fontSize: 10.5, color: C.text3, marginTop: 2 }}>{describeSceneStep(s, lang)}</div>
+          </button>
+          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+            <button onClick={() => startEditStep(i)} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 6 }}><Pencil size={13} /></button>
+            <button onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', padding: 6 }}><Trash2 size={14} /></button>
           </div>
-          <button onClick={() => setSteps((prev) => prev.filter((_, idx) => idx !== i))} style={{ background: 'none', border: 'none', color: C.rose, cursor: 'pointer', padding: 4 }}><Trash2 size={14} /></button>
         </div>
       ))}
       <Btn kind="soft" onClick={() => setPicking(true)} style={{ width: '100%', marginBottom: 18, display: 'flex', justifyContent: 'center', gap: 7, alignItems: 'center' }}><Plus size={15} />{lang === 'pt' ? 'Adicionar dispositivo' : 'Add device'}</Btn>
