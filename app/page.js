@@ -1040,7 +1040,37 @@ async function classifyCapture(raw, lang) {
     priority: [1, 2, 3].includes(x.priority) ? x.priority : 2, confidence: typeof x.confidence === 'number' ? x.confidence : 0.6,
   }));
 }
-function buildContext(items) {
+// resume o histórico do wearable (Oura + passos do Apple Health, fundidos em "health" — ver
+// mergedHealth em App) num formato compacto: detalhe dos últimos 7 dias + tendência de 30 dias
+// contra os 30 dias anteriores, pra o Dr. Claude raciocinar sobre trajetória e não só o valor de
+// hoje. "health" aqui já é o histórico completo (settings.health, que cresce pra sempre a cada
+// sincronização, mais o /api/health/history por baixo) — não é mais só a janela curta do cache.
+function buildWearableContext(health, lastSleep) {
+  const byDate = health || {};
+  const dates = Object.keys(byDate).sort();
+  if (!dates.length && !lastSleep) return null;
+  const today = todayISO();
+  const avg = (from, to, key) => {
+    const vals = dates.filter((d) => d >= from && d < to).map((d) => byDate[d] && byDate[d][key]).filter((v) => typeof v === 'number');
+    return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+  };
+  const last7 = dates.filter((d) => d >= addDays(today, -7)).map((d) => ({
+    date: d, readiness: byDate[d].readiness ?? null, sleep: byDate[d].sleep ?? null,
+    activity: byDate[d].activity ?? null, steps: byDate[d].steps ?? null, tempDeviation: byDate[d].tempDeviation ?? null,
+  }));
+  return {
+    daysTracked: dates.length,
+    firstDayTracked: dates[0] || null,
+    last7,
+    trend30d: {
+      readiness: { last30: avg(addDays(today, -30), today, 'readiness'), prior30: avg(addDays(today, -60), addDays(today, -30), 'readiness') },
+      sleep: { last30: avg(addDays(today, -30), today, 'sleep'), prior30: avg(addDays(today, -60), addDays(today, -30), 'sleep') },
+      steps: { last30: avg(addDays(today, -30), today, 'steps'), prior30: avg(addDays(today, -60), addDays(today, -30), 'steps') },
+    },
+    lastSleepDetail: lastSleep || null,
+  };
+}
+function buildContext(items, health, lastSleep) {
   const today = todayISO();
   const open = items.filter((i) => i.type === 'task' && i.status !== 'done').slice(0, 30).map((i) => ({ title: i.title, due: i.date, priority: i.priority, area: i.domain }));
   const events = items.filter((i) => i.date && ['event', 'appointment', 'trip', 'flight'].includes(i.type)).slice(0, 25).map((i) => ({ title: i.title, date: i.date, area: i.domain }));
@@ -1054,9 +1084,35 @@ function buildContext(items) {
   const recentMeals = items.filter((i) => i.type === 'meal' && i.domain === 'health' && i.date >= addDays(today, -14)).map((i) => ({ title: i.title, date: i.date, calories: i.meta && i.meta.calories, proteinG: i.meta && (i.meta.proteinG ?? i.meta.protein), carbsG: i.meta && (i.meta.carbsG ?? i.meta.carbs), fatG: i.meta && (i.meta.fatG ?? i.meta.fat) }));
   const recentExercise = items.filter((i) => i.type === 'exercise' && i.date >= addDays(today, -14)).map((i) => ({ date: i.date, activity: i.meta && i.meta.activityType, durationMin: i.meta && i.meta.durationMin, distanceKm: i.meta && i.meta.distanceKm }));
   const examHistory = buildExamHistory(items);
+  // consultas (passadas e futuras) com detalhe completo — antes só apareciam em "events" com
+  // título/data, sem médico/especialidade/local/notas, que é o que realmente importa clinicamente.
+  const upcomingAppointments = items.filter((i) => i.type === 'appointment' && i.date && i.date >= today)
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    .slice(0, 15)
+    .map((i) => ({ title: i.title, date: i.date, time: i.time, notes: i.notes || null, doctor: (i.meta && i.meta.doctor) || null, specialty: (i.meta && i.meta.specialty) || null, clinic: (i.meta && i.meta.clinic) || null }));
+  const pastAppointments = items.filter((i) => i.type === 'appointment' && i.date && i.date < today)
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .slice(0, 15)
+    .map((i) => ({ title: i.title, date: i.date, notes: i.notes || null, doctor: (i.meta && i.meta.doctor) || null, specialty: (i.meta && i.meta.specialty) || null }));
+  // compras relacionadas à saúde (farmácia, suplementos, medicação) — dá contexto de adesão a
+  // tratamento e gasto com saúde que hoje não chegava ao Dr. Claude de nenhuma forma.
+  const healthPurchases = items.filter((i) => (i.type === 'purchase' || i.type === 'expense') && (i.domain === 'health' || /farmac|remédio|remedio|medicament|suplement|vitamin/i.test(i.title || '')))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .slice(0, 15)
+    .map((i) => ({ title: i.title, date: i.date, amount: i.amount, store: (i.meta && i.meta.store) || null }));
+  // viagens (passadas recentes e futuras) — mudança de fuso/rotina/clima é relevante pra sono,
+  // prontidão e hábitos, e antes não existia em lugar nenhum do contexto de saúde.
+  const travel = items.filter((i) => ['trip', 'flight'].includes(i.type) && i.date && i.date >= addDays(today, -14))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+    .slice(0, 10)
+    .map((i) => ({ type: i.type, title: i.title, date: i.date, notes: i.notes || null }));
+  const wearable = buildWearableContext(health, lastSleep);
   return {
     today, openTasks: open, events, monthSpendBRL: exp.filter((i) => (i.date || '').startsWith(month)).reduce((a, b) => a + b.amount, 0),
-    health: { metrics: healthMetrics, conditions, allergies, medications, recentMeals, recentExercise, examHistory },
+    health: {
+      metrics: healthMetrics, conditions, allergies, medications, recentMeals, recentExercise, examHistory,
+      upcomingAppointments, pastAppointments, purchasesRelated: healthPurchases, travel, wearable,
+    },
   };
 }
 
@@ -2003,11 +2059,23 @@ function CaptureSheet({ lang, t, onClose, addItems, flash }) {
 }
 
 /* ---------------- Claude chat (screen + overlay) ---------------- */
-function Chat({ items, lang, t, name, seed, heightStyle }) {
+function Chat({ items, lang, t, name, seed, heightStyle, health, lastSleep }) {
   const [msgs, setMsgs] = useState([]); const [input, setInput] = useState(''); const [loading, setLoading] = useState(false); const endRef = useRef(); const seeded = useRef(false);
-  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. When the topic is health: weigh EVERY piece of data under "health" equally — registered conditions, allergies, medications, recent meals/exercise, AND health.examHistory (past lab and imaging exam findings/reports) are just as important as the numeric health.metrics. Do not focus only on lab numbers; the narrative exam findings and the person's full medical history matter just as much for understanding them as a patient. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items))}`;
+  // memória persistente entre sessões (tabela dr_claude_messages — ver /api/dr-claude/messages):
+  // sem isto, cada conversa começava do zero, mesmo tendo discutido o mesmo assunto de saúde
+  // ontem. Carregada uma vez por abertura do chat; cada mensagem nova é registrada em push().
+  const [recentLog, setRecentLog] = useState([]);
+  useEffect(() => {
+    authFetch('/api/dr-claude/messages?limit=20').then((r) => r.json()).then((j) => { if (j && Array.isArray(j.messages)) setRecentLog(j.messages); }).catch(() => {});
+  }, []);
+  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. When the topic is health: weigh EVERY piece of data under "health" equally — registered conditions, allergies, medications, recent meals/exercise, upcoming/past appointments, health-related purchases, recent/upcoming travel (jet lag and routine disruption matter), AND health.examHistory (past lab and imaging exam findings/reports) are just as important as the numeric health.metrics. health.wearable holds the full Oura/Apple Health history (not just today): daysTracked, the last 7 days in detail, a 30-day trend vs the prior 30 days, and lastSleepDetail (HRV, heart rate, sleep phases) — use it to reason about trajectory (improving/worsening), not just the latest reading. Do not focus only on lab numbers or today's snapshot; the narrative exam findings, the wearable trend and the person's full history matter just as much for understanding them as a patient. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items, health, lastSleep))}${recentLog.length ? `\nRecent conversation history with you (Dr. Claude), for continuity — don't repeat questions already answered here: ${JSON.stringify(recentLog)}` : ''}`;
+  const logMsg = (role, content) => {
+    if (typeof content === 'string' && content.trim()) authFetch('/api/dr-claude/messages', { method: 'POST', body: JSON.stringify({ role, content }) }).catch(() => {});
+  };
   const push = async (next) => { setMsgs(next); setLoading(true);
-    try { const reply = await callClaude(system, next.map((mm) => ({ role: mm.role, content: mm.content }))); setMsgs((p) => [...p, { role: 'assistant', content: reply || '…' }]); }
+    const lastUser = next[next.length - 1];
+    if (lastUser && lastUser.role === 'user') logMsg('user', lastUser.content);
+    try { const reply = await callClaude(system, next.map((mm) => ({ role: mm.role, content: mm.content }))); setMsgs((p) => [...p, { role: 'assistant', content: reply || '…' }]); logMsg('assistant', reply); }
     catch (e) { setMsgs((p) => [...p, { role: 'assistant', content: lang === 'pt' ? 'Não consegui responder agora.' : "Couldn't respond just now." }]); }
     setLoading(false); };
   useEffect(() => { if (seed && !seeded.current) { seeded.current = true; push([{ role: 'user', content: seed }]); } }, [seed]);
@@ -5161,15 +5229,17 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const genSummary = async () => {
     setSumLoading(true);
     try {
-      const last7 = Object.entries(health || {}).filter(([d]) => d >= addDays(today, -7)).map(([d, v]) => ({ date: d, sleep: v.sleep, readiness: v.readiness, activity: v.activity, tempDeviation: v.tempDeviation }));
+      const last7 = Object.entries(health || {}).filter(([d]) => d >= addDays(today, -7)).map(([d, v]) => ({ date: d, sleep: v.sleep, readiness: v.readiness, activity: v.activity, steps: v.steps, tempDeviation: v.tempDeviation }));
+      const wearable = buildWearableContext(health, lastSleep);
       const metrics = items.filter((i) => i.type === 'healthMetric' && i.title !== '__checked__').slice(-40).map((i) => ({ indicator: i.title, value: i.amount, unit: i.meta && i.meta.unit, status: i.meta && i.meta.status, date: i.date }));
       const conditions = items.filter((i) => i.type === 'condition' && i.meta && i.meta.status === 'ativa').map((i) => i.title);
       const allergies = items.filter((i) => i.type === 'allergy').map((i) => i.title);
       const meds = items.filter((i) => i.type === 'medication' && !(i.meta && i.meta.endDate)).map((i) => i.title);
       const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health' && i.date >= addDays(today, -3)).map((i) => ({ title: i.title, calories: i.meta && i.meta.calories, protein: i.meta && i.meta.protein }));
       const examHistory = buildExamHistory(items);
-      const system = `Você é o Dr. Claude, assistente de saúde pessoal. Com base em TODOS os dados abaixo, escreva um resumo de NO MÁXIMO 3 linhas (curto, direto, em ${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre o estado geral de saúde da pessoa AGORA, terminando com uma recomendação prática pro dia/semana. Tom acolhedor mas objetivo, como o resumo diário de um app de wearable. IMPORTANTE: considere os achados dos exames (laboratoriais e de imagem, campo "Histórico de exames" abaixo) com o MESMO peso dos indicadores numéricos — não foque só em números; laudos, condições registradas e o histórico narrativo do paciente são igualmente relevantes. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado, trabalhe com o que tiver e não invente. Responda em texto puro, sem markdown, sem aspas.
-Sono/prontidão (últimos 7 dias): ${JSON.stringify(last7)}
+      const system = `Você é o Dr. Claude, assistente de saúde pessoal. Com base em TODOS os dados abaixo, escreva um resumo de NO MÁXIMO 3 linhas (curto, direto, em ${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre o estado geral de saúde da pessoa AGORA, terminando com uma recomendação prática pro dia/semana. Tom acolhedor mas objetivo, como o resumo diário de um app de wearable. IMPORTANTE: considere os achados dos exames (laboratoriais e de imagem, campo "Histórico de exames" abaixo) com o MESMO peso dos indicadores numéricos — não foque só em números; laudos, condições registradas, a tendência de 30 dias do wearable (campo "trend30d" abaixo) e o histórico narrativo do paciente são igualmente relevantes. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado, trabalhe com o que tiver e não invente. Responda em texto puro, sem markdown, sem aspas.
+Sono/prontidão/passos (últimos 7 dias): ${JSON.stringify(last7)}
+Tendência do wearable (30 dias vs 30 dias anteriores) e detalhe do último sono (HRV, frequência cardíaca, fases): ${JSON.stringify(wearable)}
 Indicadores de exames recentes: ${JSON.stringify(metrics)}
 Histórico de exames (laboratoriais e de imagem, com achados quando já analisados): ${JSON.stringify(examHistory)}
 Condições ativas: ${JSON.stringify(conditions)}
@@ -5466,7 +5536,7 @@ function DietCalendar({ meals, lang, sel, setSel }) {
     </div>
   );
 }
-function DietScreen({ items, lang, t, back, addItem, delItem, onOpen, flash, dietSummary, setDietSummary, openClaude }) {
+function DietScreen({ items, lang, t, back, addItem, delItem, onOpen, flash, dietSummary, setDietSummary, openClaude, health }) {
   const [sumLoading, setSumLoading] = useState(false);
   const [mealDraft, setMealDraft] = useState(null);
   const [adding, setAdding] = useState(false);
@@ -5490,9 +5560,11 @@ function DietScreen({ items, lang, t, back, addItem, delItem, onOpen, flash, die
     try {
       const last14 = meals.filter((m) => m.date >= addDays(today, -14)).map((m) => ({ date: m.date, title: m.title, calories: m.meta && m.meta.calories, proteinG: m.meta && m.meta.proteinG }));
       const exList = items.filter((i) => i.type === 'exercise' && i.date >= addDays(today, -14)).map((i) => ({ date: i.date, activity: i.meta && i.meta.activityType, durationMin: i.meta && i.meta.durationMin, distanceKm: i.meta && i.meta.distanceKm }));
-      const system = `Você é o Dr. Claude, personal trainer/nutricionista pessoal embutido num app de vida pessoal. Com base nas refeições e atividades físicas dos últimos 14 dias, escreva NO MÁXIMO 3 linhas (${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre como a dieta e a rotina de exercícios estão indo, terminando com 1-2 dicas práticas. Tom acolhedor mas direto, como o resumo diário de um app de wearable. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado (poucos registros), diga isso e incentive registrar mais. Responda em texto puro, sem markdown, sem aspas.
+      const activity14 = Object.entries(health || {}).filter(([d]) => d >= addDays(today, -14)).map(([d, v]) => ({ date: d, steps: v.steps, activityScore: v.activity }));
+      const system = `Você é o Dr. Claude, personal trainer/nutricionista pessoal embutido num app de vida pessoal. Com base nas refeições, atividades físicas registradas E nos passos/pontuação de atividade do wearable dos últimos 14 dias, escreva NO MÁXIMO 3 linhas (${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre como a dieta e a rotina de exercícios estão indo, terminando com 1-2 dicas práticas. Cruze calorias consumidas com o nível de atividade (passos/pontuação) — não julgue só a dieta isolada. Tom acolhedor mas direto, como o resumo diário de um app de wearable. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado (poucos registros), diga isso e incentive registrar mais. Responda em texto puro, sem markdown, sem aspas.
 Refeições (14d): ${JSON.stringify(last14)}
-Atividades físicas (14d): ${JSON.stringify(exList)}
+Atividades físicas registradas (14d): ${JSON.stringify(exList)}
+Passos/pontuação de atividade do wearable (14d): ${JSON.stringify(activity14)}
 Hoje: ${today}`;
       const text = await callClaude(system, [{ role: 'user', content: lang === 'pt' ? 'Gere a análise.' : 'Generate the analysis.' }]);
       setDietSummary({ date: today, text: text.trim() });
@@ -8406,6 +8478,14 @@ function App() {
   const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [theme, setThemeState] = useState(_theme); const applyTheme = (name) => { setTheme(name); setThemeState(name); };
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
+  // histórico permanente de saúde (tabela health_daily — ver /api/health/history e
+  // lib/healthDaily.js): diferente do cache de curta janela que a Oura/HealthKit devolvem,
+  // isto nunca perde dias antigos e é a base usada tanto pra visão histórica quanto pro
+  // contexto que o Dr. Claude enxerga (ver mergedHealth abaixo e buildContext).
+  const [healthHistoryByDate, setHealthHistoryByDate] = useState({});
+  const loadHealthHistory = () => {
+    authFetch('/api/health/history?days=400').then((r) => r.json()).then((j) => { if (j && j.byDate) setHealthHistoryByDate(j.byDate); }).catch(() => {});
+  };
   // aplica a resposta de /api/oura no estado do app inteiro — usado tanto nos fetches automáticos
   // quanto no "Atualizar agora" dos Ajustes, que antes só atualizava o carimbo local ali mesmo e
   // deixava a Hoje/Saúde com os dados antigos até um reload completo da página.
@@ -8564,6 +8644,7 @@ function App() {
     let alive = true;
     authFetch('/api/oura').then((r) => r.json()).then((j) => { if (alive) applyOuraData(j); }).catch(() => {});
     syncHealthKitSteps();
+    loadHealthHistory();
     loadGmail();
     loadNews();
     authFetch('/api/ticktick').then((r) => r.json()).then((j) => { if (alive && j) setTicktick({ loading: false, connected: !!j.connected, tasks: j.tasks || [], projects: j.projects || [], error: j.error }); }).catch(() => { if (alive) setTicktick((p) => ({ ...p, loading: false })); });
@@ -8793,7 +8874,10 @@ function App() {
     _tags: t.tags || [],
   }));
   const allItems = [...items, ...(gEvents || []), ...(gMsgs || []), ...ttItems];
-  const mergedHealth = { ...(settings.health || {}), ...ouraByDate };
+  // camada base: histórico permanente (health_daily, meses/anos) por dia; por cima, o que já
+  // estava acumulado em settings.health e por fim a leitura mais fresca desta sessão (ouraByDate)
+  // — cada camada só complementa/atualiza o dia, nunca perde o que a anterior já tinha.
+  const mergedHealth = { ...healthHistoryByDate, ...(settings.health || {}), ...ouraByDate };
   // HealthKit tem prioridade só pro campo "steps" (dado mais fresco, sem o delay de sync da
   // Oura) — não pode sobrescrever o dia inteiro, senão perde readiness/sono que só a Oura tem.
   // "server" (funciona em qualquer plataforma) primeiro, "local" (só existe no próprio app iOS,
@@ -8920,11 +9004,11 @@ function App() {
           onSendItem={sendNewsItem} />}
         {active.screen === 'medical' && <MedicalHistoryScreen items={allItems} people={people} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} updateItem={updateItem} flash={flash} health={mergedHealth} onOpen={setDetail} openClaude={(q) => setClaudeSeed(q)} goIndicatorsFull={() => setActive({ screen: 'indicatorsFull', module: null })} />}
         {active.screen === 'indicatorsFull' && <IndicatorsFullScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'medical', module: null })} />}
-        {active.screen === 'diet' && <DietScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} delItem={delItem} onOpen={setDetail} flash={flash} dietSummary={settings.dietSummary} setDietSummary={setDietSummary} openClaude={(q) => setClaudeSeed(q)} />}
+        {active.screen === 'diet' && <DietScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} addItem={addItem} delItem={delItem} onOpen={setDetail} flash={flash} dietSummary={settings.dietSummary} setDietSummary={setDietSummary} openClaude={(q) => setClaudeSeed(q)} health={mergedHealth} />}
         {active.screen === 'healthDocs' && <HealthDocsScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} onOpen={setDetail} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={() => Promise.all([refreshGoogle(), loadGmail()])} onMount={() => { refreshGoogle(); loadGmail(); }} />}
-        {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} />}
+        {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} health={mergedHealth} lastSleep={lastSleep} />}
         {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} goNews={() => setActive({ screen: 'news', module: null })} order={settings.moduleOrder || []} setOrder={(o) => setSettings((st) => ({ ...st, moduleOrder: o }))} />)}
       </div>
       </div>
@@ -8961,7 +9045,7 @@ function App() {
         onUnsave={(n) => unsaveNewsItem(items.find((i) => i.type === 'note' && i.meta && i.meta.source === 'news' && i.meta.link === n.link))}
         onShare={sendNewsItem} />}
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
-      {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} />}
+      {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} health={mergedHealth} lastSleep={lastSleep} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', width: 'max-content', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 16, fontSize: 13, lineHeight: 1.4, textAlign: 'center', zIndex: 60, whiteSpace: 'normal', wordBreak: 'break-word' }}>{toast}</div>}
       {!isOnline && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: C.sky, color: '#1A1200', textAlign: 'center', fontSize: 11.5, fontWeight: 600, padding: '6px 10px', zIndex: 90 }}>{lang === 'pt' ? 'Offline — vendo dados salvos no aparelho; alterações sincronizam ao reconectar' : 'Offline — showing data saved on this device; changes sync once back online'}</div>}
     </div>

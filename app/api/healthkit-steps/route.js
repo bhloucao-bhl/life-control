@@ -1,4 +1,5 @@
 import { admin, userFromRequest } from '../../../lib/oauth';
+import { mergeHealthDaily } from '../../../lib/healthDaily';
 
 export const runtime = 'nodejs';
 
@@ -30,10 +31,16 @@ export async function POST(req) {
   if (!byDate || typeof byDate !== 'object' || Array.isArray(byDate)) {
     return Response.json({ error: 'byDate obrigatório.' }, { status: 400 });
   }
-  await admin().from('healthkit_steps_cache').upsert({
+  const db = admin();
+  await db.from('healthkit_steps_cache').upsert({
     user_id: user.id,
     by_date: byDate,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' });
+  // histórico permanente (ver lib/healthDaily.js) — sem isso, passos de mais de ~14 dias
+  // atrás se perdiam toda vez que o cache acima era substituído por uma janela nova.
+  await mergeHealthDaily(db, user.id, Object.fromEntries(
+    Object.entries(byDate).filter(([, steps]) => typeof steps === 'number').map(([d, steps]) => [d, { steps }])
+  ));
   return Response.json({ ok: true });
 }
