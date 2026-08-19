@@ -52,6 +52,32 @@ async function fetchHealthKitSteps(days = 14) {
     return null;
   }
 }
+// sono, frequência cardíaca de repouso, HRV, calorias ativas e peso — mesmo esquema dos passos
+// acima, só que sem exibição própria: só alimenta o histórico permanente (health_daily) que o
+// Dr. Claude lê, via /api/healthkit-metrics (ver syncHealthKitExtras em App).
+async function fetchHealthKitMetrics(days = 14) {
+  if (!isNative() || Capacitor.getPlatform() !== 'ios') return null;
+  try {
+    const avail = await HealthKit.isAvailable();
+    if (!avail || !avail.available) return null;
+    await HealthKit.requestAuthorization();
+    return await HealthKit.getDailyMetrics({ days });
+  } catch (e) {
+    return null;
+  }
+}
+async function fetchHealthKitWorkouts(days = 14) {
+  if (!isNative() || Capacitor.getPlatform() !== 'ios') return null;
+  try {
+    const avail = await HealthKit.isAvailable();
+    if (!avail || !avail.available) return null;
+    await HealthKit.requestAuthorization();
+    const { byDate } = await HealthKit.getDailyWorkouts({ days });
+    return byDate || null;
+  } catch (e) {
+    return null;
+  }
+}
 async function syncNativeSession(session) {
   if (!isNative()) return;
   try {
@@ -1054,9 +1080,15 @@ function buildWearableContext(health, lastSleep) {
     const vals = dates.filter((d) => d >= from && d < to).map((d) => byDate[d] && byDate[d][key]).filter((v) => typeof v === 'number');
     return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
   };
+  // readiness/sleep(score)/activity(score)/steps/tempDeviation vêm da Oura; restingHR/hrv/
+  // activeEnergyKcal/weightKg/appleSleepMin/workoutMinutes vêm direto do Apple Health (ver
+  // ios/App/App/HealthKitPlugin.swift + /api/healthkit-metrics) — funde no mesmo dia sem conflito,
+  // são campos distintos dos da Oura.
   const last7 = dates.filter((d) => d >= addDays(today, -7)).map((d) => ({
     date: d, readiness: byDate[d].readiness ?? null, sleep: byDate[d].sleep ?? null,
     activity: byDate[d].activity ?? null, steps: byDate[d].steps ?? null, tempDeviation: byDate[d].tempDeviation ?? null,
+    restingHR: byDate[d].restingHR ?? null, hrv: byDate[d].hrv ?? null, activeEnergyKcal: byDate[d].activeEnergyKcal ?? null,
+    weightKg: byDate[d].weightKg ?? null, appleSleepMin: byDate[d].appleSleepMin ?? null, workoutMinutes: byDate[d].workoutMinutes ?? null,
   }));
   return {
     daysTracked: dates.length,
@@ -1066,6 +1098,9 @@ function buildWearableContext(health, lastSleep) {
       readiness: { last30: avg(addDays(today, -30), today, 'readiness'), prior30: avg(addDays(today, -60), addDays(today, -30), 'readiness') },
       sleep: { last30: avg(addDays(today, -30), today, 'sleep'), prior30: avg(addDays(today, -60), addDays(today, -30), 'sleep') },
       steps: { last30: avg(addDays(today, -30), today, 'steps'), prior30: avg(addDays(today, -60), addDays(today, -30), 'steps') },
+      restingHR: { last30: avg(addDays(today, -30), today, 'restingHR'), prior30: avg(addDays(today, -60), addDays(today, -30), 'restingHR') },
+      hrv: { last30: avg(addDays(today, -30), today, 'hrv'), prior30: avg(addDays(today, -60), addDays(today, -30), 'hrv') },
+      activeEnergyKcal: { last30: avg(addDays(today, -30), today, 'activeEnergyKcal'), prior30: avg(addDays(today, -60), addDays(today, -30), 'activeEnergyKcal') },
     },
     lastSleepDetail: lastSleep || null,
   };
@@ -2068,7 +2103,7 @@ function Chat({ items, lang, t, name, seed, heightStyle, health, lastSleep }) {
   useEffect(() => {
     authFetch('/api/dr-claude/messages?limit=20').then((r) => r.json()).then((j) => { if (j && Array.isArray(j.messages)) setRecentLog(j.messages); }).catch(() => {});
   }, []);
-  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. When the topic is health: weigh EVERY piece of data under "health" equally — registered conditions, allergies, medications, recent meals/exercise, upcoming/past appointments, health-related purchases, recent/upcoming travel (jet lag and routine disruption matter), AND health.examHistory (past lab and imaging exam findings/reports) are just as important as the numeric health.metrics. health.wearable holds the full Oura/Apple Health history (not just today): daysTracked, the last 7 days in detail, a 30-day trend vs the prior 30 days, and lastSleepDetail (HRV, heart rate, sleep phases) — use it to reason about trajectory (improving/worsening), not just the latest reading. Do not focus only on lab numbers or today's snapshot; the narrative exam findings, the wearable trend and the person's full history matter just as much for understanding them as a patient. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items, health, lastSleep))}${recentLog.length ? `\nRecent conversation history with you (Dr. Claude), for continuity — don't repeat questions already answered here: ${JSON.stringify(recentLog)}` : ''}`;
+  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. When the topic is health: weigh EVERY piece of data under "health" equally — registered conditions, allergies, medications, recent meals/exercise, upcoming/past appointments, health-related purchases, recent/upcoming travel (jet lag and routine disruption matter), AND health.examHistory (past lab and imaging exam findings/reports) are just as important as the numeric health.metrics. health.wearable holds the full Oura/Apple Health history (not just today): daysTracked, the last 7 days in detail (readiness/sleep/activity/steps from Oura PLUS restingHR/hrv/activeEnergyKcal/weightKg/appleSleepMin/workoutMinutes straight from Apple Health when the person has an iPhone/Apple Watch), a 30-day trend vs the prior 30 days, and lastSleepDetail (HRV, heart rate, sleep phases) — use it to reason about trajectory (improving/worsening), not just the latest reading. Do not focus only on lab numbers or today's snapshot; the narrative exam findings, the wearable trend and the person's full history matter just as much for understanding them as a patient. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items, health, lastSleep))}${recentLog.length ? `\nRecent conversation history with you (Dr. Claude), for continuity — don't repeat questions already answered here: ${JSON.stringify(recentLog)}` : ''}`;
   const logMsg = (role, content) => {
     if (typeof content === 'string' && content.trim()) authFetch('/api/dr-claude/messages', { method: 'POST', body: JSON.stringify({ role, content }) }).catch(() => {});
   };
@@ -8515,6 +8550,26 @@ function App() {
       authFetch('/api/healthkit-steps', { method: 'POST', body: JSON.stringify({ byDate }) }).catch(() => {});
     });
   };
+  // sono, frequência cardíaca de repouso, HRV, calorias ativas, peso e treinos — só existe no app
+  // iOS (mesma limitação de fetchHealthKitSteps); vai direto pro histórico permanente
+  // (health_daily via /api/healthkit-metrics), sem card de exibição própria — é pro Dr. Claude.
+  const syncHealthKitExtras = () => {
+    Promise.all([fetchHealthKitMetrics(), fetchHealthKitWorkouts()]).then(([metrics, workouts]) => {
+      const byDate = {};
+      const put = (source, key) => {
+        Object.entries(source || {}).forEach(([d, v]) => { byDate[d] = { ...(byDate[d] || {}), [key]: v }; });
+      };
+      put(metrics && metrics.restingHR, 'restingHR');
+      put(metrics && metrics.hrv, 'hrv');
+      put(metrics && metrics.activeEnergy, 'activeEnergyKcal');
+      put(metrics && metrics.weightKg, 'weightKg');
+      put(metrics && metrics.sleepMinutes, 'appleSleepMin');
+      Object.entries(workouts || {}).forEach(([d, w]) => {
+        byDate[d] = { ...(byDate[d] || {}), workoutMinutes: w.minutes, workoutCount: w.count };
+      });
+      if (Object.keys(byDate).length) authFetch('/api/healthkit-metrics', { method: 'POST', body: JSON.stringify({ byDate }) }).catch(() => {});
+    }).catch(() => {});
+  };
   const [gmail, setGmail] = useState({ loading: true, connected: false, messages: [], error: null });
   const [ticktick, setTicktick] = useState({ loading: true, connected: false, tasks: [], projects: [] });
   const [gEvents, setGEvents] = useState([]); const [gMsgs, setGMsgs] = useState([]);
@@ -8644,6 +8699,7 @@ function App() {
     let alive = true;
     authFetch('/api/oura').then((r) => r.json()).then((j) => { if (alive) applyOuraData(j); }).catch(() => {});
     syncHealthKitSteps();
+    syncHealthKitExtras();
     loadHealthHistory();
     loadGmail();
     loadNews();
