@@ -6717,7 +6717,7 @@ function SceneEditor({ scene, tuyaDevices, lgDevices, tuyaPrefs, lgHost, lang, t
         <div style={{ ...card, padding: 14, marginBottom: 10, textAlign: 'center', color: C.text3, fontSize: 12 }}>{lang === 'pt' ? 'Nenhum aparelho adicionado ainda.' : 'No devices added yet.'}</div>
       ) : steps.map((s, i) => (
         <div key={i} style={{ ...card, padding: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <button onClick={() => startEditStep(i)} style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, flex: 1, minWidth: 0 }}>
+          <button onClick={() => startEditStep(i)} style={{ background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, flex: 1, minWidth: 0, color: C.text }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{s.deviceName}</div>
             <div style={{ fontSize: 10.5, color: C.text3, marginTop: 2 }}>{describeSceneStep(s, lang)}</div>
           </button>
@@ -6771,7 +6771,7 @@ function ScenesSection({ scenes, setScenes, lastScene, setLastScene, tuyaDevices
             const isLast = lastScene && lastScene.id === sc.id;
             return (
             <div key={sc.id} style={{ ...card, padding: 13, position: 'relative', border: isLast ? `1px solid ${C.green}55` : undefined }}>
-              <button onClick={() => trigger(sc)} disabled={running === sc.id} style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0 }}>
+              <button onClick={() => trigger(sc)} disabled={running === sc.id} style={{ width: '100%', background: 'none', border: 'none', textAlign: 'left', cursor: 'pointer', padding: 0, color: C.text }}>
                 <div style={{ width: 34, height: 34, borderRadius: 9, background: C.violet + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                   {running === sc.id ? <Loader2 size={17} className="spin" style={{ color: C.violet }} /> : <Sparkles size={17} style={{ color: C.violet }} />}
                 </div>

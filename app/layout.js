@@ -32,7 +32,7 @@ export default function RootLayout({ children }) {
           * { box-sizing: border-box; }
           html, body { margin: 0; padding: 0; background: #0A0E17; color: #FFFFFF; font-family: ${SF_STACK}; }
           body { -webkit-font-smoothing: antialiased; overscroll-behavior-y: none; }
-          input, textarea, select, button { font-family: inherit; }
+          input, textarea, select, button { font-family: inherit; color: inherit; }
           @keyframes lccPulse { 0%,100% { opacity: .35; transform: scale(0.97); } 50% { opacity: 1; transform: scale(1.03); } }
           .lcc-pulse { animation: lccPulse 1.4s ease-in-out infinite; }
           .lcc-tip { background: rgba(10,14,23,.85) !important; border: none !important; color: #F59E0B !important; font-size: 10px !important; font-weight: 700 !important; box-shadow: none !important; padding: 1px 5px !important; }
