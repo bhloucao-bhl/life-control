@@ -1,0 +1,32 @@
+name: Oura health history snapshot
+
+# Roda de hora em hora e chama /api/cron/oura-snapshot no app publicado,
+# gravando o dia mais recente de todo mundo conectado à Oura no histórico
+# permanente de saúde (health_daily — ver schema8.sql). É uma rede de
+# segurança: o webhook da Oura já faz isso a cada sincronização do anel, mas
+# se um evento se perder, este cron garante que nenhum dia fique sem
+# registro histórico.
+#
+# Mesmo esquema do mercadolivre-sync.yml/morning-brief.yml — contas Hobby da
+# Vercel só permitem cron nativo diário, não horário. Precisa dos mesmos
+# secrets:
+#   - APP_BASE_URL: URL pública do app (ex: https://life-control.vercel.app)
+#   - CRON_SECRET: o mesmo valor da variável de ambiente CRON_SECRET na Vercel
+
+on:
+  schedule:
+    - cron: '30 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call oura-snapshot endpoint
+        run: |
+          curl --fail-with-body --show-error --silent \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_BASE_URL%/}/api/cron/oura-snapshot"
+        env:
+          APP_BASE_URL: ${{ secrets.APP_BASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}

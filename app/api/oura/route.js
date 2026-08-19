@@ -1,5 +1,6 @@
 import { admin, userFromRequest, validToken } from '../../../lib/oauth';
 import { fetchOuraData } from '../../../lib/oura';
+import { mergeHealthDaily } from '../../../lib/healthDaily';
 
 export const runtime = 'nodejs';
 
@@ -44,6 +45,8 @@ export async function GET(req) {
     last_sleep: lastSleep,
     updated_at: new Date().toISOString(),
   }, { onConflict: 'user_id' });
+  // histórico permanente (ver lib/healthDaily.js) — não perde dias fora da janela do cache acima
+  await mergeHealthDaily(db, user.id, byDate);
 
   return Response.json({ connected: true, byDate, lastSleep, errors }, {
     headers: { 'Cache-Control': 'private, s-maxage=900' },
