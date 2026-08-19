@@ -48,7 +48,7 @@
 	<key>NSHealthShareUsageDescription</key>
 	<string>Usado pra ler passos, sono, frequência cardíaca, calorias ativas, peso e treinos direto do Apple Health, pro Dr. Claude ter uma visão mais completa da sua saúde.</string>
 	<key>NSHealthUpdateUsageDescription</key>
-	<string>O Life Control não grava nenhum dado no Apple Health — só lê. Essa permissão é exigida pelo sistema mesmo quando o app não escreve informações.</string>
+	<string>Usado pra gravar seu peso no Apple Health quando você registra um novo peso no Life Control, pra não precisar atualizar os dois separadamente.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Usado pra mostrar a previsão do tempo da sua localização atual.</string>
 	<key>UIApplicationSceneManifest</key>

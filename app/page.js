@@ -78,6 +78,21 @@ async function fetchHealthKitWorkouts(days = 14) {
     return null;
   }
 }
+// mão dupla: quando a pessoa registra um peso no app (addWeight em App), este também grava no
+// Apple Health — pra não ter que manter as duas ferramentas atualizadas na mão. Silencioso de
+// propósito (nunca lança): se o HealthKit recusar ou não existir (Android/web), o peso já foi
+// salvo no app normalmente, isso aqui é só o espelhamento extra.
+async function writeWeightToHealthKit(kg) {
+  if (!isNative() || Capacitor.getPlatform() !== 'ios') return;
+  try {
+    const avail = await HealthKit.isAvailable();
+    if (!avail || !avail.available) return;
+    await HealthKit.requestAuthorization();
+    await HealthKit.saveWeight({ kg });
+  } catch (e) {
+    // segue sem gravar no HealthKit — o registro no app já aconteceu
+  }
+}
 async function syncNativeSession(session) {
   if (!isNative()) return;
   try {
@@ -545,7 +560,7 @@ import {
   ListTodo, Newspaper, Utensils, Pill, Stethoscope, ShoppingCart, CircleCheck,
   Circle, Paperclip, Ticket, ArrowRight, Star, UserRound, Activity, Thermometer,
   Wrench, CreditCard, Phone, Mail, MessageSquare, MessageCircle, Power, Snowflake,
-  Wind, Lightbulb, Video, TrendingUp, Landmark, Scale, Ruler, Syringe, Gift,
+  Wind, Lightbulb, Video, TrendingUp, TrendingDown, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
   MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, GripVertical,
   Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint, Footprints
@@ -1223,11 +1238,12 @@ function SectionTitle({ icon: Icon, label, color }) {
 function ScreenTitle({ title, sub }) {
   return <div style={{ margin: '4px 2px 16px' }}><div style={{ fontSize: 22, fontWeight: 600, letterSpacing: '-.01em' }}>{title}</div>{sub && <div style={{ fontSize: 13, color: C.text3, marginTop: 3 }}>{sub}</div>}</div>;
 }
-function MiniStat({ label, value, color, small, onClick }) {
+function MiniStat({ label, value, sub, color, small, onClick }) {
   return (
     <div onClick={onClick} style={{ flex: 1, background: C.bg2, borderRadius: 12, padding: '11px 8px', textAlign: 'center', cursor: onClick ? 'pointer' : 'default', border: `1px solid ${onClick ? C.borderSoft : 'transparent'}` }}>
       <div style={{ fontSize: small ? 14 : 19, fontWeight: 700, color: color || C.text }}>{value}</div>
       <div style={{ fontSize: 10.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 2, fontWeight: 600 }}>{label}</div>
+      {sub && <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, display: 'flex', gap: 3, alignItems: 'center', justifyContent: 'center' }}>{sub}</div>}
     </div>
   );
 }
@@ -5303,6 +5319,20 @@ Data de hoje: ${today}`;
   const weekEx = exercises.filter((i) => i.date >= weekAgo);
   const weekMin = weekEx.reduce((a, b) => a + (Number(b.meta && b.meta.durationMin) || 0), 0);
   const weekKm = weekEx.reduce((a, b) => a + (Number(b.meta && b.meta.distanceKm) || 0), 0);
+  // dados extras do Apple Health (frequência cardíaca, HRV, calorias ativas, treinos — ver
+  // HealthKitPlugin.swift getDailyMetrics/getDailyWorkouts): só aparecem pra quem tem
+  // iPhone/Apple Watch sincronizando; o card abaixo fica escondido se não houver nada disso.
+  const appleWeek = Object.entries(health || {}).filter(([d]) => d >= weekAgo && d <= today).map(([, v]) => v);
+  const appleWorkoutMin = appleWeek.reduce((a, v) => a + (Number(v.workoutMinutes) || 0), 0);
+  const appleWorkoutCount = appleWeek.reduce((a, v) => a + (Number(v.workoutCount) || 0), 0);
+  const hasAppleExtra = w.restingHR != null || w.hrv != null || w.activeEnergyKcal != null || appleWorkoutMin > 0;
+  // variação de peso nos últimos 7 dias (fonte: registros manuais no app, os mesmos que agora
+  // também vão pro Apple Health via addWeight) — só aparece com pelo menos 2 pesagens no período.
+  const sortedWeights = [...(weights || [])].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const latestWeight = sortedWeights[sortedWeights.length - 1];
+  const weightWeekAgo = [...sortedWeights].reverse().find((x) => x.date <= weekAgo);
+  const weightDelta = latestWeight && weightWeekAgo && latestWeight.date !== weightWeekAgo.date
+    ? Math.round((latestWeight.kg - weightWeekAgo.kg) * 10) / 10 : null;
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -5386,8 +5416,27 @@ Data de hoje: ${today}`;
       {ouraOn && <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', marginBottom: 8, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{t('ouraSynced')}</div>}
 
       {ouraOn && (lastSleep ? <SleepCard s={lastSleep} lang={lang} t={t} /> : <div style={{ ...card, padding: 16, marginBottom: 10, color: C.text3, fontSize: 12.5, textAlign: 'center' }}>{t('noSleepData')}</div>)}
+      {hasAppleExtra && (
+        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+          <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 10 }}>
+            <HeartPulse size={14} style={{ color: C.rose }} />
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: C.text2, textTransform: 'uppercase', letterSpacing: '.04em' }}>Apple Health</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <MiniStat label={lang === 'pt' ? 'FC repouso' : 'Resting HR'} value={w.restingHR != null ? Math.round(w.restingHR) : '—'} color={C.rose} small />
+            <MiniStat label="HRV" value={w.hrv != null ? Math.round(w.hrv) + ' ms' : '—'} color={C.violet} small />
+            <MiniStat label={lang === 'pt' ? 'Cal. ativas' : 'Active kcal'} value={w.activeEnergyKcal != null ? Math.round(w.activeEnergyKcal) : '—'} color={C.sky} small />
+            <MiniStat label={lang === 'pt' ? 'Treinos 7d' : 'Workouts 7d'} value={appleWorkoutCount > 0 ? appleWorkoutCount : '—'} sub={appleWorkoutMin > 0 ? `${appleWorkoutMin}min` : null} color={C.green} small />
+          </div>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
-        <MiniStat label={t('weight')} value={profile.weight ? profile.weight + ' kg' : '—'} color={C.rose} small />
+        <MiniStat
+          label={t('weight')} value={profile.weight ? profile.weight + ' kg' : '—'} color={C.rose} small
+          sub={weightDelta != null && weightDelta !== 0 ? (
+            <>{weightDelta > 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}{(weightDelta > 0 ? '+' : '') + weightDelta + 'kg · 7d'}</>
+          ) : null}
+        />
         <MiniStat label={t('height')} value={profile.height ? profile.height + ' cm' : '—'} color={C.blue} small />
         <MiniStat label={t('bmi')} value={bmi || '—'} color={C.accent} small />
       </div>
@@ -8860,6 +8909,8 @@ function App() {
     // fica só de fallback pra quem ainda não tem esse contato criado.
     const me = people.find(isMePerson);
     if (me) updateItem(me.id, { meta: { ...me.meta, weightKg: kg } });
+    // mão dupla com o Apple Health — sem await de propósito, não trava a UI esperando o HealthKit.
+    writeWeightToHealthKit(kg);
   };
   const setDevices = (fn) => setSettings((s) => ({ ...s, devices: typeof fn === 'function' ? fn(s.devices || DEFAULT_DEVICES) : fn }));
   // lista de compras da semana (widget da Hoje, versão wide) — vive em settings, igual pesos/dieta

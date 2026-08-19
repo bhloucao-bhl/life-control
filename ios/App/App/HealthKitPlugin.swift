@@ -6,7 +6,10 @@ import HealthKit
 /// sincronização em nuvem da Oura); agora também lê sono, frequência cardíaca
 /// de repouso, HRV, calorias ativas, peso e treinos — tudo pra dar ao
 /// Dr. Claude uma visão mais completa da saúde da pessoa, não só o que a
-/// Oura sincroniza. Ver app/page.js (syncHealthKitSteps/syncHealthKitExtras)
+/// Oura sincroniza. A única coisa que este plugin GRAVA de volta no
+/// HealthKit é peso (saveWeight) — quando a pessoa registra o peso no app,
+/// ele também aparece no Apple Health, sem precisar manter os dois em sincronia
+/// na mão. Ver app/page.js (syncHealthKitSteps/syncHealthKitExtras/addWeight)
 /// pro lado JS e app/api/healthkit-metrics/route.js pro lado servidor.
 @objc(HealthKitPlugin)
 public class HealthKitPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -18,6 +21,7 @@ public class HealthKitPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "getDailySteps", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDailyMetrics", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getDailyWorkouts", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "saveWeight", returnType: CAPPluginReturnPromise),
     ]
 
     private let store = HKHealthStore()
@@ -41,16 +45,39 @@ public class HealthKitPlugin: CAPPlugin, CAPBridgedPlugin {
             return
         }
         let readTypes: Set<HKObjectType> = [stepType, restingHRType, hrvType, activeEnergyType, weightType, sleepType, workoutType]
-        store.requestAuthorization(toShare: nil, read: readTypes) { success, error in
+        // só peso é gravado de volta (via saveWeight) — tudo o mais é só leitura.
+        let shareTypes: Set<HKSampleType> = [weightType]
+        store.requestAuthorization(toShare: shareTypes, read: readTypes) { success, error in
             if let error = error {
                 call.reject("Falha ao pedir autorização do HealthKit: \(error.localizedDescription)")
                 return
             }
-            // Por privacidade, o HealthKit nunca informa se o usuário negou leitura de um tipo
-            // específico — "success" aqui só significa que o fluxo de permissão rodou (ou já tinha
-            // rodado antes), não que cada tipo foi de fato concedido. Cada query simplesmente volta
-            // vazia pros tipos negados.
+            // Por privacidade, o HealthKit nunca informa se o usuário negou leitura/escrita de um
+            // tipo específico — "success" aqui só significa que o fluxo de permissão rodou (ou já
+            // tinha rodado antes), não que cada tipo foi de fato concedido. Cada query/gravação
+            // simplesmente falha ou volta vazia pros tipos negados.
             call.resolve(["granted": success])
+        }
+    }
+
+    @objc func saveWeight(_ call: CAPPluginCall) {
+        guard HKHealthStore.isHealthDataAvailable() else {
+            call.reject("HealthKit não disponível.")
+            return
+        }
+        guard let kg = call.getDouble("kg"), kg > 0 else {
+            call.reject("kg obrigatório.")
+            return
+        }
+        let now = Date()
+        let quantity = HKQuantity(unit: HKUnit.gramUnit(with: .kilo), doubleValue: kg)
+        let sample = HKQuantitySample(type: weightType, quantity: quantity, start: now, end: now)
+        store.save(sample) { success, error in
+            if let error = error {
+                call.reject("Falha ao gravar peso no HealthKit: \(error.localizedDescription)")
+                return
+            }
+            call.resolve(["saved": success])
         }
     }
 
