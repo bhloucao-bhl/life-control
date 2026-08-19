@@ -97,6 +97,20 @@ export async function GET(req) {
     }
     const seen = new Set();
     events = events.filter((e) => { if (seen.has(e.id)) return false; seen.add(e.id); return true; });
+
+    // dedup de compromissos replicados entre calendários (ex.: cópia via Shortcuts
+    // do calendário de trabalho para o pessoal) — mesmo dia/hora/título viram 1 só,
+    // priorizando a versão marcada como "work".
+    const normTitle = (t) => (t || '').replace(/^\s*\(m\)\s*/i, '').trim().toLowerCase();
+    const byKey = new Map();
+    for (const e of events) {
+      const key = `${e.date}|${e.time || ''}|${normTitle(e.title)}`;
+      const existing = byKey.get(key);
+      if (!existing || (e.meta && e.meta.work && !(existing.meta && existing.meta.work))) {
+        byKey.set(key, e);
+      }
+    }
+    events = Array.from(byKey.values());
   } catch (e) {
     errors.push(String(e.message || e));
   }
