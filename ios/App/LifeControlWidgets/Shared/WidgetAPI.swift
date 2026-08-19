@@ -11,6 +11,8 @@ struct WidgetSummary: Codable {
     struct Account: Codable, Identifiable { let id: String; let title: String; let institution: String?; let balance: Double }
     struct Finance: Codable { let accounts: [Account] }
     struct Purchase: Codable, Identifiable { let id: String; let title: String; let store: String?; let etaDate: String?; let stage: String; let tracking: String? }
+    struct Scene: Codable, Identifiable { let id: String; let name: String; let steps: Int }
+    struct LastScene: Codable { let id: String; let name: String; let at: String }
 
     let today: String
     let health: Health
@@ -19,6 +21,8 @@ struct WidgetSummary: Codable {
     let diet: Diet
     let finance: Finance
     let purchases: [Purchase]
+    let scenes: [Scene]
+    let lastScene: LastScene?
 }
 
 enum WidgetAPI {
@@ -50,18 +54,27 @@ enum WidgetAPI {
         return try JSONDecoder().decode(WidgetSummary.self, from: data)
     }
 
-    /// Única ação que o widget dispara sem abrir o app: marcar uma compra como
-    /// recebida (não pede nenhuma entrada do usuário, então é segura de fazer
-    /// direto do botão interativo). Adicionar gasto/refeição/compra sempre
-    /// abre o app numa tela pré-preenchida — ver WidgetLinks.
-    static func markPurchaseReceived(id: String) async throws {
+    private static func postAction(_ action: String, id: String) async throws {
         var req = try await request(path: "/api/widget/action")
         req.httpMethod = "POST"
-        req.httpBody = try JSONEncoder().encode(["action": "markPurchaseReceived", "id": id])
+        req.httpBody = try JSONEncoder().encode(["action": action, "id": id])
         let (_, response) = try await URLSession.shared.data(for: req)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
             throw WidgetAPIError.badStatus((response as? HTTPURLResponse)?.statusCode ?? -1)
         }
+    }
+
+    /// Ações que o widget dispara sem abrir o app — nenhuma das duas pede
+    /// entrada do usuário, então são seguras de fazer direto do toque.
+    /// Adicionar gasto/refeição/compra sempre abre o app numa tela
+    /// pré-preenchida (ver WidgetLinks); rodar uma cena de casa não precisa
+    /// disso, é sempre a mesma sequência de comandos já salva.
+    static func markPurchaseReceived(id: String) async throws {
+        try await postAction("markPurchaseReceived", id: id)
+    }
+
+    static func runScene(id: String) async throws {
+        try await postAction("runScene", id: id)
     }
 
     /// Traduz o erro real numa frase curta pro widget mostrar — sem isso, todo

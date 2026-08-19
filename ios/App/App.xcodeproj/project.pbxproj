@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		0126C60E70E98089D68C54D5 /* LifeControlWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C3A93D921A4CB2517B51E69 /* LifeControlWidgetsBundle.swift */; };
 		1E5FBD58F7BF185D420B8EFB /* SelectAccountIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 225DE21B7DED2B14C1616BA8 /* SelectAccountIntent.swift */; };
+		2F0A65CB636C4B73ECE814B8 /* SelectSceneIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C8F2900597D177FDCE19A95 /* SelectSceneIntent.swift */; };
 		2FAD9763203C412B000D30F8 /* config.xml in Resources */ = {isa = PBXBuildFile; fileRef = 2FAD9762203C412B000D30F8 /* config.xml */; };
 		4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */ = {isa = PBXBuildFile; productRef = 4D22ABE82AF431CB00220026 /* CapApp-SPM */; };
 		4F3C4D017286F6150C608EED /* DietWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1128A60BDEA2970BCE7EC69E /* DietWidget.swift */; };
@@ -20,6 +21,7 @@
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		64F37E00E40501F8C87FE59C /* AccountEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A7A5D02655E606266F1F34D /* AccountEntity.swift */; };
 		6B556148F793E96B0E7FEC44 /* SharedSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B333D525357793A75C4270 /* SharedSession.swift */; };
+		73EA04FFC6C475C326D48F1B /* SceneLockWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 19C72DD2BB419A7BF5BD8D0D /* SceneLockWidget.swift */; };
 		78ABEFC10F89F684DC67432B /* WidgetLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77B270BF8E27F9C7094915AB /* WidgetLinks.swift */; };
 		7A2488D2D4C11850B235B5A6 /* MarkPurchaseReceivedIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 405F749E544A50570178CD7F /* MarkPurchaseReceivedIntent.swift */; };
 		7C6536DCC94DF921D72FCB53 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 23E667EE9C149C717B10EC72 /* WidgetKit.framework */; };
@@ -32,16 +34,19 @@
 		97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65B333D525357793A75C4270 /* SharedSession.swift */; };
 		9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
 		9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
+		9FF375CE429E45B357BB7854 /* HealthKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */; };
+		A4CF6B78CB3C6F620627EB4F /* ScenesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 068EF1F50E97F86122BDF256 /* ScenesWidget.swift */; };
 		AB4A2BBE075B811B822A8B79 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */; };
 		AB55F4967474308EE4004442 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF897D7A1455C2A99163D0AF /* AppIntents.framework */; };
 		B9512A1BB9DF15FFA5F21EEA /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */; };
+		BE7E253FCCBB705A754ACBA3 /* RunSceneIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D7FCA50B4B144187418BD87 /* RunSceneIntent.swift */; };
 		C3AB1944A3CBA4191DBE75EA /* WidgetUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */; };
 		C987043C6C6EFF7FFA86D52B /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */; };
 		CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863B924633F127D12E497D8B /* PurchasesWidget.swift */; };
+		DADB0C5A3A4B142F252D5C65 /* SceneEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5986234B4AFC3ADF159A67C6 /* SceneEntity.swift */; };
 		E38DAFDB428EEBA73C80694D /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */; };
-		F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A20782818C62B8359506B99 /* FinanceWidget.swift */; };
-		9FF375CE429E45B357BB7854 /* HealthKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */; };
 		F4B41B89D3CABF0BAE9E7AA9 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7926AD07ACA0C95F611BDE70 /* HealthKit.framework */; };
+		F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A20782818C62B8359506B99 /* FinanceWidget.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,12 +74,15 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		068EF1F50E97F86122BDF256 /* ScenesWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScenesWidget.swift; sourceTree = "<group>"; };
 		1128A60BDEA2970BCE7EC69E /* DietWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DietWidget.swift; sourceTree = "<group>"; };
+		19C72DD2BB419A7BF5BD8D0D /* SceneLockWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SceneLockWidget.swift; sourceTree = "<group>"; };
 		225DE21B7DED2B14C1616BA8 /* SelectAccountIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SelectAccountIntent.swift; sourceTree = "<group>"; };
 		23E667EE9C149C717B10EC72 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/WidgetKit.framework; sourceTree = DEVELOPER_DIR; };
 		2A20782818C62B8359506B99 /* FinanceWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FinanceWidget.swift; sourceTree = "<group>"; };
 		2DFAC8C877B05FD2C03CAFD6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
+		3D7FCA50B4B144187418BD87 /* RunSceneIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RunSceneIntent.swift; sourceTree = "<group>"; };
 		405F749E544A50570178CD7F /* MarkPurchaseReceivedIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MarkPurchaseReceivedIntent.swift; sourceTree = "<group>"; };
 		50379B222058CBB4000EE86E /* capacitor.config.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = capacitor.config.json; sourceTree = "<group>"; };
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -84,11 +92,14 @@
 		504EC3111FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		504EC3131FED79650016851F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		50B271D01FEDC1A000F3C39B /* public */ = {isa = PBXFileReference; lastKnownFileType = folder; path = public; sourceTree = "<group>"; };
+		5986234B4AFC3ADF159A67C6 /* SceneEntity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SceneEntity.swift; sourceTree = "<group>"; };
 		5A7A5D02655E606266F1F34D /* AccountEntity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AccountEntity.swift; sourceTree = "<group>"; };
 		65B333D525357793A75C4270 /* SharedSession.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedSession.swift; sourceTree = "<group>"; };
 		6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DashboardWidget.swift; sourceTree = "<group>"; };
+		6C8F2900597D177FDCE19A95 /* SelectSceneIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SelectSceneIntent.swift; sourceTree = "<group>"; };
 		76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SharedAuthPlugin.swift; sourceTree = "<group>"; };
 		77B270BF8E27F9C7094915AB /* WidgetLinks.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetLinks.swift; sourceTree = "<group>"; };
+		7926AD07ACA0C95F611BDE70 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/HealthKit.framework; sourceTree = DEVELOPER_DIR; };
 		863B924633F127D12E497D8B /* PurchasesWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PurchasesWidget.swift; sourceTree = "<group>"; };
 		89F7B142245FFF8482C3B32A /* App.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = App.entitlements; sourceTree = "<group>"; };
 		9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetUnavailableView.swift; sourceTree = "<group>"; };
@@ -100,12 +111,11 @@
 		A29BA1B7D92C267E9A5F74E6 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetAPI.swift; sourceTree = "<group>"; };
 		C36D5570D246468E76B5B210 /* AppGroup.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
+		DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitPlugin.swift; sourceTree = "<group>"; };
 		E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EF897D7A1455C2A99163D0AF /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
 		FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LifeControlWidgets.entitlements; sourceTree = "<group>"; };
-		DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitPlugin.swift; sourceTree = "<group>"; };
-		7926AD07ACA0C95F611BDE70 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/HealthKit.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -224,6 +234,19 @@
 			path = Finance;
 			sourceTree = "<group>";
 		};
+		9B68C3567D895D00B24BEE9C /* Scenes */ = {
+			isa = PBXGroup;
+			children = (
+				3D7FCA50B4B144187418BD87 /* RunSceneIntent.swift */,
+				5986234B4AFC3ADF159A67C6 /* SceneEntity.swift */,
+				6C8F2900597D177FDCE19A95 /* SelectSceneIntent.swift */,
+				068EF1F50E97F86122BDF256 /* ScenesWidget.swift */,
+				19C72DD2BB419A7BF5BD8D0D /* SceneLockWidget.swift */,
+			);
+			name = Scenes;
+			path = Scenes;
+			sourceTree = "<group>";
+		};
 		D22ACE2ED84FD12C386F39B9 /* Shared */ = {
 			isa = PBXGroup;
 			children = (
@@ -248,6 +271,7 @@
 				A29BA1B7D92C267E9A5F74E6 /* Info.plist */,
 				FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */,
 				9C3A93D921A4CB2517B51E69 /* LifeControlWidgetsBundle.swift */,
+				9B68C3567D895D00B24BEE9C /* Scenes */,
 			);
 			name = LifeControlWidgets;
 			path = LifeControlWidgets;
@@ -398,6 +422,11 @@
 				CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */,
 				9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */,
 				6B556148F793E96B0E7FEC44 /* SharedSession.swift in Sources */,
+				BE7E253FCCBB705A754ACBA3 /* RunSceneIntent.swift in Sources */,
+				DADB0C5A3A4B142F252D5C65 /* SceneEntity.swift in Sources */,
+				2F0A65CB636C4B73ECE814B8 /* SelectSceneIntent.swift in Sources */,
+				A4CF6B78CB3C6F620627EB4F /* ScenesWidget.swift in Sources */,
+				73EA04FFC6C475C326D48F1B /* SceneLockWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
