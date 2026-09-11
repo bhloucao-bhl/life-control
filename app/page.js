@@ -7402,9 +7402,13 @@ function FlightMap({ flights, lang, t }) {
           maxBoundsViscosity: 1.0,
         });
         mapRef.current = map;
-        // tiles escuros (CARTO dark) — gratis, sem chave
+        // tiles escuros (CARTO dark). Desde ago/2026 a CARTO passou a exigir uma API key
+        // (grátis, até 5M de requisições de tile/mês) — sem ela os tiles continuam
+        // carregando, só que com marca d'água "API KEY REQUIRED" por cima. Chave em
+        // https://carto.com/basemaps/apikey/, configurada em NEXT_PUBLIC_CARTO_API_KEY.
         // noWrap evita que o mapa repita o mundo várias vezes lado a lado quando o contêiner é largo (desktop)
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, minZoom: 2, noWrap: true }).addTo(map);
+        const cartoKey = process.env.NEXT_PUBLIC_CARTO_API_KEY;
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png' + (cartoKey ? `?key=${cartoKey}` : ''), { maxZoom: 19, minZoom: 2, noWrap: true }).addTo(map);
         const latlngs = keys.map((k) => [pts[k][1], pts[k][0]]);
         // marcadores (pins) das cidades/aeroportos
         keys.forEach((k) => {
