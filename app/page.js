@@ -1,5 +1,6 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { createClient } from '@supabase/supabase-js';
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
@@ -112,6 +113,28 @@ async function syncNativeSession(session) {
     // (esta função roda antes de qualquer UI existir, em Page()).
     window.__lccNativeSyncError = (e && e.message) || String(e);
   }
+}
+// Complemento de syncNativeSession: enquanto o app fica em segundo plano, o widget de iOS
+// pode ter renovado o token sozinho (ver SharedSession.refreshed(), no processo dele) — e como
+// o refresh token do Supabase é de uso único, isso invalida o que o supabase-js daqui ainda tem
+// guardado no localStorage. Sem reler o App Group ao voltar pro app, a primeira tentativa de
+// auto-refresh do supabase-js usa um refresh token já queimado pelo widget e desloga a pessoa,
+// mesmo sem nada de errado ter acontecido do lado dela — daí o "cai sozinho várias vezes por dia".
+// Aqui a gente sempre prefere a sessão mais nova entre as duas (comparando expiresAt) antes de
+// deixar o supabase-js tentar renovar com o que ele tem.
+async function adoptFresherNativeSession(currentSession) {
+  if (!isNative()) return currentSession;
+  let shared;
+  try { shared = await SharedAuth.getSession(); } catch (e) { return currentSession; }
+  if (!shared || !shared.accessToken || !shared.refreshToken) return currentSession;
+  const sharedExpiresAt = Number(shared.expiresAt) || 0;
+  const currentExpiresAt = (currentSession && currentSession.expires_at) || 0;
+  if (currentSession && sharedExpiresAt <= currentExpiresAt) return currentSession;
+  try {
+    const { data, error } = await supabase.auth.setSession({ access_token: shared.accessToken, refresh_token: shared.refreshToken });
+    if (!error && data && data.session) return data.session;
+  } catch (e) {}
+  return currentSession;
 }
 
 /* ============================================================
@@ -2690,6 +2713,8 @@ function WeatherBarWide({ lang, t }) {
   const [liveLoading, setLiveLoading] = useState(true);
   const [cityLabel, setCityLabel] = useState(null); // null = localização automática
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null); // posição (viewport) do dropdown, pro portal abaixo
+  const cityBtnRef = useRef(null);
   const [cq, setCq] = useState(''); const [copts, setCopts] = useState([]); const [csearching, setCsearching] = useState(false);
   const coordsRef = useRef({ lat: null, lon: null }); // última localização usada (auto ou escolhida) — reusada no auto-refresh
   const load = (lat, lon) => {
@@ -2732,17 +2757,30 @@ function WeatherBarWide({ lang, t }) {
     setCityLabel(null); setPickerOpen(false); setCq(''); setCopts([]);
     if (typeof window !== 'undefined' && window.__lccGeo) load(window.__lccGeo.lat, window.__lccGeo.lon); else load(null, null);
   };
+  const openPicker = () => {
+    if (!pickerOpen) {
+      const r = cityBtnRef.current && cityBtnRef.current.getBoundingClientRect();
+      setMenuPos(r ? { top: r.bottom + 4, left: r.left } : null);
+    }
+    setPickerOpen((v) => !v);
+  };
   const CityPicker = () => (
     <div style={{ position: 'relative' }}>
-      <button onClick={() => setPickerOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', gap: 3, border: 'none', background: 'transparent', padding: 0, marginTop: 2, cursor: 'pointer', color: C.accent }}>
+      <button ref={cityBtnRef} onClick={openPicker} style={{ display: 'flex', alignItems: 'center', gap: 3, border: 'none', background: 'transparent', padding: 0, marginTop: 2, cursor: 'pointer', color: C.accent }}>
         <MapPin size={10} style={{ color: C.accent }} />
         <span style={{ fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap' }}>{cityLabel || (lang === 'pt' ? 'Minha localização' : 'My location')}</span>
         <ChevronRight size={9} style={{ color: C.accent, transform: pickerOpen ? 'rotate(90deg)' : 'none' }} />
       </button>
-      {pickerOpen && (
+      {/* Portal pro <body>: este card mora dentro de um item do grid da versão wide, que o
+          react-grid-layout posiciona com CSS transform — e transform cria um novo "containing
+          block"/stacking context, então um z-index normal aqui dentro só compete com o que está
+          no mesmo item do grid, não com os outros cards da tela. Sem escapar via portal, esse
+          dropdown fica "por dentro" da página (atrás de outros widgets), em vez de flutuar por
+          cima de tudo como um menu normal deveria. */}
+      {pickerOpen && menuPos && typeof document !== 'undefined' && createPortal(
         <>
-          <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 29 }} />
-          <div style={{ position: 'absolute', top: 24, left: 0, width: 240, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.3)', padding: 10, zIndex: 30 }}>
+          <div onClick={() => setPickerOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 9998 }} />
+          <div style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: 240, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, boxShadow: '0 8px 24px rgba(0,0,0,.3)', padding: 10, zIndex: 9999 }}>
             <input autoFocus value={cq} onChange={(e) => searchCity(e.target.value)} placeholder={lang === 'pt' ? 'Buscar cidade…' : 'Search city…'} style={{ ...inputStyle, marginBottom: 8, fontSize: 12, padding: '7px 10px' }} />
             {cityLabel && <button onClick={useMyLocation} style={{ background: 'none', border: 'none', color: C.accent, cursor: 'pointer', fontSize: 11.5, padding: '4px 2px 8px', display: 'flex', gap: 5, alignItems: 'center' }}><MapPin size={11} />{lang === 'pt' ? 'Usar minha localização' : 'Use my location'}</button>}
             {csearching && <div style={{ fontSize: 11.5, color: C.text3, padding: '4px 2px' }}>{t('thinking')}</div>}
@@ -2752,7 +2790,8 @@ function WeatherBarWide({ lang, t }) {
               ))}
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
@@ -9169,9 +9208,25 @@ export default function Page() {
   useEffect(() => {
     installStorage();
     if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') navigator.serviceWorker.register('/sw.js').catch(() => {});
-    supabase.auth.getSession().then(({ data }) => { setSession(data.session); setBooted(true); syncNativeSession(data.session); });
+    supabase.auth.getSession().then(async ({ data }) => {
+      const session = await adoptFresherNativeSession(data.session);
+      setSession(session); setBooted(true); syncNativeSession(session);
+    });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => { kvCache.clear(); setSession(s); syncNativeSession(s); });
-    return () => sub.subscription.unsubscribe();
+    // o widget pode renovar o token sozinho enquanto o app está em segundo plano (ver
+    // adoptFresherNativeSession acima) — reconferir toda vez que o app volta pra frente,
+    // não só na abertura fria, é o que faz o "cai sozinho" parar de acontecer no dia a dia.
+    let appStateHandle;
+    if (isNative()) {
+      CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive) return;
+        supabase.auth.getSession().then(async ({ data }) => {
+          const fresher = await adoptFresherNativeSession(data.session);
+          if (fresher !== data.session) setSession(fresher);
+        });
+      }).then((h) => { appStateHandle = h; }).catch(() => {});
+    }
+    return () => { sub.subscription.unsubscribe(); if (appStateHandle) appStateHandle.remove(); };
   }, []);
   if (!booted) return <div style={{ background: '#0A0E17', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 18 }}>
     <img className="lcc-pulse" src="/logo.svg" width={56} height={56} alt="" style={{ borderRadius: 12 }} />
