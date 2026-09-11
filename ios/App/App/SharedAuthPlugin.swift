@@ -18,6 +18,7 @@ public class SharedAuthPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "saveSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearSession", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getSession", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func saveSession(_ call: CAPPluginCall) {
@@ -60,5 +61,25 @@ public class SharedAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         SharedSession.clear()
         WidgetCenter.shared.reloadAllTimelines()
         call.resolve()
+    }
+
+    /// Lê a sessão do App Group de volta pro WebView. Existe porque o widget roda em
+    /// processo separado e, quando o access token expira enquanto o app está em segundo
+    /// plano, ele renova sozinho batendo direto na API do Supabase (ver
+    /// SharedSession.refreshed()) — e como o refresh token é de uso único (rotacionado a
+    /// cada troca), isso invalida o refresh token que o supabase-js do WebView ainda tem
+    /// guardado. Sem reler daqui no retorno ao app, a primeira tentativa de auto-refresh
+    /// do WebView usa um refresh token já queimado e desloga a pessoa — mesmo ela tendo
+    /// acabado de usar o app normalmente.
+    @objc func getSession(_ call: CAPPluginCall) {
+        guard let session = SharedSession.load() else {
+            call.resolve([:])
+            return
+        }
+        call.resolve([
+            "accessToken": session.accessToken,
+            "refreshToken": session.refreshToken,
+            "expiresAt": session.expiresAt,
+        ])
     }
 }
