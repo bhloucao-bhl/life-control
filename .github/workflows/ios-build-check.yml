@@ -1,0 +1,71 @@
+name: iOS build check
+
+# Compila o app (+ a extensão LifeControlWidgets, que o próprio target App
+# embute) numa máquina Mac do GitHub, pra pegar erro de compilação/projeto
+# Xcode antes de gastar minuto de build do Codemagic com isso. É só uma
+# checagem de compilação, sem assinar nada e sem publicar em lugar nenhum
+# — builda pro Simulador (CODE_SIGNING_ALLOWED=NO), que não pede
+# certificado nem perfil de provisionamento. A build de verdade (assinada,
+# publicada no TestFlight) continua sendo o codemagic.yaml, disparado só na
+# main.
+#
+# Não precisa de nenhum secret configurado.
+
+on:
+  push:
+    paths:
+      - 'ios/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios-build-check.yml'
+  pull_request:
+    paths:
+      - 'ios/**'
+      - 'capacitor.config.json'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/ios-build-check.yml'
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Instalar dependências npm
+        run: npm ci
+
+      - name: Capacitor sync (copia config/assets pro projeto iOS)
+        run: npx cap sync ios
+
+      - name: Selecionar o Xcode mais recente disponível no runner
+        run: sudo xcode-select -s /Applications/Xcode.app
+
+      - name: xcodebuild -version
+        run: xcodebuild -version
+
+      - name: Build (Simulador, sem assinatura)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project ios/App/App.xcodeproj \
+            -scheme App \
+            -destination 'generic/platform=iOS Simulator' \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            | tee /tmp/xcodebuild.log
+
+      - name: Salvar log da build (só quando falha)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log
+          path: /tmp/xcodebuild.log
