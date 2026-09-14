@@ -13,6 +13,7 @@ struct WidgetSummary: Codable {
     struct Purchase: Codable, Identifiable { let id: String; let title: String; let store: String?; let etaDate: String?; let stage: String; let tracking: String? }
     struct Scene: Codable, Identifiable { let id: String; let name: String; let steps: Int }
     struct LastScene: Codable { let id: String; let name: String; let at: String }
+    struct GroceryItem: Codable, Identifiable { let id: String; let text: String }
 
     let today: String
     let health: Health
@@ -23,6 +24,7 @@ struct WidgetSummary: Codable {
     let purchases: [Purchase]
     let scenes: [Scene]
     let lastScene: LastScene?
+    let groceryList: [GroceryItem]
 }
 
 enum WidgetAPI {
@@ -71,6 +73,12 @@ enum WidgetAPI {
     /// disso, é sempre a mesma sequência de comandos já salva.
     static func markPurchaseReceived(id: String) async throws {
         try await postAction("markPurchaseReceived", id: id)
+    }
+
+    /// Marcar um item da lista de compras como concluído: também não pede entrada do
+    /// usuário, então é seguro de disparar direto do toque, igual markPurchaseReceived.
+    static func toggleGroceryItem(id: String) async throws {
+        try await postAction("toggleGroceryItem", id: id)
     }
 
     static func runScene(id: String) async throws {

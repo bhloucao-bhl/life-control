@@ -51,6 +51,10 @@
 	<string>Usado pra gravar seu peso no Apple Health quando você registra um novo peso no Life Control, pra não precisar atualizar os dois separadamente.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Usado pra mostrar a previsão do tempo da sua localização atual.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Usado pra ditar itens por voz, como na lista de compras.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Usado pra transcrever o que você dita em texto, como ao adicionar um item por voz na lista de compras.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

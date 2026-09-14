@@ -89,7 +89,14 @@ export async function GET(req) {
   const scenes = (settings.scenes || []).map((s) => ({ id: s.id, name: s.name, steps: (s.steps || []).length }));
   const lastScene = settings.lastSceneRun && settings.lastSceneRun.id ? settings.lastSceneRun : null;
 
-  return Response.json({ today, health, tasks, event, diet, finance: { accounts }, purchases, scenes, lastScene }, {
+  // lista de compras da semana: só os itens ainda ativos (não marcados), igual o widget da Hoje
+  // no desktop já mostra — os concluídos somem daqui pra manter o widget curto e útil.
+  const groceryList = (settings.groceryList || [])
+    .filter((i) => !i.checked)
+    .slice(0, 12)
+    .map((i) => ({ id: i.id, text: i.text }));
+
+  return Response.json({ today, health, tasks, event, diet, finance: { accounts }, purchases, scenes, lastScene, groceryList }, {
     headers: { 'Cache-Control': 'private, no-store' },
   });
 }

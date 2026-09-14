@@ -107,6 +107,25 @@ export async function POST(req) {
     return Response.json({ ok: true });
   }
 
+  if (action === 'toggleGroceryItem') {
+    if (!id) return Response.json({ error: 'Falta o id.' }, { status: 400 });
+    const settings = await loadSettings(db, user.id);
+    const list = settings.groceryList || [];
+    if (!list.some((i) => i.id === id)) return Response.json({ error: 'Item não encontrado.' }, { status: 404 });
+    const next = { ...settings, groceryList: list.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)) };
+    await saveSettings(db, user.id, next);
+    return Response.json({ ok: true });
+  }
+
+  if (action === 'removeGroceryItem') {
+    if (!id) return Response.json({ error: 'Falta o id.' }, { status: 400 });
+    const settings = await loadSettings(db, user.id);
+    const list = settings.groceryList || [];
+    const next = { ...settings, groceryList: list.filter((i) => i.id !== id) };
+    await saveSettings(db, user.id, next);
+    return Response.json({ ok: true });
+  }
+
   if (action === 'runScene') {
     if (!id) return Response.json({ error: 'Falta o id.' }, { status: 400 });
     const settings = await loadSettings(db, user.id);

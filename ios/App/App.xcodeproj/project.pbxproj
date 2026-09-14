@@ -35,6 +35,9 @@
 		9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
 		9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = C36D5570D246468E76B5B210 /* AppGroup.swift */; };
 		9FF375CE429E45B357BB7854 /* HealthKitPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */; };
+		B3B6DF11B9B89C0D293DCF91 /* VoiceInputPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 540C641EAD5138EDE4CB3699 /* VoiceInputPlugin.swift */; };
+		97E7B738DB091AFF39AC9886 /* Speech.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8EB96270189A578C69C3EEA3 /* Speech.framework */; };
+		1DCE53918AA38318A24D83A3 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 878B803FA9171FE23FB68BA6 /* AVFoundation.framework */; };
 		A4CF6B78CB3C6F620627EB4F /* ScenesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 068EF1F50E97F86122BDF256 /* ScenesWidget.swift */; };
 		AB4A2BBE075B811B822A8B79 /* MainViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */; };
 		AB55F4967474308EE4004442 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF897D7A1455C2A99163D0AF /* AppIntents.framework */; };
@@ -43,6 +46,8 @@
 		C3AB1944A3CBA4191DBE75EA /* WidgetUnavailableView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */; };
 		C987043C6C6EFF7FFA86D52B /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */; };
 		CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 863B924633F127D12E497D8B /* PurchasesWidget.swift */; };
+		DE9DF9B46F54E87138DBEB91 /* GroceryWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED2B30D5AF45911D6EFA650B /* GroceryWidget.swift */; };
+		715A912D54DCC574A9E4EA0A /* ToggleGroceryItemIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0DFA3AE7E6DAD73D09F1BC09 /* ToggleGroceryItemIntent.swift */; };
 		DADB0C5A3A4B142F252D5C65 /* SceneEntity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5986234B4AFC3ADF159A67C6 /* SceneEntity.swift */; };
 		E38DAFDB428EEBA73C80694D /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */; };
 		F4B41B89D3CABF0BAE9E7AA9 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7926AD07ACA0C95F611BDE70 /* HealthKit.framework */; };
@@ -112,6 +117,11 @@
 		BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetAPI.swift; sourceTree = "<group>"; };
 		C36D5570D246468E76B5B210 /* AppGroup.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppGroup.swift; sourceTree = "<group>"; };
 		DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HealthKitPlugin.swift; sourceTree = "<group>"; };
+		540C641EAD5138EDE4CB3699 /* VoiceInputPlugin.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceInputPlugin.swift; sourceTree = "<group>"; };
+		8EB96270189A578C69C3EEA3 /* Speech.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Speech.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Speech.framework; sourceTree = DEVELOPER_DIR; };
+		878B803FA9171FE23FB68BA6 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AVFoundation.framework; sourceTree = DEVELOPER_DIR; };
+		ED2B30D5AF45911D6EFA650B /* GroceryWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = GroceryWidget.swift; sourceTree = "<group>"; };
+		0DFA3AE7E6DAD73D09F1BC09 /* ToggleGroceryItemIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ToggleGroceryItemIntent.swift; sourceTree = "<group>"; };
 		E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MainViewController.swift; sourceTree = "<group>"; };
 		E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EF897D7A1455C2A99163D0AF /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
@@ -126,6 +136,8 @@
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
 				807485E720C9343B5E32A672 /* WidgetKit.framework in Frameworks */,
 				F4B41B89D3CABF0BAE9E7AA9 /* HealthKit.framework in Frameworks */,
+				97E7B738DB091AFF39AC9886 /* Speech.framework in Frameworks */,
+				1DCE53918AA38318A24D83A3 /* AVFoundation.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -159,6 +171,8 @@
 				9FD8FC0DC693564FF340AC4D /* SwiftUI.framework */,
 				EF897D7A1455C2A99163D0AF /* AppIntents.framework */,
 				7926AD07ACA0C95F611BDE70 /* HealthKit.framework */,
+				8EB96270189A578C69C3EEA3 /* Speech.framework */,
+				878B803FA9171FE23FB68BA6 /* AVFoundation.framework */,
 			);
 			name = iOS;
 			sourceTree = "<group>";
@@ -198,6 +212,7 @@
 				89F7B142245FFF8482C3B32A /* App.entitlements */,
 				76919A1F9FCFB395DE37B0B1 /* SharedAuthPlugin.swift */,
 				DEC64EAB22262CC9C8B051DA /* HealthKitPlugin.swift */,
+				540C641EAD5138EDE4CB3699 /* VoiceInputPlugin.swift */,
 				E3CB3DA5F8E60EA3B878F3CC /* MainViewController.swift */,
 				E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */,
 			);
@@ -221,6 +236,16 @@
 			);
 			name = Purchases;
 			path = Purchases;
+			sourceTree = "<group>";
+		};
+		5C794B181CA7571017A5F541 /* Grocery */ = {
+			isa = PBXGroup;
+			children = (
+				0DFA3AE7E6DAD73D09F1BC09 /* ToggleGroceryItemIntent.swift */,
+				ED2B30D5AF45911D6EFA650B /* GroceryWidget.swift */,
+			);
+			name = Grocery;
+			path = Grocery;
 			sourceTree = "<group>";
 		};
 		8DC26E096C7CF35CCE6148A9 /* Finance */ = {
@@ -268,6 +293,7 @@
 				F39B8857F7627A6FBBCF1811 /* Diet */,
 				8DC26E096C7CF35CCE6148A9 /* Finance */,
 				53CCA1378AED06D3C9977328 /* Purchases */,
+				5C794B181CA7571017A5F541 /* Grocery */,
 				A29BA1B7D92C267E9A5F74E6 /* Info.plist */,
 				FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */,
 				9C3A93D921A4CB2517B51E69 /* LifeControlWidgetsBundle.swift */,
@@ -399,6 +425,7 @@
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
 				81247BF62ADD51133363279E /* SharedAuthPlugin.swift in Sources */,
 				9FF375CE429E45B357BB7854 /* HealthKitPlugin.swift in Sources */,
+				B3B6DF11B9B89C0D293DCF91 /* VoiceInputPlugin.swift in Sources */,
 				9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */,
 				97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */,
 				AB4A2BBE075B811B822A8B79 /* MainViewController.swift in Sources */,
@@ -420,6 +447,8 @@
 				F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */,
 				7A2488D2D4C11850B235B5A6 /* MarkPurchaseReceivedIntent.swift in Sources */,
 				CAE9042EC12BC51BBB2CE418 /* PurchasesWidget.swift in Sources */,
+				DE9DF9B46F54E87138DBEB91 /* GroceryWidget.swift in Sources */,
+				715A912D54DCC574A9E4EA0A /* ToggleGroceryItemIntent.swift in Sources */,
 				9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */,
 				6B556148F793E96B0E7FEC44 /* SharedSession.swift in Sources */,
 				BE7E253FCCBB705A754ACBA3 /* RunSceneIntent.swift in Sources */,

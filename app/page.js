@@ -35,6 +35,54 @@ async function nativeShare(title, text) {
 const SharedAuth = registerPlugin('SharedAuth');
 
 /* ============================================================
+   Ditado por voz nativo (iOS): o WKWebView do app não implementa a Web
+   Speech API (window.webkitSpeechRecognition fica undefined mesmo com o
+   app rodando), então no nativo o reconhecimento vem do plugin Swift
+   (Speech framework) — ver ios/App/App/VoiceInputPlugin.swift. Em
+   qualquer outro ambiente (navegador desktop, Android) cai pra Web
+   Speech API, igual o ditado que a Captura rápida já usa.
+   ============================================================ */
+const VoiceInput = registerPlugin('VoiceInput');
+function startDictation({ lang, onPartial, onFinal, onError }) {
+  const locale = lang === 'pt' ? 'pt-BR' : 'en-US';
+  if (isNative() && Capacitor.getPlatform() === 'ios') {
+    let subs = [];
+    (async () => {
+      try {
+        const avail = await VoiceInput.isAvailable({ language: locale });
+        if (!avail || !avail.available) { onError(lang === 'pt' ? 'Ditado por voz indisponível neste aparelho.' : 'Voice dictation unavailable on this device.'); return; }
+        const auth = await VoiceInput.requestAuthorization();
+        if (!auth || !auth.granted) { onError(lang === 'pt' ? 'Permissão de microfone/ditado negada.' : 'Microphone/dictation permission denied.'); return; }
+        subs = await Promise.all([
+          VoiceInput.addListener('partialResult', (d) => onPartial(d.text)),
+          VoiceInput.addListener('result', (d) => onFinal(d.text)),
+          VoiceInput.addListener('error', (d) => onError(d.message)),
+        ]);
+        await VoiceInput.start({ language: locale });
+      } catch (e) { onError((e && e.message) || (lang === 'pt' ? 'Erro ao iniciar o microfone.' : 'Error starting the microphone.')); }
+    })();
+    return { stop: () => { subs.forEach((s) => s.remove()); VoiceInput.stop().catch(() => {}); } };
+  }
+  const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
+  if (!SR) { onError(lang === 'pt' ? 'Ditado por voz não é suportado neste navegador.' : 'Voice input not supported in this browser.'); return null; }
+  const rec = new SR();
+  rec.lang = locale;
+  rec.interimResults = true;
+  rec.maxAlternatives = 1;
+  rec.onresult = (e) => {
+    let finalText = '', partial = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const chunk = e.results[i][0].transcript;
+      if (e.results[i].isFinal) finalText += chunk; else partial += chunk;
+    }
+    if (finalText) onFinal(finalText); else if (partial) onPartial(partial);
+  };
+  rec.onerror = () => onError(lang === 'pt' ? 'Não entendi. Tente de novo.' : "Didn't catch that.");
+  try { rec.start(); } catch (e) { onError(lang === 'pt' ? 'Não consegui iniciar o microfone.' : "Couldn't start the microphone."); return null; }
+  return { stop: () => rec.stop() };
+}
+
+/* ============================================================
    Passos via Apple Health (iOS): o HealthKit já tem os passos do dia
    direto no aparelho (inclusive os que o próprio app da Oura grava lá),
    sem esperar a sincronização em nuvem da Oura — que pode levar horas
@@ -622,7 +670,7 @@ function Login() {
    ============================================================ */
 import {
   Sun, Calendar as CalIcon, LayoutGrid, Sparkles, Plus, Settings as Cog,
-  Check, X, Trash2, ChevronRight, ChevronLeft, Clock, AlertTriangle, Download,
+  Check, X, Trash2, ChevronRight, ChevronLeft, ChevronUp, ChevronDown, Clock, AlertTriangle, Download,
   Globe, Send, Loader2, Heart, Home, Wallet, Users, FileText, Car, Plane,
   ListTodo, Newspaper, Utensils, Pill, Stethoscope, ShoppingCart, CircleCheck,
   Circle, Paperclip, Ticket, ArrowRight, Star, UserRound, Activity, Thermometer,
@@ -2467,7 +2515,86 @@ function InfoCard({ icon: Icon, title, sub, right, onClick, accent }) {
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, setHealth, goModule, openClaude, goNews, onOpenNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId }) {
+/* ---------------- Lista de compras da semana ----------------
+   Cartão compartilhado pela Hoje (mobile e wide) e pela aba Compras — mesmos
+   dados (settings.groceryList), pra aparecer igual em qualquer tela. Ver
+   toggleGroceryItem/removeGroceryItem/addGroceryItem em App() e o widget
+   nativo de iOS (ios/App/LifeControlWidgets/Grocery), que lê/edita a mesma lista. */
+function GroceryListCard({ lang, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem }) {
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState('');
+  const [listening, setListening] = useState(false);
+  const [voiceErr, setVoiceErr] = useState('');
+  const dictationRef = useRef(null);
+
+  const stopDictation = () => { if (dictationRef.current) { dictationRef.current.stop(); dictationRef.current = null; } setListening(false); };
+
+  const startDictationFor = () => {
+    setVoiceErr('');
+    setAdding(true);
+    setListening(true);
+    dictationRef.current = startDictation({
+      lang,
+      onPartial: (v) => setText(v),
+      onFinal: (v) => { setText(v); stopDictation(); },
+      onError: (msg) => { setVoiceErr(msg); stopDictation(); },
+    });
+    if (!dictationRef.current) setListening(false);
+  };
+
+  // aberto pelo botão "+" do widget de iOS ("lifecontrol://open?action=addGroceryItem"),
+  // que já entra ditando direto — sem precisar tocar em mais nada. Ver appUrlOpen em App().
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.__lccOpenAddGrocery) {
+      window.__lccOpenAddGrocery = false;
+      startDictationFor();
+    }
+    return () => stopDictation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const commit = () => {
+    stopDictation();
+    if (text.trim()) addGroceryItem(text);
+    setText(''); setAdding(false); setVoiceErr('');
+  };
+  const cancel = () => { stopDictation(); setText(''); setAdding(false); setVoiceErr(''); };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {groceryList.length === 0 && !adding && <Empty icon={ShoppingCart} text={lang === 'pt' ? 'Nada na lista ainda.' : 'Nothing on the list yet.'} />}
+      {groceryList.map((i) => (
+        <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
+          <button onClick={() => toggleGroceryItem(i.id)} style={{ width: 18, height: 18, borderRadius: 5, border: i.checked ? 'none' : `1.5px solid ${C.border}`, background: i.checked ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none', padding: 0 }}>
+            {i.checked && <Check size={11} style={{ color: '#fff' }} />}
+          </button>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: i.checked ? C.text3 : C.text2, textDecoration: i.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.text}</div>
+          <button onClick={() => removeGroceryItem(i.id)} style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}><X size={12} /></button>
+        </div>
+      ))}
+      {adding ? (
+        <div style={{ padding: '8px 0', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+            <input autoFocus value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') cancel(); }} placeholder={listening ? (lang === 'pt' ? 'Ouvindo…' : 'Listening…') : (lang === 'pt' ? 'Novo item…' : 'New item…')} style={{ ...inputStyle, padding: '6px 9px', fontSize: 12.5, flex: 1 }} />
+            <button type="button" onClick={() => (listening ? stopDictation() : startDictationFor())} title={lang === 'pt' ? 'Ditar por voz' : 'Voice input'} style={{ background: listening ? C.rose + '22' : 'none', border: 'none', color: listening ? C.rose : C.text3, cursor: 'pointer', padding: 6, borderRadius: 8, flex: 'none', display: 'flex' }}><Mic size={15} /></button>
+            <button type="button" onClick={commit} disabled={!text.trim()} title={lang === 'pt' ? 'Adicionar' : 'Add'} style={{ background: 'none', border: 'none', color: text.trim() ? C.accent : C.text3, cursor: text.trim() ? 'pointer' : 'default', padding: 6, borderRadius: 8, flex: 'none', display: 'flex' }}><Check size={15} /></button>
+            <button type="button" onClick={cancel} title={lang === 'pt' ? 'Cancelar' : 'Cancel'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: 6, borderRadius: 8, flex: 'none', display: 'flex' }}><X size={15} /></button>
+          </div>
+          {voiceErr && <div style={{ fontSize: 10.5, color: C.rose }}>{voiceErr}</div>}
+        </div>
+      ) : (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 0' }}>
+          <div onClick={() => setAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1, minWidth: 0 }}>
+            <div style={{ width: 18, height: 18, borderRadius: '50%', border: `1.5px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: C.text3 }}><Plus size={10} /></div>
+            <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Adicionar item à lista' : 'Add item to list'}</div>
+          </div>
+          <button onClick={startDictationFor} title={lang === 'pt' ? 'Adicionar por voz' : 'Add by voice'} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', padding: '4px 6px', borderRadius: 8, flex: 'none', display: 'flex' }}><Mic size={14} /></button>
+        </div>
+      )}
+    </div>
+  );
+}
+function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, setHealth, goModule, openClaude, goNews, onOpenNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
   const [zBusy, setZBusy] = useState(false);
@@ -2574,6 +2701,10 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text }}>{w.steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span>
         </button>
       )}
+      <SectionTitle icon={ShoppingCart} label={lang === 'pt' ? 'Compra da semana' : "This week's shopping"} color={C.accent} />
+      <div style={{ ...card, padding: 14, marginBottom: 4 }}>
+        <GroceryListCard lang={lang} groceryList={groceryList} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} />
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><AlertTriangle size={14} style={{ color: C.rose }} />{t('attention')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -2970,7 +3101,6 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
-  const [addingGrocery, setAddingGrocery] = useState(false); const [groceryText, setGroceryText] = useState('');
   const [agendaDate, setAgendaDate] = useState(today); // navegação de dia só no card "Compromissos do dia" — o resto da tela continua em "hoje" de verdade
   const [addingMeal, setAddingMeal] = useState(false);
   const [editingLayout, setEditingLayout] = useState(false);
@@ -3144,27 +3274,7 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
         <div key="grocery">
           <WidgetShell editing={editingLayout} onHide={() => hideWidget('grocery')} lang={lang}>
             <WideCard title={lang === 'pt' ? 'Compra da semana' : "This week's shopping"}>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {groceryList.map((i) => (
-                  <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: `1px solid ${C.borderSoft}` }}>
-                    <button onClick={() => toggleGroceryItem(i.id)} style={{ width: 18, height: 18, borderRadius: 5, border: i.checked ? 'none' : `1.5px solid ${C.border}`, background: i.checked ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none', padding: 0 }}>
-                      {i.checked && <Check size={11} style={{ color: '#fff' }} />}
-                    </button>
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: i.checked ? C.text3 : C.text2, textDecoration: i.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.text}</div>
-                    <button onClick={() => removeGroceryItem(i.id)} style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}><X size={12} /></button>
-                  </div>
-                ))}
-                {addingGrocery ? (
-                  <form onSubmit={(e) => { e.preventDefault(); addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} style={{ padding: '8px 0' }}>
-                    <input autoFocus value={groceryText} onChange={(e) => setGroceryText(e.target.value)} onBlur={() => { if (groceryText.trim()) addGroceryItem(groceryText); setGroceryText(''); setAddingGrocery(false); }} placeholder={lang === 'pt' ? 'Novo item…' : 'New item…'} style={{ ...inputStyle, padding: '6px 9px', fontSize: 12.5 }} />
-                  </form>
-                ) : (
-                  <div onClick={() => setAddingGrocery(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', cursor: 'pointer' }}>
-                    <div style={{ width: 18, height: 18, borderRadius: '50%', border: `1.5px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: C.text3 }}><Plus size={10} /></div>
-                    <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Adicionar item à lista' : 'Add item to list'}</div>
-                  </div>
-                )}
-              </div>
+              <GroceryListCard lang={lang} groceryList={groceryList} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} />
             </WideCard>
           </WidgetShell>
         </div>
@@ -4718,7 +4828,8 @@ function PurchaseCard({ p, lang, onOpen, selectMode, selected, onToggleSelect, o
     </div>
   );
 }
-function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems, updateItem, delItem, onOpen, flash, setPendingCount }) {
+function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems, updateItem, delItem, onOpen, flash, setPendingCount, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem }) {
+  const [groceryOpen, setGroceryOpen] = useState(true);
   const [adding, setAdding] = useState(false);
   const [pendingAccountId, setPendingAccountId] = useState(null);
   useEffect(() => {
@@ -4830,6 +4941,18 @@ function PurchasesScreen({ module, items = [], lang, t, back, addItem, addItems,
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ ...card, padding: 14, marginBottom: 14 }}>
+        <div onClick={() => setGroceryOpen((v) => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+          <span style={{ fontSize: 13.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 7 }}><ShoppingCart size={15} style={{ color: C.accent }} />{lang === 'pt' ? 'Compra da semana' : "This week's shopping"}</span>
+          {groceryOpen ? <ChevronUp size={16} style={{ color: C.text3 }} /> : <ChevronDown size={16} style={{ color: C.text3 }} />}
+        </div>
+        <div style={{ fontSize: 11, color: C.text3, marginTop: 3 }}>{lang === 'pt' ? 'Sua lista de mercado — separada dos pedidos abaixo, que são compras já feitas online.' : 'Your grocery list — separate from the orders below, which are purchases already made online.'}</div>
+        {groceryOpen && (
+          <div style={{ marginTop: 8 }}>
+            <GroceryListCard lang={lang} groceryList={groceryList} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} />
+          </div>
+        )}
+      </div>
       {!ml.connected && !ml.loading && (
         <div style={{ ...card, padding: 13, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
           <ShoppingCart size={16} style={{ color: C.accent, flexShrink: 0 }} />
@@ -8787,6 +8910,11 @@ function App() {
         setActive({ screen: 'dashboard', module: moduleByKey('purchases') });
       } else if (action === 'purchases') {
         setActive({ screen: 'dashboard', module: moduleByKey('purchases') });
+      } else if (action === 'addGroceryItem') {
+        window.__lccOpenAddGrocery = true;
+        setActive({ screen: 'home', module: null });
+      } else if (action === 'groceryList') {
+        setActive({ screen: 'home', module: null });
       } else {
         setActive({ screen: 'home', module: null });
       }
@@ -9081,7 +9209,7 @@ function App() {
       mergedHealth[d] = { ...(mergedHealth[d] || {}), steps: byDate[d] };
     });
   });
-  const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, addItems, updateItem, delItem, flash, setPendingCount };
+  const shared = { items: allItems, people, lang, t, toggleTask, onOpen: setDetail, addItem, addItems, updateItem, delItem, flash, setPendingCount, groceryList: settings.groceryList || [], toggleGroceryItem, removeGroceryItem, addGroceryItem };
   const renderModule = (mo) => {
     const back = () => setActive({ screen: 'dashboard', module: null });
     if (mo.custom === 'travel') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><TravelScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
