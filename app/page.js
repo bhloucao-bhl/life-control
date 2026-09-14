@@ -728,7 +728,7 @@ const S = {
   home: L('Hoje', 'Today'), messages: L('Mensagens', 'Messages'), calendar: L('Calendário', 'Calendar'),
   dashboard: L('Painel de Controle', 'Dashboard'), dashShort: L('Painel', 'Dashboard'), claude: L('Claude', 'Claude'),
   work: L('Trabalho', 'Work'), purchases: L('Compras', 'Purchases'), tasks: L('Tarefas', 'Tasks'), health: L('Saúde', 'Health'), house: L('Casa', 'Home'), finance: L('Finanças', 'Finance'), kids: L('Filhos', 'Kids'),
-  people: L('Contatos', 'Contacts'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'),
+  people: L('Contatos', 'Contacts'), docs: L('Documentos', 'Documents'), cars: L('Carros', 'Cars'), travel: L('Viagens', 'Travel'), plaud: L('Gravações', 'Recordings'),
   readiness: L('Prontidão', 'Readiness'), sleepScore: L('Sono', 'Sleep'), steps: L('Passos', 'Steps'),
   connectOura: L('Conecte o Oura em Ajustes, ou toque para registrar.', 'Connect Oura in Settings, or tap to log.'),
   weather: L('Clima', 'Weather'), weatherSoon: L('Tempo real (open-meteo) na versão no celular.', 'Live weather in the phone version.'),
@@ -757,6 +757,8 @@ const S = {
   weightHistory: L('Histórico de peso', 'Weight history'), addWeight: L('Registrar peso', 'Log weight'), heightSettings: L('Altura fica em Ajustes.', 'Height lives in Settings.'),
   suggestions: L('Sugestões do seu e-mail', 'Suggestions from your email'), scanInbox: L('Buscar viagens no e-mail', 'Scan email for trips'),
   scanning: L('Lendo e-mails…', 'Reading email…'), noSuggestions: L('Nada novo encontrado.', 'Nothing new found.'),
+  plaudHint: L('Itens extraídos das suas gravações e transcrições do Plaud — revise e aceite o que fizer sentido.', 'Items extracted from your Plaud recordings and transcripts — review and accept what makes sense.'),
+  plaudEmpty: L('Nenhuma sugestão nova das suas gravações.', 'No new suggestions from your recordings.'),
   addPhoto: L('Foto', 'Photo'), photo: L('Foto', 'Photo'),
   deleteConfirmGeneric: L('Tem certeza que deseja excluir? Esta ação não pode ser desfeita.', 'Delete this? This cannot be undone.'),
   on: L('Ligado', 'On'), off: L('Desligado', 'Off'), offline: L('Offline', 'Offline'),
@@ -1028,12 +1030,13 @@ const MODULES = [
   { key: 'docs', icon: FileText, color: C.blue, filter: (i) => i.type === 'document' || i.domain === 'docs', types: ['document'], custom: 'docs' },
   { key: 'cars', icon: Car, color: C.teal, filter: (i) => i.domain === 'cars' || i.type === 'vehicle', types: ['vehicle', 'maintenance', 'expense', 'document', 'note'], custom: 'cars' },
   { key: 'travel', icon: Plane, color: C.violet, filter: (i) => i.domain === 'travel' || i.type === 'trip' || i.type === 'flight', types: ['trip', 'flight', 'note'], custom: 'travel' },
+  { key: 'plaud', icon: Mic, color: C.teal, filter: (i) => i.meta && i.meta.fromPlaud, types: ['task', 'event', 'note', 'shopping', 'gift', 'appointment'], custom: 'plaud' },
 ];
 const moduleByKey = (k) => MODULES.find((m) => m.key === k);
 const moduleDomain = (k) => (k === 'house' ? 'home' : k === 'tasks' || k === 'people' ? 'personal' : k);
 
 const SCREEN_ICONS = { home: Sun, messages: MessageSquare, calendar: CalIcon, dashboard: LayoutGrid, claude: Sparkles };
-const DOCKABLE = ['home', 'messages', 'calendar', 'dashboard', 'claude', 'tasks', 'finance', 'health', 'house', 'travel', 'cars', 'kids', 'people', 'docs', 'gmail'];
+const DOCKABLE = ['home', 'messages', 'calendar', 'dashboard', 'claude', 'tasks', 'finance', 'health', 'house', 'travel', 'cars', 'kids', 'people', 'docs', 'gmail', 'plaud'];
 const DEFAULT_DOCK = ['home', 'messages', 'calendar', 'dashboard', 'claude'];
 function navIcon(k) { return SCREEN_ICONS[k] || (moduleByKey(k) ? moduleByKey(k).icon : Circle); }
 function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
@@ -1042,7 +1045,7 @@ function navLabel(k, t) { return k === 'dashboard' ? t('dashShort') : t(k); }
 const WIDE_NAV_GROUPS = [
   { label: L('Visão geral', 'Overview'), keys: ['home', 'calendar', 'messages', 'claude'] },
   { label: L('Vida', 'Life'), keys: ['work', 'tasks', 'health', 'house', 'finance', 'kids'] },
-  { label: L('Registros', 'Records'), keys: ['people', 'docs', 'cars', 'travel', 'purchases'] },
+  { label: L('Registros', 'Records'), keys: ['people', 'docs', 'cars', 'travel', 'purchases', 'plaud'] },
 ];
 const TUYA_SEED = {
   'eb2a4a8b85c2a8deadb1g8': { show: true, alias: 'Abajur Carol', room: 'Suíte', kind: 'light' },
@@ -3545,6 +3548,81 @@ function MessagesScreen({ items, people, lang, t, setItems, onOpen, toggleTask, 
       })}
       {adding && <AddModal title={t('t_message')} icon={MessageSquare} draft={{ type: 'message', domain: 'personal', meta: { channel: 'email', unread: true } }} allowedTypes={['message']} lang={lang} t={t} people={people} onClose={() => setAdding(false)} onSave={(x) => { addItem(x); flash(t('savedOne')); setAdding(false); }} />}
       {thread && <MessageThread msg={thread} lang={lang} t={t} onClose={() => setThread(null)} onSave={updateItem} onDelete={delItem} />}
+    </div>
+  );
+}
+
+/* ---------------- Plaud (gravações) ----------------
+   As sugestões aqui não vêm de um scan on-demand (o Plaud ainda não tem API
+   pública própria — só MCP) — uma Rotina agendada, com acesso ao Plaud MCP,
+   lê as gravações novas, extrai os itens com Claude e grava a lista em
+   lcc_plaud_suggestions_v1 (mesmo mecanismo de kv key que settings/items,
+   só que dono é a rotina, não o app). Esta tela só lê essa key, mostra pra
+   aceitar/descartar, e resolve pra onde cada item vai (tarefa, evento,
+   lista de compras, nota/lembrança, etc.) com o que a rotina já decidiu. */
+function PlaudScreen({ module, lang, t, back, addItem, addGroceryItem, flash, setPendingCount }) {
+  const [state, setState] = useState({ loading: true, list: [], error: null });
+  const load = () => {
+    if (typeof window === 'undefined' || !window.storage) { setState({ loading: false, list: [], error: null }); return; }
+    setState((p) => ({ ...p, loading: true }));
+    window.storage.get('lcc_plaud_suggestions_v1').then((r) => {
+      let list = [];
+      try { list = r && r.value ? JSON.parse(r.value) : []; } catch (e) { list = []; }
+      setState({ loading: false, list: Array.isArray(list) ? list : [], error: null });
+    }).catch((e) => setState({ loading: false, list: [], error: String(e) }));
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => { if (setPendingCount) setPendingCount('plaud', (state.list || []).length); }, [state.list]);
+
+  const persist = (list) => { if (typeof window !== 'undefined' && window.storage) window.storage.set('lcc_plaud_suggestions_v1', JSON.stringify(list)); };
+  const dismiss = (sg) => { const next = state.list.filter((x) => x.key !== sg.key); setState((p) => ({ ...p, list: next })); persist(next); };
+  const accept = (sg) => {
+    if (sg.kind === 'grocery') addGroceryItem(sg.title);
+    else addItem({ type: sg.type, domain: sg.domain || 'personal', title: sg.title, notes: sg.notes || '', date: sg.date || null, time: sg.time || null, amount: sg.amount != null ? sg.amount : null, meta: { ...(sg.meta || {}), fromPlaud: true } });
+    dismiss(sg);
+    flash(t('savedOne'));
+  };
+
+  return (
+    <div>
+      <ModuleHeader module={module} t={t} back={back} />
+      <div style={{ ...card, padding: 12, marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
+        <Mic size={16} style={{ color: C.accent, flexShrink: 0 }} />
+        <span style={{ flex: 1, fontSize: 12.5, color: C.text2, lineHeight: 1.4 }}>{t('plaudHint')}</span>
+        <Btn kind="soft" onClick={load} disabled={state.loading} style={{ padding: '7px 12px', fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
+          {state.loading ? <Loader2 size={13} className="spin" /> : <RefreshCw size={13} />}{state.loading ? t('scanning') : t('refresh')}
+        </Btn>
+      </div>
+      {state.error && <HintCard icon={AlertTriangle} text={state.error} />}
+      {!state.loading && state.list.length === 0 && <HintCard icon={Check} text={t('plaudEmpty')} />}
+      {state.list.map((sg) => {
+        const Ic = sg.kind === 'grocery' ? ShoppingCart : typeIcon(sg.type);
+        const typeLabel = sg.kind === 'grocery' ? t('t_shopping') : t('t_' + sg.type);
+        return (
+          <div key={sg.key} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+              <Ic size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600 }}>{sg.title}</div>
+                <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>
+                  {typeLabel}{sg.date ? ' · ' + fmtDate(sg.date, lang) : ''}{sg.time ? ' ' + sg.time : ''}
+                </div>
+                {sg.notes && <div style={{ fontSize: 11.5, color: C.text2, marginTop: 4, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{sg.notes}</div>}
+                {sg.why && <div style={{ fontSize: 11, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{sg.why}</div>}
+                {sg.source && sg.source.recordingTitle && (
+                  <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <Mic size={10} style={{ verticalAlign: -1, marginRight: 3 }} />{sg.source.recordingTitle}{sg.source.recordingDate ? ' · ' + fmtDate(sg.source.recordingDate, lang) : ''}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Btn kind="soft" onClick={() => accept(sg)} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={13} />{t('accept')}</Btn>
+              <Btn kind="ghost" onClick={() => dismiss(sg)} style={{ padding: '7px 12px', fontSize: 12.5 }}>{t('discard')}</Btn>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -9174,12 +9252,12 @@ function App() {
 
   // pendências: itens de varreduras de e-mail que esperam uma decisão sua (aceitar/recusar) —
   // cada tela dona da fila (Casa, Viagens, Saúde, Compras) reporta sua contagem aqui, pro sino global
-  const [pendingCounts, setPendingCounts] = useState({ house: 0, travel: 0, health: 0, purchases: 0, work: 0 });
+  const [pendingCounts, setPendingCounts] = useState({ house: 0, travel: 0, health: 0, purchases: 0, work: 0, plaud: 0 });
   const setPendingCount = (key, n) => setPendingCounts((p) => (p[key] === n ? p : { ...p, [key]: n }));
   const pendingTotal = Object.values(pendingCounts).reduce((a, b) => a + b, 0);
   const [bellOpen, setBellOpen] = useState(false);
-  const PENDING_MODULES = { house: 'house', travel: 'travel', health: 'health', purchases: 'shopping', work: 'tasks' };
-  const PENDING_LABELS = { house: lang === 'pt' ? 'Casa' : 'House', travel: lang === 'pt' ? 'Viagens' : 'Travel', health: lang === 'pt' ? 'Saúde' : 'Health', purchases: lang === 'pt' ? 'Compras' : 'Purchases', work: lang === 'pt' ? 'Tarefas (Trab)' : 'Tasks (Work)' };
+  const PENDING_MODULES = { house: 'house', travel: 'travel', health: 'health', purchases: 'shopping', work: 'tasks', plaud: 'plaud' };
+  const PENDING_LABELS = { house: lang === 'pt' ? 'Casa' : 'House', travel: lang === 'pt' ? 'Viagens' : 'Travel', health: lang === 'pt' ? 'Saúde' : 'Health', purchases: lang === 'pt' ? 'Compras' : 'Purchases', work: lang === 'pt' ? 'Tarefas (Trab)' : 'Tasks (Work)', plaud: lang === 'pt' ? 'Gravações' : 'Recordings' };
   const NotifBell = ({ small }) => (
     <div style={{ position: 'relative' }}>
       <button onClick={() => setBellOpen((v) => !v)} style={small ? { ...card, padding: 7, color: C.text2, cursor: 'pointer', position: 'relative' } : { background: 'none', border: 'none', color: C.text2, cursor: 'pointer', position: 'relative', display: 'flex' }}>
@@ -9248,6 +9326,7 @@ function App() {
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'gmail') return <GmailScreen module={mo} lang={lang} t={t} back={back} state={gmail} setState={setGmail} load={loadGmail} />;
+    if (mo.custom === 'plaud') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PlaudScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     return <ModuleScreen module={mo} {...shared} back={back} ttConnected={ticktick.connected} ttProjects={ticktick.projects} onCreateTick={ttCreate} reloadTick={reloadTicktick} />;
   };
 
