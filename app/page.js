@@ -140,10 +140,54 @@ async function adoptFresherNativeSession(currentSession) {
 /* ============================================================
    Supabase (cliente)
    ============================================================ */
+// Storage customizado do supabase-js. O GoTrue só perdoa reusar a geração IMEDIATAMENTE
+// anterior do refresh token (protege contra requisição duplicada/rede instável) — reusar
+// algo mais velho que isso derruba a sessão inteira (todos os refresh tokens da família são
+// revogados), não só aquela tentativa. O supabase-js decide sozinho, já na inicialização do
+// client (antes de qualquer código nosso rodar), se precisa renovar usando o que estiver no
+// localStorage — então se o widget de iOS rotacionou o token 2+ vezes enquanto o app estava
+// fechado (ele roda em processo separado e renova sozinho, ver SharedSession.refreshed()),
+// o localStorage daqui já está velho demais e essa primeira tentativa automática derruba a
+// sessão antes mesmo do app terminar de abrir — daí o "desloga sozinho, preciso logar nas
+// 3-4 primeiras vezes que abro por dia". adoptFresherNativeSession (acima) só ajuda depois
+// que o client já inicializou; aqui a gente intercepta a própria leitura do storage, ANTES
+// disso, e devolve a sessão do App Group quando ela for mais nova que a local.
+// mesma chave que o supabase-js já usava por padrão (derivada da URL do projeto) — setar
+// storageKey explicitamente com QUALQUER outro valor faria todo mundo perder a sessão
+// persistida (o client procuraria uma chave nova, vazia, e trataria como deslogado)
+function defaultSupabaseStorageKey(url) {
+  try { return `sb-${new URL(url).hostname.split('.')[0]}-auth-token`; }
+  catch (e) { return 'sb-auth-token'; }
+}
+const AUTH_STORAGE_KEY = defaultSupabaseStorageKey(process.env.NEXT_PUBLIC_SUPABASE_URL);
+const nativeAwareStorage = {
+  getItem: async (key) => {
+    let raw = null;
+    try { raw = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null; } catch (e) { return null; }
+    if (key !== AUTH_STORAGE_KEY || !isNative()) return raw;
+    let shared;
+    try { shared = await SharedAuth.getSession(); } catch (e) { return raw; }
+    if (!shared || !shared.accessToken || !shared.refreshToken) return raw;
+    let local = null;
+    try { local = raw ? JSON.parse(raw) : null; } catch (e) {}
+    const sharedExpiresAt = Number(shared.expiresAt) || 0;
+    const localExpiresAt = (local && local.expires_at) || 0;
+    if (!local || !sharedExpiresAt || sharedExpiresAt <= localExpiresAt) return raw;
+    return JSON.stringify({
+      ...local,
+      access_token: shared.accessToken,
+      refresh_token: shared.refreshToken,
+      expires_at: sharedExpiresAt,
+      expires_in: Math.max(0, Math.round(sharedExpiresAt - Date.now() / 1000)),
+    });
+  },
+  setItem: (key, value) => { try { if (typeof window !== 'undefined') window.localStorage.setItem(key, value); } catch (e) {} },
+  removeItem: (key) => { try { if (typeof window !== 'undefined') window.localStorage.removeItem(key); } catch (e) {} },
+};
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } }
+  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: AUTH_STORAGE_KEY, storage: nativeAwareStorage } }
 );
 
 /* ============================================================
