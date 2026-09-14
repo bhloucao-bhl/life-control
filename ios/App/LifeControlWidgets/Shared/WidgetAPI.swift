@@ -13,7 +13,7 @@ struct WidgetSummary: Codable {
     struct Purchase: Codable, Identifiable { let id: String; let title: String; let store: String?; let etaDate: String?; let stage: String; let tracking: String? }
     struct Scene: Codable, Identifiable { let id: String; let name: String; let steps: Int }
     struct LastScene: Codable { let id: String; let name: String; let at: String }
-    struct GroceryItem: Codable, Identifiable { let id: String; let text: String }
+    struct GroceryItem: Codable, Identifiable { let id: String; let text: String; let checked: Bool }
 
     let today: String
     let health: Health

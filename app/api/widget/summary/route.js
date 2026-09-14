@@ -89,12 +89,11 @@ export async function GET(req) {
   const scenes = (settings.scenes || []).map((s) => ({ id: s.id, name: s.name, steps: (s.steps || []).length }));
   const lastScene = settings.lastSceneRun && settings.lastSceneRun.id ? settings.lastSceneRun : null;
 
-  // lista de compras da semana: só os itens ainda ativos (não marcados), igual o widget da Hoje
-  // no desktop já mostra — os concluídos somem daqui pra manter o widget curto e útil.
+  // lista de compras da semana: igual o app mostra — item marcado como comprado continua na
+  // lista (só riscado), some daqui somente quando a pessoa o exclui de verdade no app.
   const groceryList = (settings.groceryList || [])
-    .filter((i) => !i.checked)
-    .slice(0, 12)
-    .map((i) => ({ id: i.id, text: i.text }));
+    .slice(0, 20)
+    .map((i) => ({ id: i.id, text: i.text, checked: !!i.checked }));
 
   return Response.json({ today, health, tasks, event, diet, finance: { accounts }, purchases, scenes, lastScene, groceryList }, {
     headers: { 'Cache-Control': 'private, no-store' },

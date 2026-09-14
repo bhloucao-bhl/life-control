@@ -2529,6 +2529,8 @@ function GroceryListCard({ lang, groceryList = [], toggleGroceryItem, removeGroc
 
   const stopDictation = () => { if (dictationRef.current) { dictationRef.current.stop(); dictationRef.current = null; } setListening(false); };
 
+  const openAdd = () => { setVoiceErr(''); setAdding(true); };
+
   const startDictationFor = () => {
     setVoiceErr('');
     setAdding(true);
@@ -2542,14 +2544,28 @@ function GroceryListCard({ lang, groceryList = [], toggleGroceryItem, removeGroc
     if (!dictationRef.current) setListening(false);
   };
 
-  // aberto pelo botão "+" do widget de iOS ("lifecontrol://open?action=addGroceryItem"),
-  // que já entra ditando direto — sem precisar tocar em mais nada. Ver appUrlOpen em App().
+  // Os botões do widget de iOS ("+"/mic) trazem o app pro primeiro plano e disparam
+  // "lifecontrol://open?action=addGroceryItem[Voice]" — ver appUrlOpen em App(). Como o app
+  // quase sempre já está rodando (a Hoje é a tela padrão, então normalmente já está montada),
+  // um efeito de montagem sozinho não bastava: se o app já estava aberto na Hoje, o React nunca
+  // remonta este card, e a flag lida só no mount nunca é vista. Por isso registramos as funções
+  // direto em window: se o card já estiver montado, appUrlOpen chama na hora; senão (abrindo o
+  // app do zero), a flag de fallback é consumida aqui no primeiro mount.
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.__lccOpenAddGrocery) {
-      window.__lccOpenAddGrocery = false;
+    window.__lccGroceryOpenAdd = openAdd;
+    window.__lccGroceryOpenAddVoice = startDictationFor;
+    if (window.__lccOpenAddGroceryVoice) {
+      window.__lccOpenAddGroceryVoice = false;
       startDictationFor();
+    } else if (window.__lccOpenAddGrocery) {
+      window.__lccOpenAddGrocery = false;
+      openAdd();
     }
-    return () => stopDictation();
+    return () => {
+      stopDictation();
+      if (window.__lccGroceryOpenAdd === openAdd) window.__lccGroceryOpenAdd = null;
+      if (window.__lccGroceryOpenAddVoice === startDictationFor) window.__lccGroceryOpenAddVoice = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2584,7 +2600,7 @@ function GroceryListCard({ lang, groceryList = [], toggleGroceryItem, removeGroc
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 0' }}>
-          <div onClick={() => setAdding(true)} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1, minWidth: 0 }}>
+          <div onClick={openAdd} style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', flex: 1, minWidth: 0 }}>
             <div style={{ width: 18, height: 18, borderRadius: '50%', border: `1.5px dashed ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 'none', color: C.text3 }}><Plus size={10} /></div>
             <div style={{ fontSize: 12, color: C.text3 }}>{lang === 'pt' ? 'Adicionar item à lista' : 'Add item to list'}</div>
           </div>
@@ -2701,10 +2717,6 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
           <span style={{ fontSize: 12, fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace', color: C.text }}>{w.steps.toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US')}</span>
         </button>
       )}
-      <SectionTitle icon={ShoppingCart} label={lang === 'pt' ? 'Compra da semana' : "This week's shopping"} color={C.accent} />
-      <div style={{ ...card, padding: 14, marginBottom: 4 }}>
-        <GroceryListCard lang={lang} groceryList={groceryList} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} />
-      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><AlertTriangle size={14} style={{ color: C.rose }} />{t('attention')}</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -2723,6 +2735,13 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       </>}
       <SectionTitle icon={Clock} label={lang === 'pt' ? 'O que vai rolar nas próximas 24h' : 'Next 24 hours'} color={C.accent} />
       {next5.length === 0 ? <Empty icon={Sun} text={t('nothingToday')} /> : <div style={{ ...card, padding: 14 }}><MiniPlanner items={next5} lang={lang} t={t} onOpen={onOpen} today={today} /></div>}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '18px 2px 8px' }}>
+        <ShoppingCart size={13} style={{ color: C.text3 }} />
+        <span style={{ fontSize: 12.5, color: C.text2, fontWeight: 600 }}>{lang === 'pt' ? 'Compra da semana' : "This week's shopping"}</span>
+      </div>
+      <div style={{ ...card, padding: 14, marginBottom: 4 }}>
+        <GroceryListCard lang={lang} groceryList={groceryList} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} />
+      </div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '18px 2px 10px' }}>
         <span style={{ fontSize: 12.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', fontWeight: 600, display: 'flex', gap: 7, alignItems: 'center' }}><Newspaper size={14} style={{ color: C.blue }} />{t('news')}</span>
         <div style={{ display: 'flex', gap: 7, alignItems: 'center' }}>
@@ -8911,7 +8930,13 @@ function App() {
       } else if (action === 'purchases') {
         setActive({ screen: 'dashboard', module: moduleByKey('purchases') });
       } else if (action === 'addGroceryItem') {
-        window.__lccOpenAddGrocery = true;
+        // se a Hoje já estiver montada (o app quase sempre abre nela), chama a função
+        // registrada pelo próprio card em vez de só largar uma flag — ver o efeito de
+        // montagem em GroceryListCard pro porquê disso ser necessário.
+        if (window.__lccGroceryOpenAdd) window.__lccGroceryOpenAdd(); else window.__lccOpenAddGrocery = true;
+        setActive({ screen: 'home', module: null });
+      } else if (action === 'addGroceryItemVoice') {
+        if (window.__lccGroceryOpenAddVoice) window.__lccGroceryOpenAddVoice(); else window.__lccOpenAddGroceryVoice = true;
         setActive({ screen: 'home', module: null });
       } else if (action === 'groceryList') {
         setActive({ screen: 'home', module: null });

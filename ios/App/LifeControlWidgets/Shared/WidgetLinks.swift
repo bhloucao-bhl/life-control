@@ -11,6 +11,7 @@ enum WidgetAction: String {
     case purchases
     case groceryList
     case addGroceryItem
+    case addGroceryItemVoice
 }
 
 enum WidgetLinks {

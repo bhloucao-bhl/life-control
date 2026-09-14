@@ -69,13 +69,25 @@ struct GroceryWidgetView: View {
         }
     }
 
+    // "Adicionar item" é o principal (é assim que a maioria vai adicionar — abre o app já com
+    // o campo de texto pronto); o microfone é só um atalho secundário menor ao lado, pra quem
+    // quiser ditar em vez de digitar.
     private var addRow: some View {
-        Link(destination: WidgetLinks.open(.addGroceryItem)) {
-            HStack(spacing: 6) {
-                Image(systemName: "mic.circle.fill").font(.callout)
-                Text("Adicionar (voz)").font(.caption2)
+        HStack(spacing: 14) {
+            Link(destination: WidgetLinks.open(.addGroceryItem)) {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Adicionar item")
+                }
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.tint)
             }
-            .foregroundStyle(.tint)
+            Spacer(minLength: 0)
+            Link(destination: WidgetLinks.open(.addGroceryItemVoice)) {
+                Image(systemName: "mic.fill")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }
@@ -86,12 +98,16 @@ private struct GroceryRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Button(intent: ToggleGroceryItemIntent(itemId: item.id)) {
-                Image(systemName: "circle")
+                Image(systemName: item.checked ? "checkmark.circle.fill" : "circle")
             }
             .buttonStyle(.plain)
             .font(.callout)
-            .tint(.secondary)
-            Text(item.text).font(.caption).lineLimit(1)
+            .tint(item.checked ? .green : .secondary)
+            Text(item.text)
+                .font(.caption)
+                .lineLimit(1)
+                .strikethrough(item.checked)
+                .foregroundStyle(item.checked ? .secondary : .primary)
             Spacer(minLength: 0)
         }
     }
@@ -106,7 +122,7 @@ struct GroceryWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Compra da semana")
-        .description("Itens ativos da lista de compras — toque no círculo pra marcar como comprado.")
+        .description("Sua lista de compras — toque no círculo pra marcar como comprado.")
         .supportedFamilies([.systemMedium, .systemLarge])
     }
 }
