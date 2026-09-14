@@ -1413,6 +1413,13 @@ function WorkBadge({ size = 15 }) {
     </span>
   );
 }
+function PlaudBadge({ size = 15 }) {
+  return (
+    <span title="Veio de uma gravação do Plaud" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: size, height: size, borderRadius: 999, background: C.rose }}>
+      <Mic size={Math.max(8, Math.round(size * 0.6))} color="#fff" strokeWidth={2.5} />
+    </span>
+  );
+}
 function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount, onDelete }) {
   const overdue = item.type === 'task' && item.status !== 'done' && item.date && item.date < todayISO();
   const Ic = (item.meta && item.meta.purchaseRef) ? Package : typeIcon(item.type); const mile = item.meta && item.meta.milestone;
@@ -1433,6 +1440,7 @@ function ItemRow({ item, lang, t, onToggle, onOpen, hideAmount, onDelete }) {
           {item.notes && item.type !== 'message' && item.type !== 'note' && <FileText size={11} style={{ color: C.text3 }} />}
           {item.priority === 1 && item.status !== 'done' && <span style={{ fontSize: 10.5, color: C.accent, border: `1px solid ${C.accent}44`, borderRadius: 999, padding: '1px 7px' }}>{t('high')}</span>}
           {item.meta && item.meta.moura && <WorkBadge />}
+          {item.meta && item.meta.fromPlaud && <PlaudBadge />}
           {item.meta && item.meta.external === 'google' && !((item.meta && item.meta.moura)) && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 7px' }}>Google</span>}
           {item.type === 'document' && item.meta && item.meta.tag && <span style={{ fontSize: 10, color: C.blue, border: `1px solid ${C.blue}44`, borderRadius: 999, padding: '1px 8px' }}>{item.meta.tag}</span>}
           {item.type === 'trip' && item.meta && item.meta.purpose && <span style={{ fontSize: 10, color: item.meta.purpose === 'trabalho' ? C.sky : C.green, border: `1px solid currentColor`, borderRadius: 999, padding: '1px 8px' }}>{item.meta.purpose === 'trabalho' ? (lang === 'pt' ? 'Trabalho' : 'Work') : (lang === 'pt' ? 'Lazer' : 'Leisure')}</span>}
@@ -2587,7 +2595,7 @@ function GroceryListCard({ lang, groceryList = [], toggleGroceryItem, removeGroc
           <button onClick={() => toggleGroceryItem(i.id)} style={{ width: 18, height: 18, borderRadius: 5, border: i.checked ? 'none' : `1.5px solid ${C.border}`, background: i.checked ? C.accent : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none', padding: 0 }}>
             {i.checked && <Check size={11} style={{ color: '#fff' }} />}
           </button>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: i.checked ? C.text3 : C.text2, textDecoration: i.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.text}</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: i.checked ? C.text3 : C.text2, textDecoration: i.checked ? 'line-through' : 'none', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{i.text}</span>{i.fromPlaud && <PlaudBadge size={13} />}</div>
           <button onClick={() => removeGroceryItem(i.id)} style={{ width: 20, height: 20, borderRadius: 6, border: 'none', background: 'transparent', color: C.text3, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 'none' }}><X size={12} /></button>
         </div>
       ))}
@@ -3577,7 +3585,7 @@ function PlaudScreen({ module, lang, t, back, addItem, addGroceryItem, flash, se
   const persist = (list) => { if (typeof window !== 'undefined' && window.storage) window.storage.set('lcc_plaud_suggestions_v1', JSON.stringify(list)); };
   const dismiss = (sg) => { const next = state.list.filter((x) => x.key !== sg.key); setState((p) => ({ ...p, list: next })); persist(next); };
   const accept = (sg) => {
-    if (sg.kind === 'grocery') addGroceryItem(sg.title);
+    if (sg.kind === 'grocery') addGroceryItem(sg.title, true);
     else addItem({ type: sg.type, domain: sg.domain || 'personal', title: sg.title, notes: sg.notes || '', date: sg.date || null, time: sg.time || null, amount: sg.amount != null ? sg.amount : null, meta: { ...(sg.meta || {}), fromPlaud: true } });
     dismiss(sg);
     flash(t('savedOne'));
@@ -9234,7 +9242,7 @@ function App() {
   // lista de compras da semana (widget da Hoje, versão wide) — vive em settings, igual pesos/dieta
   const toggleGroceryItem = (id) => setSettings((s) => ({ ...s, groceryList: (s.groceryList || []).map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)) }));
   const removeGroceryItem = (id) => setSettings((s) => ({ ...s, groceryList: (s.groceryList || []).filter((i) => i.id !== id) }));
-  const addGroceryItem = (text) => { if (!text || !text.trim()) return; setSettings((s) => ({ ...s, groceryList: [...(s.groceryList || []), { id: uid(), text: text.trim(), checked: false }] })); };
+  const addGroceryItem = (text, fromPlaud) => { if (!text || !text.trim()) return; setSettings((s) => ({ ...s, groceryList: [...(s.groceryList || []), { id: uid(), text: text.trim(), checked: false, ...(fromPlaud ? { fromPlaud: true } : {}) }] })); };
   // layout personalizável da Hoje wide (tamanho/posição de cada card) — persistido igual ao resto de settings
   const setWideLayout = (l) => setSettings((s) => ({ ...s, wideLayout: l }));
   const setWideHidden = (ids) => setSettings((s) => ({ ...s, wideHidden: ids }));
