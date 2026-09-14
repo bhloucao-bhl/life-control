@@ -1,5 +1,6 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
 import { brDateTime } from '../../../lib/tz';
+import { pMap } from '../../../lib/gmailPool';
 
 export const runtime = 'nodejs';
 export const revalidate = 0;
@@ -124,7 +125,7 @@ export async function GET(req) {
     const j = await r.json();
     const ids = (j.messages || []).map((m) => m.id);
 
-    const detail = await Promise.all(ids.map(async (id) => {
+    const detail = await pMap(ids, async (id) => {
       try {
         const u = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`;
         const rr = await fetch(u, { headers: h, cache: 'no-store' });
@@ -150,7 +151,7 @@ export async function GET(req) {
           meta: { channel: 'email', sender, unread: true, external: 'google', link: `https://mail.google.com/mail/u/0/#inbox/${id}` },
         };
       } catch (e) { return null; }
-    }));
+    }, 8);
     messages = detail.filter(Boolean);
   } catch (e) {
     errors.push(String(e.message || e));

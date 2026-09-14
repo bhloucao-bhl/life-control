@@ -1,5 +1,6 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
 import { brDate } from '../../../lib/tz';
+import { pMap } from '../../../lib/gmailPool';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -69,7 +70,7 @@ export async function GET(req) {
     const ids = [...new Set([...(j.messages || []).map((m) => m.id), ...(jKw.messages || []).map((m) => m.id)])].slice(0, 40);
     if (!ids.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
-    const mails = (await Promise.all(ids.map(async (id) => {
+    const mails = (await pMap(ids, async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=full`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;
@@ -83,7 +84,7 @@ export async function GET(req) {
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
-    }))).filter(Boolean).filter((m) => !/mercadolivre|mercadolibre|mlstatic/i.test(m.from || ''));
+    }, 6)).filter(Boolean).filter((m) => !/mercadolivre|mercadolibre|mlstatic/i.test(m.from || ''));
     if (!mails.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
     const today = brDate(Date.now());

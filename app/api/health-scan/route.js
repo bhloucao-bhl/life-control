@@ -1,5 +1,6 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
 import { brDate } from '../../../lib/tz';
+import { pMap } from '../../../lib/gmailPool';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -68,7 +69,7 @@ export async function GET(req) {
     if (rLabel.ok) jLabel = await rLabel.json();
     const ids = [...new Set([...(j.messages || []).map((m) => m.id), ...(jLabel.messages || []).map((m) => m.id)])].slice(0, 45);
 
-    mails = (await Promise.all(ids.map(async (id) => {
+    mails = (await pMap(ids, async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=full`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;
@@ -82,7 +83,7 @@ export async function GET(req) {
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
-    }))).filter(Boolean);
+    }, 6)).filter(Boolean);
   } catch (e) {
     // segue sem e-mails se der erro
   }
