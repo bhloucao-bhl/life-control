@@ -1,5 +1,6 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
 import { brDateTime } from '../../../lib/tz';
+import { pMap } from '../../../lib/gmailPool';
 
 export const runtime = 'nodejs';
 
@@ -102,7 +103,7 @@ export async function GET(req) {
     // mescla os IDs das duas buscas, sem duplicar
     const ids = [...new Set([...(j.messages || []).map((m) => m.id), ...(jWork.messages || []).map((m) => m.id)])];
 
-    const messages = (await Promise.all(ids.map(async (id) => {
+    const messages = (await pMap(ids, async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=full`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;
@@ -147,7 +148,7 @@ export async function GET(req) {
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
-    }))).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
+    }, 8)).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date));
 
     return Response.json({ connected: true, messages });
   } catch (e) {

@@ -1,5 +1,6 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
 import { brDate } from '../../../lib/tz';
+import { pMap } from '../../../lib/gmailPool';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -83,19 +84,19 @@ export async function GET(req) {
     if (!ids.length) return Response.json({ connected: true, results: [], scanned: 0 });
 
     // 1a passada: metadata leve, só pra achar quais assuntos começam com "(Z)"
-    const metas = (await Promise.all(ids.map(async (id) => {
+    const metas = (await pMap(ids, async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=metadata&metadataHeaders=Subject`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;
         const m = await rr.json();
         return { id, subject: header(m.payload, 'Subject') };
       } catch (e) { return null; }
-    }))).filter(Boolean);
+    }, 8)).filter(Boolean);
     const matchIds = metas.filter((m) => SUBJECT_RE.test(m.subject || '')).map((m) => m.id);
     if (!matchIds.length) return Response.json({ connected: true, results: [], scanned: metas.length });
 
     // 2a passada: corpo completo só dos que batem, pra extrair contexto (data recebida, texto)
-    const mails = (await Promise.all(matchIds.map(async (id) => {
+    const mails = (await pMap(matchIds, async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=full`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;
@@ -111,7 +112,7 @@ export async function GET(req) {
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
-    }))).filter(Boolean).filter((m) => m.zText);
+    }, 6)).filter(Boolean).filter((m) => m.zText);
 
     if (!mails.length) return Response.json({ connected: true, results: [], scanned: metas.length });
 

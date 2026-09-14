@@ -1,5 +1,6 @@
 import { userFromRequest, validToken } from '../../../lib/oauth';
 import { brDate } from '../../../lib/tz';
+import { pMap } from '../../../lib/gmailPool';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
@@ -87,14 +88,14 @@ export async function GET(req) {
     if (!ids.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
     // fase 1: metadata leve (barato) pra triar
-    const metas = (await Promise.all(ids.map(async (id) => {
+    const metas = (await pMap(ids, async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;
         const m = await rr.json();
         return { id, from: header(m.payload, 'From'), subject: header(m.payload, 'Subject'), snippet: (m.snippet || '').slice(0, 200) };
       } catch (e) { return null; }
-    }))).filter(Boolean);
+    }, 8)).filter(Boolean);
     if (!metas.length) return Response.json({ connected: true, suggestions: [], scanned: 0 });
 
     // e-mails de remetentes conhecidos de companhia aérea/OTA já entram direto na fase 2 —
@@ -120,7 +121,7 @@ Ignore propaganda, newsletter, promoção e sugestão de destino. Se nada qualif
     if (!candidateIds.length) return Response.json({ connected: true, suggestions: [], scanned: metas.length });
 
     // fase 2: corpo completo só dos que passaram na triagem, pra extrair os detalhes
-    const mails = (await Promise.all(candidateIds.map(async (id) => {
+    const mails = (await pMap(candidateIds, async (id) => {
       try {
         const rr = await fetch(`${G}/messages/${id}?format=full`, { headers: h, cache: 'no-store' });
         if (!rr.ok) return null;
@@ -134,7 +135,7 @@ Ignore propaganda, newsletter, promoção e sugestão de destino. Se nada qualif
           link: `https://mail.google.com/mail/u/0/#inbox/${id}`,
         };
       } catch (e) { return null; }
-    }))).filter(Boolean);
+    }, 6)).filter(Boolean);
 
     const today = brDate(Date.now());
     const system = `Você extrai reservas de viagem e compromissos de e-mails, para um app pessoal.
