@@ -9159,12 +9159,16 @@ function App() {
   // ---- Pull-to-refresh (puxar pra baixo no topo) ----
   const [pull, setPull] = useState(0); const [refreshing, setRefreshing] = useState(false);
   const pullRef = useRef({ y0: 0, active: false });
+  // timeout de segurança: no iOS o app pode ser suspenso em segundo plano no meio de um fetch
+  // e a promise nunca resolve nem rejeita — sem isso "refreshing" fica travado em true pra sempre
+  // e a régua do pull-to-refresh (linha do header) fica presa aberta, com um vão azul sem conteúdo.
+  const withTimeout = (p, ms) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((res) => setTimeout(res, ms))]);
   const doRefresh = async () => {
     setRefreshing(true);
     try {
       const jobs = [refreshGoogle(), loadGmail(), reloadTicktick(), loadNews(true)];
-      await Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {})));
-      try { applyOuraData(await (await authFetch('/api/oura')).json()); } catch (e) {}
+      await withTimeout(Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {}))), 10000);
+      await withTimeout((async () => applyOuraData(await (await authFetch('/api/oura')).json()))(), 8000);
     } finally { setTimeout(() => setRefreshing(false), 300); }
   };
   const scrollTop = () => (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0);
@@ -9461,7 +9465,7 @@ function App() {
             const Ic = navIcon(k); const isMod = !SCREEN_ICONS[k];
             const activeK = isMod ? (active.module && active.module.key === k) : (active.screen === k && (k !== 'dashboard' || !active.module));
             const badge = k === 'messages' ? allItems.filter((i) => i.type === 'message' && i.meta && i.meta.unread).length + allItems.filter((i) => i.status === 'inbox').length : 0;
-            return <button key={k} onClick={() => { haptic(); navTo(k); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, position: 'relative', padding: '2px 8px' }}>
+            return <button key={k} onClick={() => { haptic(); if (activeK) { window.scrollTo({ top: 0, behavior: 'smooth' }); } else { navTo(k); } }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: activeK ? C.accent : C.text3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, position: 'relative', padding: '2px 8px' }}>
               <Ic size={21} /><span style={{ fontSize: 10.5 }}>{navLabel(k, t)}</span>
               {badge > 0 && <span style={{ position: 'absolute', top: -3, right: 4, background: C.rose, color: '#fff', fontSize: 9, borderRadius: 999, minWidth: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 3px' }}>{badge}</span>}
             </button>;
