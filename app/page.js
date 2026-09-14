@@ -3570,13 +3570,19 @@ function MessagesScreen({ items, people, lang, t, setItems, onOpen, toggleTask, 
    lista de compras, nota/lembrança, etc.) com o que a rotina já decidiu. */
 function PlaudScreen({ module, lang, t, back, addItem, addGroceryItem, flash, setPendingCount }) {
   const [state, setState] = useState({ loading: true, list: [], error: null });
+  const [log, setLog] = useState(null);
+  const [logOpen, setLogOpen] = useState(false);
   const load = () => {
     if (typeof window === 'undefined' || !window.storage) { setState({ loading: false, list: [], error: null }); return; }
     setState((p) => ({ ...p, loading: true }));
-    window.storage.get('lcc_plaud_suggestions_v1').then((r) => {
+    Promise.all([
+      window.storage.get('lcc_plaud_suggestions_v1'),
+      window.storage.get('lcc_plaud_log_v1'),
+    ]).then(([r, rl]) => {
       let list = [];
       try { list = r && r.value ? JSON.parse(r.value) : []; } catch (e) { list = []; }
       setState({ loading: false, list: Array.isArray(list) ? list : [], error: null });
+      try { setLog(rl && rl.value ? JSON.parse(rl.value) : null); } catch (e) { setLog(null); }
     }).catch((e) => setState({ loading: false, list: [], error: String(e) }));
   };
   useEffect(() => { load(); }, []);
@@ -3591,6 +3597,57 @@ function PlaudScreen({ module, lang, t, back, addItem, addGroceryItem, flash, se
     flash(t('savedOne'));
   };
 
+  // separa em seções pra priorizar na hora de revisar: compromissos (tem hora marcada) primeiro,
+  // depois tarefas, depois compras (vão pra lista de compras, não pro cadastro geral), e por
+  // fim o resto (notas/lembranças, ideias de presente) — cada bucket é mutuamente exclusivo
+  const byDateTime = (a, b) => `${a.date || '9999'}${a.time || ''}`.localeCompare(`${b.date || '9999'}${b.time || ''}`);
+  const buckets = { appt: [], task: [], grocery: [], other: [] };
+  state.list.forEach((sg) => {
+    if (sg.kind === 'grocery') buckets.grocery.push(sg);
+    else if (sg.type === 'event' || sg.type === 'appointment') buckets.appt.push(sg);
+    else if (sg.type === 'task') buckets.task.push(sg);
+    else buckets.other.push(sg);
+  });
+  buckets.appt.sort(byDateTime);
+  buckets.task.sort(byDateTime);
+  buckets.grocery.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  buckets.other.sort((a, b) => ((b.source && b.source.recordingDate) || '').localeCompare((a.source && a.source.recordingDate) || ''));
+  const SECTIONS = [
+    { key: 'appt', list: buckets.appt, icon: CalIcon, color: C.accent, label: lang === 'pt' ? 'Compromissos' : 'Appointments' },
+    { key: 'task', list: buckets.task, icon: ListTodo, color: C.blue, label: lang === 'pt' ? 'Tarefas' : 'Tasks' },
+    { key: 'grocery', list: buckets.grocery, icon: ShoppingCart, color: C.green, label: lang === 'pt' ? 'Compras' : 'Groceries' },
+    { key: 'other', list: buckets.other, icon: Sparkles, color: C.violet, label: lang === 'pt' ? 'Outras sugestões' : 'Other suggestions' },
+  ];
+
+  const renderCard = (sg) => {
+    const Ic = sg.kind === 'grocery' ? ShoppingCart : typeIcon(sg.type);
+    const typeLabel = sg.kind === 'grocery' ? t('t_shopping') : t('t_' + sg.type);
+    return (
+      <div key={sg.key} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+          <Ic size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600 }}>{sg.title}</div>
+            <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>
+              {typeLabel}{sg.date ? ' · ' + fmtDate(sg.date, lang) : ''}{sg.time ? ' ' + sg.time : ''}
+            </div>
+            {sg.notes && <div style={{ fontSize: 11.5, color: C.text2, marginTop: 4, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{sg.notes}</div>}
+            {sg.why && <div style={{ fontSize: 11, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{sg.why}</div>}
+            {sg.source && sg.source.recordingTitle && (
+              <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Mic size={10} style={{ verticalAlign: -1, marginRight: 3 }} />{sg.source.recordingTitle}{sg.source.recordingDate ? ' · ' + fmtDate(sg.source.recordingDate, lang) : ''}
+              </div>
+            )}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+          <Btn kind="soft" onClick={() => accept(sg)} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={13} />{t('accept')}</Btn>
+          <Btn kind="ghost" onClick={() => dismiss(sg)} style={{ padding: '7px 12px', fontSize: 12.5 }}>{t('discard')}</Btn>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div>
       <ModuleHeader module={module} t={t} back={back} />
@@ -3603,34 +3660,36 @@ function PlaudScreen({ module, lang, t, back, addItem, addGroceryItem, flash, se
       </div>
       {state.error && <HintCard icon={AlertTriangle} text={state.error} />}
       {!state.loading && state.list.length === 0 && <HintCard icon={Check} text={t('plaudEmpty')} />}
-      {state.list.map((sg) => {
-        const Ic = sg.kind === 'grocery' ? ShoppingCart : typeIcon(sg.type);
-        const typeLabel = sg.kind === 'grocery' ? t('t_shopping') : t('t_' + sg.type);
-        return (
-          <div key={sg.key} style={{ ...card, padding: 13, marginBottom: 8, borderColor: C.accent + '33' }}>
-            <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
-              <Ic size={16} style={{ color: C.accent, marginTop: 2, flexShrink: 0 }} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{sg.title}</div>
-                <div style={{ fontSize: 11.5, color: C.text2, marginTop: 3 }}>
-                  {typeLabel}{sg.date ? ' · ' + fmtDate(sg.date, lang) : ''}{sg.time ? ' ' + sg.time : ''}
+      {SECTIONS.map((sec) => sec.list.length === 0 ? null : (
+        <div key={sec.key} style={{ marginBottom: 6 }}>
+          <SectionTitle icon={sec.icon} label={`${sec.label} (${sec.list.length})`} color={sec.color} />
+          {sec.list.map(renderCard)}
+        </div>
+      ))}
+
+      {log && (
+        <div style={{ marginTop: 18 }}>
+          <button onClick={() => setLogOpen((v) => !v)} style={{ background: 'none', border: 'none', color: C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, padding: '4px 0', width: '100%', textAlign: 'left' }}>
+            {logOpen ? <ChevronDown size={12} style={{ flexShrink: 0 }} /> : <ChevronRight size={12} style={{ flexShrink: 0 }} />}
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {lang === 'pt' ? 'Verificado' : 'Checked'} {timeAgo(log.lastCheckedAt, lang)}
+              {log.lastRecording && log.lastRecording.title ? ` · ${lang === 'pt' ? 'última gravação vista' : 'last seen'}: ${log.lastRecording.title}` : ''}
+            </span>
+          </button>
+          {logOpen && (
+            <div style={{ marginTop: 4 }}>
+              {(log.recentlyProcessed || []).length === 0 ? (
+                <div style={{ fontSize: 11, color: C.text3, padding: '4px 0' }}>{lang === 'pt' ? 'Nenhuma gravação processada ainda.' : 'No recording processed yet.'}</div>
+              ) : log.recentlyProcessed.map((r) => (
+                <div key={r.id} style={{ fontSize: 11, color: C.text3, padding: '5px 0', borderBottom: `1px solid ${C.borderSoft}`, display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</span>
+                  <span style={{ flexShrink: 0 }}>{r.date ? fmtDate(r.date, lang) : ''}{r.suggestionsCount != null ? ` · ${r.suggestionsCount}` : ''}</span>
                 </div>
-                {sg.notes && <div style={{ fontSize: 11.5, color: C.text2, marginTop: 4, lineHeight: 1.4, whiteSpace: 'pre-wrap' }}>{sg.notes}</div>}
-                {sg.why && <div style={{ fontSize: 11, color: C.text3, marginTop: 4, lineHeight: 1.45 }}>{sg.why}</div>}
-                {sg.source && sg.source.recordingTitle && (
-                  <div style={{ fontSize: 10.5, color: C.text3, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    <Mic size={10} style={{ verticalAlign: -1, marginRight: 3 }} />{sg.source.recordingTitle}{sg.source.recordingDate ? ' · ' + fmtDate(sg.source.recordingDate, lang) : ''}
-                  </div>
-                )}
-              </div>
+              ))}
             </div>
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <Btn kind="soft" onClick={() => accept(sg)} style={{ flex: 1, padding: '7px 10px', fontSize: 12.5, display: 'flex', justifyContent: 'center', gap: 5, alignItems: 'center' }}><Check size={13} />{t('accept')}</Btn>
-              <Btn kind="ghost" onClick={() => dismiss(sg)} style={{ padding: '7px 12px', fontSize: 12.5 }}>{t('discard')}</Btn>
-            </div>
-          </div>
-        );
-      })}
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -4226,6 +4285,7 @@ function DayPlanner({ dayItems, lang, t, onOpen }) {
                 <div key={i.id} onClick={() => onOpen(i)} style={{ position: 'absolute', top, height, left, width, background: col.bg, borderLeft: `3px solid ${col.border}`, borderRadius: 8, padding: '5px 8px', cursor: 'pointer', overflow: 'hidden', boxSizing: 'border-box', boxShadow: cols > 1 ? `0 0 0 1px ${C.surface}` : 'none' }}>
                   <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
                     {isWork && <WorkBadge size={12} />}
+                    {i.meta && i.meta.fromPlaud && <PlaudBadge size={12} />}
                     {badge && <span style={{ color: col.text, display: 'flex', flexShrink: 0 }}>{badge}</span>}
                     <span style={{ fontSize: 11.5, fontWeight: 600, color: col.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span>
                     {link && <Video size={11} style={{ color: col.text, flexShrink: 0 }} />}
@@ -4263,6 +4323,7 @@ function MiniPlanner({ items, lang, t, onOpen, today }) {
             <div style={{ flex: 1, minWidth: 0, paddingTop: 1 }}>
               <div style={{ fontSize: 13.5, display: 'flex', gap: 6, alignItems: 'center' }}>
                 {isWork && <WorkBadge size={13} />}
+                {i.meta && i.meta.fromPlaud && <PlaudBadge size={13} />}
                 {i.meta && i.meta.milestone && <Star size={12} style={{ color: C.accent }} />}
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{isWork ? (i.title || '').replace(/^\s*\(m\)\s*/i, '') : i.title}</span>
               </div>
@@ -9159,16 +9220,16 @@ function App() {
   // ---- Pull-to-refresh (puxar pra baixo no topo) ----
   const [pull, setPull] = useState(0); const [refreshing, setRefreshing] = useState(false);
   const pullRef = useRef({ y0: 0, active: false });
-  // timeout de segurança: no iOS o app pode ser suspenso em segundo plano no meio de um fetch
-  // e a promise nunca resolve nem rejeita — sem isso "refreshing" fica travado em true pra sempre
-  // e a régua do pull-to-refresh (linha do header) fica presa aberta, com um vão azul sem conteúdo.
-  const withTimeout = (p, ms) => Promise.race([Promise.resolve(p).catch(() => {}), new Promise((res) => setTimeout(res, ms))]);
+  // timeout de segurança (reusa withTimeout, já usado no armazenamento): no iOS o app pode
+  // ser suspenso em segundo plano no meio de um fetch e a promise nunca resolve nem rejeita —
+  // sem isso "refreshing" fica travado em true pra sempre e a régua do pull-to-refresh (linha
+  // do header) fica presa aberta, com um vão azul sem conteúdo.
   const doRefresh = async () => {
     setRefreshing(true);
     try {
       const jobs = [refreshGoogle(), loadGmail(), reloadTicktick(), loadNews(true)];
-      await withTimeout(Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {}))), 10000);
-      await withTimeout((async () => applyOuraData(await (await authFetch('/api/oura')).json()))(), 8000);
+      await withTimeout(Promise.all(jobs.map((p) => Promise.resolve(p).catch(() => {}))), 10000).catch(() => {});
+      await withTimeout((async () => applyOuraData(await (await authFetch('/api/oura')).json()))(), 8000).catch(() => {});
     } finally { setTimeout(() => setRefreshing(false), 300); }
   };
   const scrollTop = () => (window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0);
@@ -9451,7 +9512,7 @@ function App() {
       </div>
       </div>
 
-      {!wide && active.screen !== 'claude' && (
+      {!wide && active.screen !== 'claude' && !(active.module && active.module.key === 'plaud') && (
         <div style={{ position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)', left: 0, right: 0, zIndex: 30, pointerEvents: 'none' }}>
           <div style={{ maxWidth: 480, margin: '0 auto', position: 'relative', height: 0 }}>
             <button onClick={() => { haptic(12); setShowCapture(true); }} style={{ position: 'absolute', right: 18, bottom: 0, pointerEvents: 'auto', background: C.accent, color: '#FFFFFF', border: 'none', width: 52, height: 52, borderRadius: 16, cursor: 'pointer', boxShadow: '0 8px 24px rgba(37,99,235,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Plus size={24} /></button>
