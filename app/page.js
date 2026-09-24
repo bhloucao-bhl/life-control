@@ -8356,6 +8356,8 @@ function OuraWebhookSetup({ lang, onOuraSync }) {
         yesterday: (j.byDate && j.byDate[addDays(todayISO(), -1)]) || null,
         errors: j.errors || [],
         connected: !!j.connected,
+        battery: j.battery || null,
+        batteryError: j.batteryError || null,
       });
       await loadStatus();
     } catch (e) { setDebug({ error: String(e) }); }
