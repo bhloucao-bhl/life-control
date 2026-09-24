@@ -6355,6 +6355,8 @@ function OuraInsights({ health, extra, lang }) {
       {ex.restMode && <HintCard icon={Moon} text={pt ? `Modo descanso ativo desde ${fmtDate(ex.restMode.since, lang)} — a Oura pausou metas de atividade e está focada em recuperação.` : `Rest mode on since ${fmtDate(ex.restMode.since, lang)}.`} />}
       {missing.length > 0 && <HintCard icon={AlertTriangle} text={pt ? `A Oura não liberou: ${missing.join(', ')}. Reconecte a Oura em Ajustes → Conexões pra autorizar os dados novos.` : `Oura didn't grant: ${missing.join(', ')}. Reconnect Oura in Settings.`} />}
 
+      {/* grade: 1 coluna no celular, 2+ no desktop (a aba Saúde lá chega a 940px+) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 360px), 1fr))', columnGap: 10 }}>
       {vitals.length > 0 && (
         <div style={{ ...card, padding: 14, marginBottom: 10 }}>
           <OuraCardHead icon={Activity} color={C.blue} title={pt ? 'Sinais vitais (Oura)' : 'Vitals (Oura)'} right={pt ? 'durante o sono' : 'during sleep'} />
@@ -6461,9 +6463,9 @@ function OuraInsights({ health, extra, lang }) {
       )}
 
       {hasTrends && (
-        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+        <div style={{ ...card, padding: 14, marginBottom: 10, gridColumn: '1 / -1' }}>
           <OuraCardHead icon={TrendingUp} color={C.accent} title={pt ? 'Tendências · 30 dias' : 'Trends · 30 days'} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(158px, 1fr))', gap: 8 }}>
             <OuraSpark health={h} k="spo2" label="SpO2" unit="%" color={C.blue} today={today} lang={lang} />
             <OuraSpark health={h} k="respRate" label={pt ? 'Respiração' : 'Breathing'} unit="rpm" color={C.teal} today={today} lang={lang} invert />
             <OuraSpark health={h} k="sleepHRV" label={pt ? 'HRV sono' : 'Sleep HRV'} unit="ms" color={C.violet} today={today} lang={lang} />
@@ -6475,6 +6477,7 @@ function OuraInsights({ health, extra, lang }) {
           </div>
         </div>
       )}
+      </div>
     </>
   );
 }
