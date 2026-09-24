@@ -7769,7 +7769,11 @@ function FlightMap({ flights, lang, t }) {
     return <div style={{ ...card, padding: 18, marginBottom: 12, textAlign: 'center', color: C.text3, fontSize: 12.5 }}>{lang === 'pt' ? 'Mapa indisponível (sem conexão). Suas rotas: ' : 'Map unavailable. Routes: '}{routes.map(([a, b]) => a + '→' + b).join(', ')}</div>;
   }
   return (
-    <div style={{ ...card, padding: 0, marginBottom: 10, overflow: 'hidden' }}>
+    // isolation:'isolate' cria um novo contexto de empilhamento pro mapa — sem isso, os
+    // controles internos do Leaflet (zoom etc., que usam z-index até 1000) furam por cima de
+    // modais abertos por cima da tela (ex.: "Adicionar voo"), já que o card do mapa em si não
+    // tinha z-index próprio e o 1000 do Leaflet vencia o 50 do Modal na mesma pilha.
+    <div style={{ ...card, padding: 0, marginBottom: 10, overflow: 'hidden', position: 'relative', isolation: 'isolate' }}>
       <div ref={elRef} style={{ width: '100%', height: 230, background: '#0b1018' }} />
     </div>
   );
