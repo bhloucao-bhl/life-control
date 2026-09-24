@@ -2127,22 +2127,24 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
   const [searching, setSearching] = useState(false); const [sq, setSq] = useState('');
   const [listening, setListening] = useState(false);
   const [mealDraft, setMealDraft] = useState(null);
-  const recRef = useRef();
+  const dictationRef = useRef(null);
   const fileRef = useRef();
+  // mesmo startDictation do "+" e da lista de compras: no iPhone usa o ditado nativo (o WKWebView
+  // não tem Web Speech API, então o SpeechRecognition direto daqui nunca funcionava no app).
+  const stopVoice = () => { if (dictationRef.current) { dictationRef.current.stop(); dictationRef.current = null; } setListening(false); };
+  useEffect(() => () => stopVoice(), []);
   const toggleVoice = () => {
-    if (listening) { recRef.current && recRef.current.stop(); return; }
-    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (!SR) { flash(lang === 'pt' ? 'Ditado por voz não é suportado neste navegador.' : 'Voice input not supported in this browser.'); return; }
-    const rec = new SR();
-    rec.lang = lang === 'pt' ? 'pt-BR' : 'en-US';
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    rec.onstart = () => setListening(true);
-    rec.onerror = () => { setListening(false); flash(lang === 'pt' ? 'Não entendi. Tente de novo.' : "Didn't catch that."); };
-    rec.onend = () => setListening(false);
-    rec.onresult = (e) => { const t = e.results[0][0].transcript; setText((p) => (p ? p + ' ' : '') + t); };
-    recRef.current = rec;
-    try { rec.start(); } catch (e) { setListening(false); }
+    if (listening) { stopVoice(); return; }
+    haptic(8);
+    const base = text ? text + ' ' : '';
+    setListening(true);
+    dictationRef.current = startDictation({
+      lang,
+      onPartial: (v) => setText(base + v),
+      onFinal: (v) => { if (v) setText(base + v); stopVoice(); },
+      onError: (msg) => { stopVoice(); flash(msg || (lang === 'pt' ? 'Não entendi. Tente de novo.' : "Didn't catch that.")); },
+    });
+    if (!dictationRef.current) setListening(false);
   };
   const run = async () => { if (!text.trim()) return; setLoading(true);
     try {
