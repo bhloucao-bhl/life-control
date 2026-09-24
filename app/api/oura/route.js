@@ -1,5 +1,5 @@
 import { admin, userFromRequest, validToken } from '../../../lib/oauth';
-import { fetchOuraData, fetchOuraBattery } from '../../../lib/oura';
+import { fetchOuraData, fetchOuraBattery, saveOuraCache } from '../../../lib/oura';
 import { mergeHealthDaily } from '../../../lib/healthDaily';
 
 export const runtime = 'nodejs';
@@ -10,7 +10,8 @@ export const runtime = 'nodejs';
 const STALE_MS = 3 * 60 * 60 * 1000; // 3h
 
 /**
- * GET /api/oura -> { byDate: { 'YYYY-MM-DD': { readiness, sleep } } }
+ * GET /api/oura -> { byDate: { 'YYYY-MM-DD': { readiness, sleep, spo2, ... } }, lastSleep, extra }
+ * (campos: ver fetchOuraData em lib/oura.js)
  * Le do cache (populado pelo webhook assim que o anel sincroniza com o app).
  * Se ainda nao houver cache, se o cache estiver velho, ou se ?refresh=1,
  * busca ao vivo na Oura.
@@ -36,23 +37,20 @@ export async function GET(req) {
         connected: true,
         byDate: cached.by_date || {},
         lastSleep: cached.last_sleep || null,
+        extra: cached.extra || null,
         cachedAt: cached.updated_at,
         ...(await batteryP), // battery + batteryError (ver fetchOuraBattery)
       }, { headers: { 'Cache-Control': 'private, s-maxage=900' } });
     }
   }
 
-  const { byDate, lastSleep, errors } = await fetchOuraData(token);
-  await db.from('oura_cache').upsert({
-    user_id: user.id,
-    by_date: byDate,
-    last_sleep: lastSleep,
-    updated_at: new Date().toISOString(),
-  }, { onConflict: 'user_id' });
+  const data = await fetchOuraData(token);
+  const { byDate, lastSleep, errors } = data;
+  await saveOuraCache(db, user.id, data);
   // histórico permanente (ver lib/healthDaily.js) — não perde dias fora da janela do cache acima
   await mergeHealthDaily(db, user.id, byDate);
 
-  return Response.json({ connected: true, byDate, lastSleep, errors, ...(await batteryP) }, {
+  return Response.json({ connected: true, byDate, lastSleep, extra: { ...data.extra, sources: data.sources }, errors, ...(await batteryP) }, {
     headers: { 'Cache-Control': 'private, s-maxage=900' },
   });
 }

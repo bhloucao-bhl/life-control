@@ -1,4 +1,5 @@
 import { admin, userFromRequest, PROVIDERS, redirectUri } from '../../../lib/oauth';
+import { OURA_SCOPES_NEEDED } from '../../../lib/oura';
 
 export const runtime = 'nodejs';
 
@@ -9,6 +10,13 @@ export async function GET(req) {
   const { data } = await admin().from('connections').select('provider, updated_at, scope').eq('user_id', user.id);
   const map = {};
   (data || []).forEach((c) => { map[c.provider] = { connected: true, since: c.updated_at }; });
+  // token da Oura antigo (de antes de o app pedir SpO2, FC contínua, estresse...) — o escopo
+  // salvo vem como "extapi:daily extapi:personal"; lista o que falta pra tela pedir reconexão.
+  if (map.oura) {
+    const row = (data || []).find((c) => c.provider === 'oura');
+    const have = String((row && row.scope) || '').split(/\s+/).map((x) => x.replace(/^extapi:/, ''));
+    if (row && row.scope) map.oura.missingScopes = OURA_SCOPES_NEEDED.filter((x) => !have.includes(x));
+  }
   return Response.json({
     oura: map.oura || { connected: false, configured: !!process.env.OURA_CLIENT_ID },
     google: map.google || { connected: false, configured: !!process.env.GOOGLE_CLIENT_ID },
