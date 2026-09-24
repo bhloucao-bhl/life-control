@@ -1321,6 +1321,8 @@ function Chip({ children, active, onClick, color }) {
 }
 // relógio ao vivo, sempre calculado no navegador (hora local real do usuário) — serve de
 // referência visual pra conferir se os horários registrados no app (emails, eventos) batem.
+// "Oura Bat: 87%" — só referência, então sai pequeno/itálico onde aparece. Com ⚡ quando está carregando.
+const ouraBatLabel = (b) => (b && b.level != null ? `Oura Bat: ${b.level}%${b.charging ? ' ⚡' : ''}` : null);
 function LiveClock({ style }) {
   const [hm, setHm] = useState(() => nowHM());
   useEffect(() => {
@@ -2648,7 +2650,7 @@ function GroceryListCard({ lang, groceryList = [], toggleGroceryItem, removeGroc
     </div>
   );
 }
-function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, setHealth, goModule, openClaude, goNews, onOpenNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem }) {
+function TodayScreen({ ouraBattery, items, lang, t, greeting, name, toggleTask, onOpen, addItems, delItem, flash, health, setHealth, goModule, openClaude, goNews, onOpenNews, ouraOn, ttItems = [], news, newsLoading, onRefreshNews, openAccount, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem }) {
   const [logOpen, setLogOpen] = useState(false); const [ask, setAsk] = useState('');
   const [quickAttn, setQuickAttn] = useState(false);
   const [zBusy, setZBusy] = useState(false);
@@ -2714,7 +2716,12 @@ function TodayScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addIt
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10, marginBottom: 14 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 26, fontWeight: 300, letterSpacing: '-.02em' }}>{name ? <>{greeting()}, <span style={{ fontWeight: 600 }}>{name}</span>.</> : <>{greeting()}.</>}</div>
-          <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2, display: 'flex', alignItems: 'center', gap: 6 }}>{fmtLongPretty(today, lang)}<span style={{ color: C.text3 }}>·</span><LiveClock /></div>
+          {/* texto corrido (não flex): em flex, quando a data quebrava linha o bloco dela ocupava a
+              largura toda e o "· 13:00" ficava lá longe à direita em vez de logo depois do ano */}
+          <div style={{ color: C.text3, fontSize: 13.5, marginTop: 2 }}>
+            {fmtLongPretty(today, lang)}<span style={{ whiteSpace: 'nowrap' }}> · <LiveClock /></span>
+            {ouraBatLabel(ouraBattery) && <span title={ouraBattery.at ? new Date(ouraBattery.at).toLocaleString(loc(lang)) : undefined} style={{ whiteSpace: 'nowrap', fontStyle: 'italic', fontSize: 12 }}> · {ouraBatLabel(ouraBattery)}</span>}
+          </div>
         </div>
         <div title={t('fxHint')} style={{ ...card, padding: '7px 10px', display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0, minWidth: 104 }}>
           {live && live.fx ? live.fx.map((fx) => (
@@ -3154,7 +3161,7 @@ function HealthRingWide({ readiness, sleep, steps, caloriesToday, calorieGoal, o
     </div>
   );
 }
-function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, onOpenNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal, wideLayout, setWideLayout, wideHidden = [], setWideHidden }) {
+function TodayWideScreen({ ouraBattery, items, lang, t, greeting, name, toggleTask, onOpen, addItem, addItems, delItem, flash, health, goModule, goNews, onOpenNews, goScreen, ttItems = [], news, newsLoading, onRefreshNews, todayAccountId, groceryList = [], toggleGroceryItem, removeGroceryItem, addGroceryItem, onSaveNews, calorieGoal, wideLayout, setWideLayout, wideHidden = [], setWideHidden }) {
   const today = todayISO(); const hm = nowHM(); const w = health[today] || {};
   const [taskFilter, setTaskFilter] = useState('work');
   const [financeHidden, setFinanceHidden] = useState(true);
@@ -3298,7 +3305,7 @@ function TodayWideScreen({ items, lang, t, greeting, name, toggleTask, onOpen, a
         {!hiddenSet.has('health') && (
         <div key="health">
           <WidgetShell editing={editingLayout} onHide={() => hideWidget('health')} lang={lang}>
-            <WideCard title={t('health')} action={t('seeAll')} onAction={() => goModule('health')}>
+            <WideCard title={<>{t('health')}{ouraBatLabel(ouraBattery) && <span title={ouraBattery.at ? new Date(ouraBattery.at).toLocaleString(loc(lang)) : undefined} style={{ marginLeft: 10, fontSize: 11, fontWeight: 400, fontStyle: 'italic', color: C.text3 }}>({ouraBatLabel(ouraBattery)})</span>}</>} action={t('seeAll')} onAction={() => goModule('health')}>
               <HealthRingWide readiness={w.readiness} sleep={w.sleep} steps={w.steps} caloriesToday={caloriesToday} calorieGoal={calorieGoal} onAddMeal={() => setAddingMeal(true)} lang={lang} t={t} onClick={() => goModule('health')} />
             </WideCard>
           </WidgetShell>
@@ -8969,6 +8976,7 @@ function App() {
   const [toast, setToast] = useState(null); const [undo, setUndo] = useState(null); const undoRef = useRef();
   const [theme, setThemeState] = useState(_theme); const applyTheme = (name) => { setTheme(name); setThemeState(name); };
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
+  const [ouraBattery, setOuraBattery] = useState(null); // { level, charging, at } — ver fetchOuraBattery em lib/oura.js
   // histórico permanente de saúde (tabela health_daily — ver /api/health/history e
   // lib/healthDaily.js): diferente do cache de curta janela que a Oura/HealthKit devolvem,
   // isto nunca perde dias antigos e é a base usada tanto pra visão histórica quanto pro
@@ -8984,6 +8992,7 @@ function App() {
     if (!j) return;
     if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); }
     if (j.lastSleep) setLastSleep(j.lastSleep);
+    if (j.battery) setOuraBattery(j.battery);
     setOuraOn(!!j.connected);
   };
   // passos do HealthKit — só o campo "steps" por dia, nunca substitui readiness/sono (que
@@ -9540,8 +9549,8 @@ function App() {
       )}
       <div style={{ padding: wide ? '24px 24px 40px' : '0 16px' }}>
         {active.screen === 'home' && (wide
-          ? <TodayWideScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} onOpenNews={setNewsReader} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} wideLayout={settings.wideLayout} setWideLayout={setWideLayout} wideHidden={settings.wideHidden || []} setWideHidden={setWideHidden} />
-          : <TodayScreen {...shared} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} onOpenNews={setNewsReader} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
+          ? <TodayWideScreen {...shared} ouraBattery={ouraBattery} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} goModule={openModuleKey} goNews={() => setActive({ screen: 'news', module: null })} onOpenNews={setNewsReader} goScreen={(s) => setActive({ screen: s, module: null })} todayAccountId={settings.todayAccountId} groceryList={settings.groceryList || []} toggleGroceryItem={toggleGroceryItem} removeGroceryItem={removeGroceryItem} addGroceryItem={addGroceryItem} onSaveNews={saveNewsItem} calorieGoal={settings.calorieGoal} wideLayout={settings.wideLayout} setWideLayout={setWideLayout} wideHidden={settings.wideHidden || []} setWideHidden={setWideHidden} />
+          : <TodayScreen {...shared} ouraBattery={ouraBattery} ttItems={ttItems} news={newsData} newsLoading={newsLoading} onRefreshNews={() => loadNews(true)} greeting={greeting} name={settings.name} addItems={addItems} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} goModule={openModuleKey} openClaude={(q) => setClaudeSeed(q)} goNews={() => setActive({ screen: 'news', module: null })} onOpenNews={setNewsReader} openAccount={openAccount} todayAccountId={settings.todayAccountId} />
         )}
         {active.screen === 'news' && <NewsScreen lang={lang} t={t} back={() => setActive({ screen: 'home', module: null })}
           news={newsData} loading={newsLoading} onRefresh={() => loadNews(true)}
