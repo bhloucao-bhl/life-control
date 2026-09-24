@@ -1,5 +1,6 @@
 import { admin, userFromRequest } from '../../../../lib/oauth';
 import { brDate } from '../../../../lib/tz';
+import { getFxWithChange } from '../../../../lib/fx';
 
 export const runtime = 'nodejs';
 
@@ -38,10 +39,13 @@ export async function GET(req) {
   const db = admin();
   const today = brDate(Date.now());
 
-  const [items, settings, ouraRow] = await Promise.all([
+  // cotacao vem junto (mesma fonte/conta da Hoje, ver lib/fx.js); se falhar, o resto do resumo
+  // sai normal e o widget so esconde a linha do cambio (fx: null).
+  const [items, settings, ouraRow, fxRes] = await Promise.all([
     loadItems(db, user.id),
     loadSettings(db, user.id),
     db.from('oura_cache').select('by_date').eq('user_id', user.id).maybeSingle().then((r) => r.data),
+    getFxWithChange([]).catch(() => ({ fx: null })),
   ]);
 
   // saude: readiness/sono do dia; se ainda nao houver leitura de hoje, cai pro dia mais recente disponivel
@@ -95,7 +99,7 @@ export async function GET(req) {
     .slice(0, 20)
     .map((i) => ({ id: i.id, text: i.text, checked: !!i.checked }));
 
-  return Response.json({ today, health, tasks, event, diet, finance: { accounts }, purchases, scenes, lastScene, groceryList }, {
+  return Response.json({ today, health, tasks, event, diet, finance: { accounts }, purchases, scenes, lastScene, groceryList, fx: fxRes.fx || null }, {
     headers: { 'Cache-Control': 'private, no-store' },
   });
 }

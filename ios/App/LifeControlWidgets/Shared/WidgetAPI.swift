@@ -14,6 +14,8 @@ struct WidgetSummary: Codable {
     struct Scene: Codable, Identifiable { let id: String; let name: String; let steps: Int }
     struct LastScene: Codable { let id: String; let name: String; let at: String }
     struct GroceryItem: Codable, Identifiable { let id: String; let text: String; let checked: Bool }
+    /// Cotação em reais (USD/EUR), mesma da Hoje — ver lib/fx.js. `pct` é a variação do dia.
+    struct FX: Codable, Identifiable { let code: String; let value: Double; let pct: Double?; var id: String { code } }
 
     let today: String
     let health: Health
@@ -25,6 +27,8 @@ struct WidgetSummary: Codable {
     let scenes: [Scene]
     let lastScene: LastScene?
     let groceryList: [GroceryItem]
+    /// Opcional: nulo quando todas as fontes de câmbio falharem (o resto do resumo sai normal).
+    let fx: [FX]?
 }
 
 enum WidgetAPI {
