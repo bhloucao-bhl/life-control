@@ -3,7 +3,7 @@ import Foundation
 /// Espelha o JSON de GET /api/widget/summary (app/api/widget/summary/route.js).
 /// Mantenha os dois em sincronia se o formato mudar de um lado.
 struct WidgetSummary: Codable {
-    struct Health: Codable { let connected: Bool; let readiness: Int?; let sleep: Int?; let date: String? }
+    struct Health: Codable { let connected: Bool; let readiness: Int?; let sleep: Int?; let date: String?; let battery: Int?; let batteryCharging: Bool? }
     struct TaskInfo: Codable { let id: String; let title: String; let date: String? }
     struct Tasks: Codable { let count: Int; let next: TaskInfo? }
     struct EventInfo: Codable { let id: String; let title: String; let date: String; let time: String? }

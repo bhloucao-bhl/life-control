@@ -60,9 +60,9 @@ struct DashboardWidgetView: View {
         }
     }
 
-    /// Coluna principal (é o widget pequeno inteiro): prontidão/sono/tarefas + cotação.
+    /// Coluna principal (é o widget pequeno inteiro): prontidão/sono/bateria do anel/tarefas + cotação.
     private func indicators(_ s: WidgetSummary) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 4) {
                 Label("Life Control", systemImage: "square.grid.2x2.fill")
                     .font(.caption2).foregroundStyle(.secondary)
@@ -73,6 +73,9 @@ struct DashboardWidgetView: View {
 
             if let r = s.health.readiness { ScoreRow(icon: "bolt.heart.fill", label: "Prontidão", value: "\(r)") }
             if let sc = s.health.sleep { ScoreRow(icon: "moon.fill", label: "Sono", value: "\(sc)") }
+            if let b = s.health.battery {
+                ScoreRow(icon: s.health.batteryCharging == true ? "battery.100percent.bolt" : batteryIcon(b), label: "Oura Bat", value: "\(b)%")
+            }
             ScoreRow(icon: "checklist", label: "Tarefas", value: "\(s.tasks.count)")
 
             if let fx = s.fx, !fx.isEmpty {
@@ -82,6 +85,17 @@ struct DashboardWidgetView: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Ícone de bateria do SF Symbols que acompanha o nível (0/25/50/75/100).
+    private func batteryIcon(_ level: Int) -> String {
+        switch level {
+        case ..<13: return "battery.0percent"
+        case ..<38: return "battery.25percent"
+        case ..<63: return "battery.50percent"
+        case ..<88: return "battery.75percent"
+        default: return "battery.100percent"
+        }
     }
 
     private func nextUp(_ s: WidgetSummary) -> some View {
@@ -170,7 +184,7 @@ struct DashboardWidget: Widget {
                 .containerBackground(.fill.tertiary, for: .widget)
         }
         .configurationDisplayName("Resumo do dia")
-        .description("Prontidão, sono, tarefas, cotação do dólar/euro e captura rápida por voz.")
+        .description("Prontidão, sono, bateria do anel, tarefas, cotação do dólar/euro e captura rápida por voz.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
