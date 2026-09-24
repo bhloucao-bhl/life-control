@@ -52,6 +52,9 @@
 		E38DAFDB428EEBA73C80694D /* DashboardWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B9819059BFBFD19C0A0A78E /* DashboardWidget.swift */; };
 		F4B41B89D3CABF0BAE9E7AA9 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7926AD07ACA0C95F611BDE70 /* HealthKit.framework */; };
 		F80F2DFE16F8416D64F8123F /* FinanceWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A20782818C62B8359506B99 /* FinanceWidget.swift */; };
+		4B96137DA9F92AF55AFCE96B /* OpenVoiceCaptureIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95179AB6E2C270C3FA41DD8 /* OpenVoiceCaptureIntent.swift */; };
+		4F4AC83697BAA5D8F811A64C /* OpenVoiceCaptureIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = F95179AB6E2C270C3FA41DD8 /* OpenVoiceCaptureIntent.swift */; };
+		2AB16551298008CC2FC060E3 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = EF897D7A1455C2A99163D0AF /* AppIntents.framework */; settings = {ATTRIBUTES = (Weak, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -126,6 +129,7 @@
 		E990B45027FC71E602CC4AEF /* GoogleService-Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		EF897D7A1455C2A99163D0AF /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AppIntents.framework; sourceTree = DEVELOPER_DIR; };
 		FA40DA65686AB2AAE9934653 /* LifeControlWidgets.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = LifeControlWidgets.entitlements; sourceTree = "<group>"; };
+		F95179AB6E2C270C3FA41DD8 /* OpenVoiceCaptureIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OpenVoiceCaptureIntent.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -138,6 +142,7 @@
 				F4B41B89D3CABF0BAE9E7AA9 /* HealthKit.framework in Frameworks */,
 				97E7B738DB091AFF39AC9886 /* Speech.framework in Frameworks */,
 				1DCE53918AA38318A24D83A3 /* AVFoundation.framework in Frameworks */,
+				2AB16551298008CC2FC060E3 /* AppIntents.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -280,6 +285,7 @@
 				BB6F3FFAE4DACCD64B8292EC /* WidgetAPI.swift */,
 				77B270BF8E27F9C7094915AB /* WidgetLinks.swift */,
 				9427B35DC378C4B7C106690E /* WidgetUnavailableView.swift */,
+				F95179AB6E2C270C3FA41DD8 /* OpenVoiceCaptureIntent.swift */,
 			);
 			name = Shared;
 			path = Shared;
@@ -428,6 +434,7 @@
 				B3B6DF11B9B89C0D293DCF91 /* VoiceInputPlugin.swift in Sources */,
 				9D4221B5661FB2F7355043A9 /* AppGroup.swift in Sources */,
 				97F133FC9F011A0CEA361079 /* SharedSession.swift in Sources */,
+				4B96137DA9F92AF55AFCE96B /* OpenVoiceCaptureIntent.swift in Sources */,
 				AB4A2BBE075B811B822A8B79 /* MainViewController.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -451,6 +458,7 @@
 				715A912D54DCC574A9E4EA0A /* ToggleGroceryItemIntent.swift in Sources */,
 				9BA4EFD85A39D172D19F8516 /* AppGroup.swift in Sources */,
 				6B556148F793E96B0E7FEC44 /* SharedSession.swift in Sources */,
+				4F4AC83697BAA5D8F811A64C /* OpenVoiceCaptureIntent.swift in Sources */,
 				BE7E253FCCBB705A754ACBA3 /* RunSceneIntent.swift in Sources */,
 				DADB0C5A3A4B142F252D5C65 /* SceneEntity.swift in Sources */,
 				2F0A65CB636C4B73ECE814B8 /* SelectSceneIntent.swift in Sources */,

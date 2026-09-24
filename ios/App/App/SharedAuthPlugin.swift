@@ -19,7 +19,33 @@ public class SharedAuthPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "saveSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "clearSession", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getSession", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "consumeWidgetAction", returnType: CAPPluginReturnPromise),
     ]
+
+    private var widgetActionObserver: NSObjectProtocol?
+
+    /// Um botão de widget com intent (ex.: o "+" do Resumo do dia — OpenVoiceCaptureIntent)
+    /// roda perform() aqui no processo do app, que pode já estar aberto em segundo plano: nesse
+    /// caso o JS é avisado na hora pelo evento "widgetAction". Abrindo do zero, o pedido fica no
+    /// App Group e o JS o busca com consumeWidgetAction() assim que monta.
+    public override func load() {
+        widgetActionObserver = NotificationCenter.default.addObserver(forName: PendingWidgetAction.notification, object: nil, queue: .main) { [weak self] _ in
+            guard let action = PendingWidgetAction.consume() else { return }
+            self?.notifyListeners("widgetAction", data: ["action": action], retainUntilConsumed: true)
+        }
+    }
+
+    deinit {
+        if let o = widgetActionObserver { NotificationCenter.default.removeObserver(o) }
+    }
+
+    @objc func consumeWidgetAction(_ call: CAPPluginCall) {
+        if let action = PendingWidgetAction.consume() {
+            call.resolve(["action": action])
+        } else {
+            call.resolve([:])
+        }
+    }
 
     @objc func saveSession(_ call: CAPPluginCall) {
         guard

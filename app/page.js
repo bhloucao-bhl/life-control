@@ -2127,22 +2127,24 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
   const [searching, setSearching] = useState(false); const [sq, setSq] = useState('');
   const [listening, setListening] = useState(false);
   const [mealDraft, setMealDraft] = useState(null);
-  const recRef = useRef();
+  const dictationRef = useRef(null);
   const fileRef = useRef();
+  // mesmo startDictation do "+" e da lista de compras: no iPhone usa o ditado nativo (o WKWebView
+  // não tem Web Speech API, então o SpeechRecognition direto daqui nunca funcionava no app).
+  const stopVoice = () => { if (dictationRef.current) { dictationRef.current.stop(); dictationRef.current = null; } setListening(false); };
+  useEffect(() => () => stopVoice(), []);
   const toggleVoice = () => {
-    if (listening) { recRef.current && recRef.current.stop(); return; }
-    const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition);
-    if (!SR) { flash(lang === 'pt' ? 'Ditado por voz não é suportado neste navegador.' : 'Voice input not supported in this browser.'); return; }
-    const rec = new SR();
-    rec.lang = lang === 'pt' ? 'pt-BR' : 'en-US';
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    rec.onstart = () => setListening(true);
-    rec.onerror = () => { setListening(false); flash(lang === 'pt' ? 'Não entendi. Tente de novo.' : "Didn't catch that."); };
-    rec.onend = () => setListening(false);
-    rec.onresult = (e) => { const t = e.results[0][0].transcript; setText((p) => (p ? p + ' ' : '') + t); };
-    recRef.current = rec;
-    try { rec.start(); } catch (e) { setListening(false); }
+    if (listening) { stopVoice(); return; }
+    haptic(8);
+    const base = text ? text + ' ' : '';
+    setListening(true);
+    dictationRef.current = startDictation({
+      lang,
+      onPartial: (v) => setText(base + v),
+      onFinal: (v) => { if (v) setText(base + v); stopVoice(); },
+      onError: (msg) => { stopVoice(); flash(msg || (lang === 'pt' ? 'Não entendi. Tente de novo.' : "Didn't catch that.")); },
+    });
+    if (!dictationRef.current) setListening(false);
   };
   const run = async () => { if (!text.trim()) return; setLoading(true);
     try {
@@ -2215,19 +2217,44 @@ function QuickCapture({ lang, t, addItems, flash, items, onOpen }) {
     </div>
   );
 }
-function CaptureSheet({ lang, t, onClose, addItems, flash }) {
+function CaptureSheet({ lang, t, onClose, addItems, flash, voice }) {
   const [text, setText] = useState(''); const [loading, setLoading] = useState(false); const [drafts, setDrafts] = useState(null); const ref = useRef();
-  useEffect(() => { ref.current && ref.current.focus(); }, []);
-  const run = async () => { if (!text.trim()) return; setLoading(true);
-    try { setDrafts(await classifyCapture(text.trim(), lang)); } catch (e) { addItems([{ type: 'note', domain: 'personal', title: text.trim(), priority: 3, status: 'inbox' }]); flash(t('couldntParse')); onClose(); }
+  const [listening, setListening] = useState(false); const [voiceErr, setVoiceErr] = useState('');
+  const dictationRef = useRef(null);
+  const run = async (raw) => { const v = (raw != null ? raw : text).trim(); if (!v) return; setLoading(true);
+    try { setDrafts(await classifyCapture(v, lang)); } catch (e) { addItems([{ type: 'note', domain: 'personal', title: v, priority: 3, status: 'inbox' }]); flash(t('couldntParse')); onClose(); }
     setLoading(false); };
+  const stopDictation = () => { if (dictationRef.current) { dictationRef.current.stop(); dictationRef.current = null; } setListening(false); };
+  // ditado (mesmo startDictation nativo da lista de compras): o texto aparece em tempo real no
+  // campo e, quando a fala termina, já vai direto pro Claude interpretar — é o que o "+" do widget
+  // Resumo do dia pede (voice), pra pessoa só falar e revisar as sugestões.
+  const startVoice = () => {
+    stopDictation(); setVoiceErr(''); setListening(true); haptic(8);
+    let heard = '';
+    dictationRef.current = startDictation({
+      lang,
+      onPartial: (v) => { heard = v; setText(v); },
+      onFinal: (v) => { heard = v || heard; setText(heard); stopDictation(); if (heard.trim()) run(heard); },
+      onError: (msg) => { setVoiceErr(msg); stopDictation(); },
+    });
+    if (!dictationRef.current) setListening(false);
+  };
+  useEffect(() => {
+    if (voice) startVoice(); else if (ref.current) ref.current.focus();
+    return () => stopDictation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
-    <Modal onClose={onClose}>
-      <SheetHead title={lang === 'pt' ? 'Capturar' : 'Capture'} onClose={onClose} icon={Sparkles} />
+    <Modal onClose={() => { stopDictation(); onClose(); }}>
+      <SheetHead title={lang === 'pt' ? 'Capturar' : 'Capture'} onClose={() => { stopDictation(); onClose(); }} icon={Sparkles} />
       {!drafts ? (
         <>
-          <textarea ref={ref} value={text} onChange={(e) => setText(e.target.value)} placeholder={t('capturePh')} rows={3} style={{ ...inputStyle, resize: 'none', marginBottom: 12 }} />
-          <Btn onClick={run} disabled={loading || !text.trim()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{loading ? <><Loader2 size={16} className="spin" />{t('thinking')}</> : <><Sparkles size={16} />{t('interpret')}</>}</Btn>
+          <div style={{ position: 'relative', marginBottom: 12 }}>
+            <textarea ref={ref} value={text} onChange={(e) => setText(e.target.value)} placeholder={listening ? (lang === 'pt' ? 'Ouvindo… pode falar.' : 'Listening… go ahead.') : t('capturePh')} rows={3} style={{ ...inputStyle, resize: 'none', paddingRight: 44 }} />
+            <button onClick={listening ? stopDictation : startVoice} title={lang === 'pt' ? 'Ditar por voz' : 'Voice input'} style={{ position: 'absolute', right: 8, top: 8, width: 30, height: 30, borderRadius: 9, border: 'none', background: listening ? C.rose + '22' : 'transparent', color: listening ? C.rose : C.text3, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{listening ? <Loader2 size={16} className="spin" /> : <Mic size={16} />}</button>
+          </div>
+          {voiceErr && <div style={{ fontSize: 11.5, color: C.rose, marginTop: -6, marginBottom: 10 }}>{voiceErr}</div>}
+          <Btn onClick={() => { stopDictation(); run(); }} disabled={loading || !text.trim()} style={{ width: '100%', display: 'flex', justifyContent: 'center', gap: 8, alignItems: 'center' }}>{loading ? <><Loader2 size={16} className="spin" />{t('thinking')}</> : <><Sparkles size={16} />{t('interpret')}</>}</Btn>
           <div style={{ fontSize: 11.5, color: C.text3, marginTop: 10, textAlign: 'center', lineHeight: 1.5 }}>{t('photoAudioSoon')}</div>
         </>
       ) : <DraftReview drafts={drafts} lang={lang} t={t} onDone={(arr, status) => { if (arr.length) addItems(arr.map((x) => ({ ...x, status }))); flash(arr.length + ' ✓'); onClose(); }} onCancel={() => setDrafts(null)} />}
@@ -9089,6 +9116,8 @@ function App() {
       } else if (action === 'addGroceryItemVoice') {
         if (window.__lccGroceryOpenAddVoice) window.__lccGroceryOpenAddVoice(); else window.__lccOpenAddGroceryVoice = true;
         setActive({ screen: 'home', module: null });
+      } else if (action === 'quickCaptureVoice') {
+        setShowCapture('voice');
       } else if (action === 'groceryList') {
         setActive({ screen: 'home', module: null });
       } else {
@@ -9096,6 +9125,22 @@ function App() {
       }
     }).then((h) => { handle = h; }).catch(() => {});
     return () => { if (handle) handle.remove(); };
+  }, []);
+  // Botões de widget que usam App Intent em vez de URL (o "+" do Resumo do dia — ver
+  // OpenVoiceCaptureIntent.swift) deixam o pedido no App Group: o plugin avisa na hora pelo
+  // evento "widgetAction" quando o app já estava aberto, e consumeWidgetAction() cobre o app
+  // abrindo do zero (no mount) ou voltando do segundo plano (appStateChange).
+  useEffect(() => {
+    if (!isNative()) return;
+    const handleWidgetAction = (action) => {
+      if (action === 'quickCaptureVoice') { setShowCapture('voice'); }
+    };
+    const consume = () => SharedAuth.consumeWidgetAction().then((r) => { if (r && r.action) handleWidgetAction(r.action); }).catch(() => {});
+    const handles = [];
+    SharedAuth.addListener('widgetAction', (d) => handleWidgetAction(d && d.action)).then((h) => handles.push(h)).catch(() => {});
+    CapApp.addListener('appStateChange', ({ isActive }) => { if (isActive) consume(); }).then((h) => handles.push(h)).catch(() => {});
+    consume();
+    return () => handles.forEach((h) => h.remove());
   }, []);
   const unlockApp = async () => {
     authBusyRef.current = true;
@@ -9539,7 +9584,7 @@ function App() {
       </div>}
 
       {composeSeed && <GmailCompose lang={lang} t={t} initial={composeSeed} onClose={() => setComposeSeed(null)} />}
-      {showCapture && <CaptureSheet lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
+      {showCapture && <CaptureSheet key={showCapture === 'voice' ? 'voice' : 'text'} voice={showCapture === 'voice'} lang={lang} t={t} onClose={() => setShowCapture(false)} addItems={addItems} flash={flash} />}
       {showSettings && <SettingsSheet settings={settings} setSettings={setSettings} lang={lang} t={t} items={items} setItems={setItems} people={people} addItem={addItem} updateItem={updateItem} theme={theme} applyTheme={applyTheme} onClose={() => setShowSettings(false)} onOuraSync={applyOuraData} wide={wide} />}
       {detail && <ErrorBoundary fallback={() => <Modal onClose={() => setDetail(null)}><SheetHead title={lang === 'pt' ? 'Erro' : 'Error'} onClose={() => setDetail(null)} icon={AlertTriangle} /><div style={{ ...card, padding: 16, fontSize: 13, color: C.text2 }}>{lang === 'pt' ? 'Não consegui abrir este item. Tente novamente ou edite-o pela lista.' : "Couldn't open this item."}</div></Modal>}><ItemDetail item={detail} lang={lang} t={t} people={people} onClose={() => setDetail(null)} onSave={updateItem} onDelete={delItem} onAct={(patch) => { updateItem(detail.id, patch); setDetail((d) => ({ ...d, ...patch, meta: { ...(d.meta || {}), ...(patch.meta || {}) } })); }} allItems={allItems} addItem={addItem} /></ErrorBoundary>}
       {newsReader && <NewsReaderModal item={newsReader} lang={lang} t={t} onClose={() => setNewsReader(null)}
