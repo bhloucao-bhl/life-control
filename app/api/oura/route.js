@@ -26,7 +26,7 @@ export async function GET(req) {
   const force = new URL(req.url).searchParams.get('refresh') === '1';
 
   // bateria do anel: sempre ao vivo (não fica no cache), em paralelo com o resto
-  const batteryP = fetchOuraBattery(token);
+  const batteryP = fetchOuraBattery(token).then(({ battery, error }) => ({ battery, batteryError: error }));
 
   if (!force) {
     const { data: cached } = await db.from('oura_cache').select('*').eq('user_id', user.id).maybeSingle();
@@ -37,7 +37,7 @@ export async function GET(req) {
         byDate: cached.by_date || {},
         lastSleep: cached.last_sleep || null,
         cachedAt: cached.updated_at,
-        battery: await batteryP,
+        ...(await batteryP), // battery + batteryError (ver fetchOuraBattery)
       }, { headers: { 'Cache-Control': 'private, s-maxage=900' } });
     }
   }
@@ -52,7 +52,7 @@ export async function GET(req) {
   // histórico permanente (ver lib/healthDaily.js) — não perde dias fora da janela do cache acima
   await mergeHealthDaily(db, user.id, byDate);
 
-  return Response.json({ connected: true, byDate, lastSleep, errors, battery: await batteryP }, {
+  return Response.json({ connected: true, byDate, lastSleep, errors, ...(await batteryP) }, {
     headers: { 'Cache-Control': 'private, s-maxage=900' },
   });
 }
