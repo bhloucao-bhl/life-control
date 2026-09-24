@@ -1,4 +1,5 @@
-import { admin, userFromRequest } from '../../../../lib/oauth';
+import { admin, userFromRequest, validToken } from '../../../../lib/oauth';
+import { fetchOuraBattery } from '../../../../lib/oura';
 import { brDate } from '../../../../lib/tz';
 import { getFxWithChange } from '../../../../lib/fx';
 
@@ -41,21 +42,28 @@ export async function GET(req) {
 
   // cotacao vem junto (mesma fonte/conta da Hoje, ver lib/fx.js); se falhar, o resto do resumo
   // sai normal e o widget so esconde a linha do cambio (fx: null).
-  const [items, settings, ouraRow, fxRes] = await Promise.all([
+  // bateria do anel: ao vivo, igual o /api/oura (não fica no oura_cache); se falhar, só some do widget
+  const batteryP = validToken(user.id, 'oura')
+    .then((tk) => (tk ? fetchOuraBattery(tk) : { battery: null }))
+    .then((r) => (r && r.battery) || null)
+    .catch(() => null);
+  const [items, settings, ouraRow, fxRes, battery] = await Promise.all([
     loadItems(db, user.id),
     loadSettings(db, user.id),
     db.from('oura_cache').select('by_date').eq('user_id', user.id).maybeSingle().then((r) => r.data),
     getFxWithChange([]).catch(() => ({ fx: null })),
+    batteryP,
   ]);
 
   // saude: readiness/sono do dia; se ainda nao houver leitura de hoje, cai pro dia mais recente disponivel
-  let health = { connected: false, readiness: null, sleep: null, date: null };
+  let health = { connected: false, readiness: null, sleep: null, date: null, battery: null, batteryCharging: null };
   const byDate = (ouraRow && ouraRow.by_date) || null;
   if (byDate) {
     const dates = Object.keys(byDate).sort();
     const day = byDate[today] ? today : dates[dates.length - 1];
     if (day) health = { connected: true, readiness: byDate[day].readiness ?? null, sleep: byDate[day].sleep ?? null, date: day };
   }
+  if (battery) { health.battery = battery.level; health.batteryCharging = battery.charging; }
 
   // tarefas: pendentes com vencimento ate hoje (atrasadas + as de hoje), ordenadas por prioridade
   const pendingTasks = items
