@@ -678,7 +678,7 @@ import {
   Wind, Lightbulb, Video, TrendingUp, TrendingDown, Landmark, Scale, Ruler, Syringe, Gift,
   GraduationCap, Copy, RefreshCw, Filter, Camera, Cloud, CloudRain, CloudSun,
   MapPin, Building2, Pencil, Tv, Radio, Waves, Wifi, WifiOff, Droplet, Lock, Eye, EyeOff, CalendarDays, Search, CheckCheck, Moon, Briefcase, Image as ImageIcon, Link as LinkIcon, Upload, Package, Truck, Mic, HeartPulse, Bell, Dumbbell, Flame, GripVertical,
-  Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint, Footprints
+  Coffee, Sandwich, Soup, Cookie, Share2, Fingerprint, Footprints, Brain
 } from 'lucide-react';
 
 /* ---------------- palette (BHL Core — Deep Space) ---------------- */
@@ -1204,41 +1204,72 @@ async function classifyCapture(raw, lang) {
 // contra os 30 dias anteriores, pra o Dr. Claude raciocinar sobre trajetória e não só o valor de
 // hoje. "health" aqui já é o histórico completo (settings.health, que cresce pra sempre a cada
 // sincronização, mais o /api/health/history por baixo) — não é mais só a janela curta do cache.
-function buildWearableContext(health, lastSleep) {
+// campos por dia que vão pro Dr. Claude (last7). Oura: notas, temperatura, SpO2/respiração/FC/HRV
+// do sono, FC contínua do dia, estresse, resiliência, idade vascular, VO2 máx, atividade detalhada,
+// contribuidores das notas, treinos e sessões (ver fetchOuraData em lib/oura.js). Apple Health:
+// restingHR/hrv/activeEnergyKcal/weightKg/appleSleepMin/workoutMinutes (ver
+// ios/App/App/HealthKitPlugin.swift + /api/healthkit-metrics). Nomes distintos, fundem no mesmo dia.
+const WEARABLE_DAY_KEYS = [
+  'readiness', 'sleep', 'activity', 'steps', 'tempDeviation', 'tempTrendDeviation',
+  'sleepTotalMin', 'timeInBedMin', 'sleepEfficiency', 'sleepLatencyMin', 'deepMin', 'remMin', 'lightMin', 'awakeMin', 'napMin', 'restlessPeriods', 'bedtimeStart', 'bedtimeEnd',
+  'sleepLowestHR', 'sleepAvgHR', 'sleepHRV', 'respRate', 'spo2', 'breathingDisturbance',
+  'hrMin', 'hrMax', 'hrAvg', 'hrAwakeAvg',
+  'stressHighMin', 'recoveryHighMin', 'stressSummary', 'resilience', 'resilienceContrib',
+  'vascularAge', 'vo2max',
+  'activeCalories', 'totalCalories', 'targetCalories', 'walkingDistanceKm', 'highActivityMin', 'mediumActivityMin', 'lowActivityMin', 'sedentaryMin', 'nonWearMin', 'inactivityAlerts',
+  'readinessContrib', 'sleepContrib', 'activityContrib', 'ouraWorkouts', 'ouraSessions', 'restMode',
+  'restingHR', 'hrv', 'activeEnergyKcal', 'weightKg', 'appleSleepMin', 'workoutMinutes',
+];
+// métricas numéricas comparadas 30d vs 30d anteriores (trajetória, não só o valor de hoje)
+const WEARABLE_TREND_KEYS = [
+  'readiness', 'sleep', 'activity', 'steps', 'sleepTotalMin', 'sleepEfficiency', 'sleepLowestHR', 'sleepHRV', 'respRate', 'spo2', 'breathingDisturbance',
+  'tempDeviation', 'hrAwakeAvg', 'stressHighMin', 'recoveryHighMin', 'vascularAge', 'vo2max', 'activeCalories', 'sedentaryMin',
+  'restingHR', 'hrv', 'activeEnergyKcal',
+];
+// resume o histórico do wearable (Oura + Apple Health, fundidos em "health" — ver mergedHealth em
+// App) num formato compacto: detalhe dos últimos 7 dias + tendência de 30 dias contra os 30 dias
+// anteriores, pra o Dr. Claude raciocinar sobre trajetória e não só o valor de hoje. "health" aqui
+// já é o histórico completo (health_daily + settings.health + leitura fresca da Oura). "extra" é o
+// que a Oura dá fora do dia a dia: perfil, horário ideal de dormir, modo descanso, FC das 24h.
+function buildWearableContext(health, lastSleep, extra) {
   const byDate = health || {};
   const dates = Object.keys(byDate).sort();
-  if (!dates.length && !lastSleep) return null;
+  if (!dates.length && !lastSleep && !extra) return null;
   const today = todayISO();
   const avg = (from, to, key) => {
     const vals = dates.filter((d) => d >= from && d < to).map((d) => byDate[d] && byDate[d][key]).filter((v) => typeof v === 'number');
     return vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
   };
-  // readiness/sleep(score)/activity(score)/steps/tempDeviation vêm da Oura; restingHR/hrv/
-  // activeEnergyKcal/weightKg/appleSleepMin/workoutMinutes vêm direto do Apple Health (ver
-  // ios/App/App/HealthKitPlugin.swift + /api/healthkit-metrics) — funde no mesmo dia sem conflito,
-  // são campos distintos dos da Oura.
-  const last7 = dates.filter((d) => d >= addDays(today, -7)).map((d) => ({
-    date: d, readiness: byDate[d].readiness ?? null, sleep: byDate[d].sleep ?? null,
-    activity: byDate[d].activity ?? null, steps: byDate[d].steps ?? null, tempDeviation: byDate[d].tempDeviation ?? null,
-    restingHR: byDate[d].restingHR ?? null, hrv: byDate[d].hrv ?? null, activeEnergyKcal: byDate[d].activeEnergyKcal ?? null,
-    weightKg: byDate[d].weightKg ?? null, appleSleepMin: byDate[d].appleSleepMin ?? null, workoutMinutes: byDate[d].workoutMinutes ?? null,
-  }));
+  const last7 = dates.filter((d) => d >= addDays(today, -7)).map((d) => {
+    const o = { date: d };
+    WEARABLE_DAY_KEYS.forEach((k) => { if (byDate[d][k] != null) o[k] = byDate[d][k]; });
+    return o;
+  });
+  const trend30d = {};
+  WEARABLE_TREND_KEYS.forEach((k) => {
+    const last30 = avg(addDays(today, -30), addDays(today, 1), k);
+    const prior30 = avg(addDays(today, -60), addDays(today, -30), k);
+    if (last30 != null || prior30 != null) trend30d[k] = { last30, prior30 };
+  });
+  const ex = extra || {};
+  const hr = Array.isArray(ex.hr24h) ? ex.hr24h : [];
+  const hrBpm = hr.map((p) => p[1]);
+  // curvas da noite (FC/HRV a cada 5 min) ficam de fora — muito volume; os agregados já vão acima
+  const { hrSeries, hrvSeries, ...sleepDetail } = lastSleep || {};
   return {
     daysTracked: dates.length,
     firstDayTracked: dates[0] || null,
+    units: 'min = minutos; HR/FC em bpm; HRV em ms; respRate em respirações/min; spo2 em %; tempDeviation em °C vs a linha de base; breathingDisturbance = índice de distúrbio respiratório (BDI, eventos/hora); vo2max em ml/kg/min; vascularAge em anos; *Contrib = contribuidores 0-100 da nota',
     last7,
-    trend30d: {
-      readiness: { last30: avg(addDays(today, -30), today, 'readiness'), prior30: avg(addDays(today, -60), addDays(today, -30), 'readiness') },
-      sleep: { last30: avg(addDays(today, -30), today, 'sleep'), prior30: avg(addDays(today, -60), addDays(today, -30), 'sleep') },
-      steps: { last30: avg(addDays(today, -30), today, 'steps'), prior30: avg(addDays(today, -60), addDays(today, -30), 'steps') },
-      restingHR: { last30: avg(addDays(today, -30), today, 'restingHR'), prior30: avg(addDays(today, -60), addDays(today, -30), 'restingHR') },
-      hrv: { last30: avg(addDays(today, -30), today, 'hrv'), prior30: avg(addDays(today, -60), addDays(today, -30), 'hrv') },
-      activeEnergyKcal: { last30: avg(addDays(today, -30), today, 'activeEnergyKcal'), prior30: avg(addDays(today, -60), addDays(today, -30), 'activeEnergyKcal') },
-    },
-    lastSleepDetail: lastSleep || null,
+    trend30d,
+    lastSleepDetail: lastSleep ? sleepDetail : null,
+    ouraProfile: ex.personal || null,
+    optimalBedtime: ex.sleepTime || null,
+    restMode: ex.restMode || null,
+    heartRate24h: hrBpm.length ? { min: Math.min(...hrBpm), max: Math.max(...hrBpm), avg: Math.round(hrBpm.reduce((a, b) => a + b, 0) / hrBpm.length), samples5min: hrBpm.length, bySource: hr.reduce((a, p) => { a[p[2]] = (a[p[2]] || 0) + 1; return a; }, {}) } : null,
   };
 }
-function buildContext(items, health, lastSleep) {
+function buildContext(items, health, lastSleep, ouraExtra) {
   const today = todayISO();
   const open = items.filter((i) => i.type === 'task' && i.status !== 'done').slice(0, 30).map((i) => ({ title: i.title, due: i.date, priority: i.priority, area: i.domain }));
   const events = items.filter((i) => i.date && ['event', 'appointment', 'trip', 'flight'].includes(i.type)).slice(0, 25).map((i) => ({ title: i.title, date: i.date, area: i.domain }));
@@ -1274,7 +1305,7 @@ function buildContext(items, health, lastSleep) {
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     .slice(0, 10)
     .map((i) => ({ type: i.type, title: i.title, date: i.date, notes: i.notes || null }));
-  const wearable = buildWearableContext(health, lastSleep);
+  const wearable = buildWearableContext(health, lastSleep, ouraExtra);
   return {
     today, openTasks: open, events, monthSpendBRL: exp.filter((i) => (i.date || '').startsWith(month)).reduce((a, b) => a + b.amount, 0),
     health: {
@@ -2265,7 +2296,7 @@ function CaptureSheet({ lang, t, onClose, addItems, flash, voice }) {
 }
 
 /* ---------------- Claude chat (screen + overlay) ---------------- */
-function Chat({ items, lang, t, name, seed, heightStyle, health, lastSleep }) {
+function Chat({ items, lang, t, name, seed, heightStyle, health, lastSleep, ouraExtra }) {
   const [msgs, setMsgs] = useState([]); const [input, setInput] = useState(''); const [loading, setLoading] = useState(false); const endRef = useRef(); const seeded = useRef(false);
   // memória persistente entre sessões (tabela dr_claude_messages — ver /api/dr-claude/messages):
   // sem isto, cada conversa começava do zero, mesmo tendo discutido o mesmo assunto de saúde
@@ -2274,7 +2305,7 @@ function Chat({ items, lang, t, name, seed, heightStyle, health, lastSleep }) {
   useEffect(() => {
     authFetch('/api/dr-claude/messages?limit=20').then((r) => r.json()).then((j) => { if (j && Array.isArray(j.messages)) setRecentLog(j.messages); }).catch(() => {});
   }, []);
-  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. When the topic is health: weigh EVERY piece of data under "health" equally — registered conditions, allergies, medications, recent meals/exercise, upcoming/past appointments, health-related purchases, recent/upcoming travel (jet lag and routine disruption matter), AND health.examHistory (past lab and imaging exam findings/reports) are just as important as the numeric health.metrics. health.wearable holds the full Oura/Apple Health history (not just today): daysTracked, the last 7 days in detail (readiness/sleep/activity/steps from Oura PLUS restingHR/hrv/activeEnergyKcal/weightKg/appleSleepMin/workoutMinutes straight from Apple Health when the person has an iPhone/Apple Watch), a 30-day trend vs the prior 30 days, and lastSleepDetail (HRV, heart rate, sleep phases) — use it to reason about trajectory (improving/worsening), not just the latest reading. Do not focus only on lab numbers or today's snapshot; the narrative exam findings, the wearable trend and the person's full history matter just as much for understanding them as a patient. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items, health, lastSleep))}${recentLog.length ? `\nRecent conversation history with you (Dr. Claude), for continuity — don't repeat questions already answered here: ${JSON.stringify(recentLog)}` : ''}`;
+  const system = `You are Claude, embedded in ${name}'s personal life app — the brilliant mind behind everything. You see all data the user catalogs. Answer concisely in ${lang === 'pt' ? 'Brazilian Portuguese' : 'US English'}, using the JSON to reason about tasks, events, spending, messages and loose ends; you can also draft messages, texts and suggest next actions. Never give definitive medical or financial advice — add a one-line caution and suggest a professional if asked. When the topic is health: weigh EVERY piece of data under "health" equally — registered conditions, allergies, medications, recent meals/exercise, upcoming/past appointments, health-related purchases, recent/upcoming travel (jet lag and routine disruption matter), AND health.examHistory (past lab and imaging exam findings/reports) are just as important as the numeric health.metrics. health.wearable holds the full Oura/Apple Health history (not just today): daysTracked, the last 7 days in detail — from the Oura ring: readiness/sleep/activity scores and what drove them (*Contrib), sleep stages/duration/latency/efficiency, nightly SpO2 and breathing disturbance index (possible sleep apnea signal), respiratory rate, sleep lowest/avg heart rate and HRV, body temperature deviation, continuous daytime heart rate (min/avg/max/awake avg), daytime stress vs recovery minutes, resilience level, cardiovascular (vascular) age, VO2 max, detailed activity (calories, sedentary time, intensity minutes), workouts and breathing/meditation sessions, rest mode — PLUS restingHR/hrv/activeEnergyKcal/weightKg/appleSleepMin/workoutMinutes from Apple Health when present; a 30-day trend vs the prior 30 days for all numeric metrics, lastSleepDetail, heartRate24h, optimalBedtime and ouraProfile (age/sex/height/weight). Use it to reason about trajectory (improving/worsening) and cross-signals (e.g. rising resting HR + falling HRV + temperature up = possible illness/overtraining; low SpO2 or high breathing disturbance = worth mentioning to a doctor; vascular age above real age = cardiovascular attention), not just the latest reading. Do not focus only on lab numbers or today's snapshot; the narrative exam findings, the wearable trend and the person's full history matter just as much for understanding them as a patient. Today: ${todayISO()}. Data: ${JSON.stringify(buildContext(items, health, lastSleep, ouraExtra))}${recentLog.length ? `\nRecent conversation history with you (Dr. Claude), for continuity — don't repeat questions already answered here: ${JSON.stringify(recentLog)}` : ''}`;
   const logMsg = (role, content) => {
     if (typeof content === 'string' && content.trim()) authFetch('/api/dr-claude/messages', { method: 'POST', body: JSON.stringify({ role, content }) }).catch(() => {});
   };
@@ -5663,7 +5694,7 @@ function buildExamHistory(items) {
     .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
     .slice(0, 20);
 }
-function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, weights, addWeight, goMedical, goDiet, goDocs, healthSummary, setHealthSummary, setPendingCount }) {
+function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen, addItem, flash, health, setHealth, profile, setProfile, ouraOn, lastSleep, ouraExtra, weights, addWeight, goMedical, goDiet, goDocs, healthSummary, setHealthSummary, setPendingCount }) {
   const [adding, setAdding] = useState(null); const [addingEx, setAddingEx] = useState(false); const [logOpen, setLogOpen] = useState(false); const [editP, setEditP] = useState(false);
   const [sumLoading, setSumLoading] = useState(false);
   const [sumOpen, setSumOpen] = useState(false);
@@ -5686,17 +5717,15 @@ function HealthScreen({ module, items, people, lang, t, back, toggleTask, onOpen
   const genSummary = async () => {
     setSumLoading(true);
     try {
-      const last7 = Object.entries(health || {}).filter(([d]) => d >= addDays(today, -7)).map(([d, v]) => ({ date: d, sleep: v.sleep, readiness: v.readiness, activity: v.activity, steps: v.steps, tempDeviation: v.tempDeviation }));
-      const wearable = buildWearableContext(health, lastSleep);
+      const wearable = buildWearableContext(health, lastSleep, ouraExtra);
       const metrics = items.filter((i) => i.type === 'healthMetric' && i.title !== '__checked__').slice(-40).map((i) => ({ indicator: i.title, value: i.amount, unit: i.meta && i.meta.unit, status: i.meta && i.meta.status, date: i.date }));
       const conditions = items.filter((i) => i.type === 'condition' && i.meta && i.meta.status === 'ativa').map((i) => i.title);
       const allergies = items.filter((i) => i.type === 'allergy').map((i) => i.title);
       const meds = items.filter((i) => i.type === 'medication' && !(i.meta && i.meta.endDate)).map((i) => i.title);
       const meals = items.filter((i) => i.type === 'meal' && i.domain === 'health' && i.date >= addDays(today, -3)).map((i) => ({ title: i.title, calories: i.meta && i.meta.calories, protein: i.meta && i.meta.protein }));
       const examHistory = buildExamHistory(items);
-      const system = `Você é o Dr. Claude, assistente de saúde pessoal. Com base em TODOS os dados abaixo, escreva um resumo de NO MÁXIMO 3 linhas (curto, direto, em ${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre o estado geral de saúde da pessoa AGORA, terminando com uma recomendação prática pro dia/semana. Tom acolhedor mas objetivo, como o resumo diário de um app de wearable. IMPORTANTE: considere os achados dos exames (laboratoriais e de imagem, campo "Histórico de exames" abaixo) com o MESMO peso dos indicadores numéricos — não foque só em números; laudos, condições registradas, a tendência de 30 dias do wearable (campo "trend30d" abaixo) e o histórico narrativo do paciente são igualmente relevantes. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado, trabalhe com o que tiver e não invente. Responda em texto puro, sem markdown, sem aspas.
-Sono/prontidão/passos (últimos 7 dias): ${JSON.stringify(last7)}
-Tendência do wearable (30 dias vs 30 dias anteriores) e detalhe do último sono (HRV, frequência cardíaca, fases): ${JSON.stringify(wearable)}
+      const system = `Você é o Dr. Claude, assistente de saúde pessoal. Com base em TODOS os dados abaixo, escreva um resumo de NO MÁXIMO 3 linhas (curto, direto, em ${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre o estado geral de saúde da pessoa AGORA, terminando com uma recomendação prática pro dia/semana. Tom acolhedor mas objetivo, como o resumo diário de um app de wearable. Cruze os sinais do anel (ex.: FC de repouso subindo + HRV caindo + temperatura acima = possível doença/sobrecarga; SpO2 baixo ou índice de distúrbio respiratório alto = vale falar com um médico; idade vascular acima da idade real = atenção cardiovascular; muito estresse sem recuperação). IMPORTANTE: considere os achados dos exames (laboratoriais e de imagem, campo "Histórico de exames" abaixo) com o MESMO peso dos indicadores numéricos — não foque só em números; laudos, condições registradas, a tendência de 30 dias do wearable (campo "trend30d" abaixo) e o histórico narrativo do paciente são igualmente relevantes. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado, trabalhe com o que tiver e não invente. Responda em texto puro, sem markdown, sem aspas.
+Wearable (Oura + Apple Health): últimos 7 dias em detalhe (notas e seus contribuidores, sono, SpO2, respiração, FC e HRV, FC contínua do dia, estresse/recuperação, resiliência, idade vascular, VO2 máx, atividade, treinos), tendência de 30 dias vs 30 anteriores, último sono, horário ideal de dormir e perfil: ${JSON.stringify(wearable)}
 Indicadores de exames recentes: ${JSON.stringify(metrics)}
 Histórico de exames (laboratoriais e de imagem, com achados quando já analisados): ${JSON.stringify(examHistory)}
 Condições ativas: ${JSON.stringify(conditions)}
@@ -5822,6 +5851,7 @@ Data de hoje: ${today}`;
       {ouraOn && <div style={{ fontSize: 11, color: C.text3, textAlign: 'center', marginBottom: 8, display: 'flex', gap: 5, alignItems: 'center', justifyContent: 'center' }}><Activity size={11} style={{ color: C.green }} />{t('ouraSynced')}</div>}
 
       {ouraOn && (lastSleep ? <SleepCard s={lastSleep} lang={lang} t={t} /> : <div style={{ ...card, padding: 16, marginBottom: 10, color: C.text3, fontSize: 12.5, textAlign: 'center' }}>{t('noSleepData')}</div>)}
+      {ouraOn && <OuraInsights health={health} extra={ouraExtra} lang={lang} />}
       {hasAppleExtra && (
         <div style={{ ...card, padding: 14, marginBottom: 10 }}>
           <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 10 }}>
@@ -6050,7 +6080,7 @@ function DietScreen({ items, lang, t, back, addItem, delItem, onOpen, flash, die
     try {
       const last14 = meals.filter((m) => m.date >= addDays(today, -14)).map((m) => ({ date: m.date, title: m.title, calories: m.meta && m.meta.calories, proteinG: m.meta && m.meta.proteinG }));
       const exList = items.filter((i) => i.type === 'exercise' && i.date >= addDays(today, -14)).map((i) => ({ date: i.date, activity: i.meta && i.meta.activityType, durationMin: i.meta && i.meta.durationMin, distanceKm: i.meta && i.meta.distanceKm }));
-      const activity14 = Object.entries(health || {}).filter(([d]) => d >= addDays(today, -14)).map(([d, v]) => ({ date: d, steps: v.steps, activityScore: v.activity }));
+      const activity14 = Object.entries(health || {}).filter(([d]) => d >= addDays(today, -14)).map(([d, v]) => ({ date: d, steps: v.steps, activityScore: v.activity, activeCalories: v.activeCalories, totalCalories: v.totalCalories, sedentaryMin: v.sedentaryMin, highActivityMin: v.highActivityMin, mediumActivityMin: v.mediumActivityMin, ouraWorkouts: v.ouraWorkouts, vo2max: v.vo2max }));
       const system = `Você é o Dr. Claude, personal trainer/nutricionista pessoal embutido num app de vida pessoal. Com base nas refeições, atividades físicas registradas E nos passos/pontuação de atividade do wearable dos últimos 14 dias, escreva NO MÁXIMO 3 linhas (${lang === 'pt' ? 'português do Brasil' : 'English'}) sobre como a dieta e a rotina de exercícios estão indo, terminando com 1-2 dicas práticas. Cruze calorias consumidas com o nível de atividade (passos/pontuação) — não julgue só a dieta isolada. Tom acolhedor mas direto, como o resumo diário de um app de wearable. NUNCA dê diretiva médica formal — é observação, não diagnóstico. Se faltar dado (poucos registros), diga isso e incentive registrar mais. Responda em texto puro, sem markdown, sem aspas.
 Refeições (14d): ${JSON.stringify(last14)}
 Atividades físicas registradas (14d): ${JSON.stringify(exList)}
@@ -6128,6 +6158,330 @@ Hoje: ${today}`;
   );
 }
 
+/* ---------------- Oura: tudo além de prontidão/sono/passos ----------------
+   Dados vindos de fetchOuraData (lib/oura.js): por dia em "health" (histórico fundido —
+   SpO2, respiração, FC, estresse, resiliência, idade vascular, VO2 máx, atividade detalhada,
+   contribuidores das notas, treinos/sessões) e o que não é por dia em "extra" (curva de FC das
+   últimas 24h, horário ideal de dormir, perfil, modo descanso, status de cada endpoint). Cada
+   bloco some sozinho quando ainda não há dado — ex.: conta sem o escopo novo, ou anel que não
+   mede aquilo. */
+const OURA_CONTRIB_LABELS = {
+  activity_balance: ['Equilíbrio de atividade', 'Activity balance'], body_temperature: ['Temperatura corporal', 'Body temperature'],
+  hrv_balance: ['Equilíbrio de HRV', 'HRV balance'], previous_day_activity: ['Atividade de ontem', 'Previous day activity'],
+  previous_night: ['Noite anterior', 'Previous night'], recovery_index: ['Índice de recuperação', 'Recovery index'],
+  resting_heart_rate: ['FC de repouso', 'Resting heart rate'], sleep_balance: ['Equilíbrio de sono', 'Sleep balance'],
+  sleep_regularity: ['Regularidade do sono', 'Sleep regularity'],
+  deep_sleep: ['Sono profundo', 'Deep sleep'], efficiency: ['Eficiência', 'Efficiency'], latency: ['Latência', 'Latency'],
+  rem_sleep: ['Sono REM', 'REM sleep'], restfulness: ['Tranquilidade', 'Restfulness'], timing: ['Horário', 'Timing'], total_sleep: ['Sono total', 'Total sleep'],
+  sleep_recovery: ['Recuperação no sono', 'Sleep recovery'], daytime_recovery: ['Recuperação diurna', 'Daytime recovery'], stress: ['Estresse', 'Stress'],
+  meet_daily_targets: ['Metas diárias', 'Daily targets'], move_every_hour: ['Mexer-se a cada hora', 'Move every hour'],
+  recovery_time: ['Tempo de recuperação', 'Recovery time'], stay_active: ['Manter-se ativo', 'Stay active'],
+  training_frequency: ['Frequência de treino', 'Training frequency'], training_volume: ['Volume de treino', 'Training volume'],
+};
+const OURA_RESILIENCE = { limited: ['Limitada', 'Limited'], adequate: ['Adequada', 'Adequate'], solid: ['Sólida', 'Solid'], strong: ['Forte', 'Strong'], exceptional: ['Excepcional', 'Exceptional'] };
+const OURA_STRESS_SUMMARY = { restored: ['Dia restaurador', 'Restored'], normal: ['Dia normal', 'Normal'], stressful: ['Dia estressante', 'Stressful'] };
+const OURA_SESSION_TYPE = { breathing: ['Respiração', 'Breathing'], meditation: ['Meditação', 'Meditation'], nap: ['Cochilo', 'Nap'], relaxation: ['Relaxamento', 'Relaxation'], rest: ['Descanso', 'Rest'], body_status: ['Status do corpo', 'Body status'] };
+const OURA_INTENSITY = { easy: ['leve', 'easy'], moderate: ['moderado', 'moderate'], hard: ['intenso', 'hard'] };
+const OURA_BEDTIME_REC = {
+  improve_efficiency: ['Melhore a eficiência do sono antes de mexer no horário', 'Improve sleep efficiency first'],
+  earlier_bedtime: ['Tente deitar mais cedo', 'Try going to bed earlier'], later_bedtime: ['Tente deitar mais tarde', 'Try going to bed later'],
+  earliest_bedtime: ['Deite no começo da janela', 'Go to bed at the start of the window'], latest_bedtime: ['Deite no fim da janela', 'Go to bed at the end of the window'],
+  follow_optimal_bedtime: ['Siga a janela ideal', 'Follow your optimal bedtime'],
+};
+const OURA_BEDTIME_STATUS = {
+  not_enough_nights: ['Ainda poucas noites registradas pra calcular', 'Not enough nights yet'],
+  not_enough_recent_nights: ['Poucas noites recentes pra calcular', 'Not enough recent nights'],
+  bad_sleep_quality: ['Qualidade de sono baixa atrapalha o cálculo', 'Low sleep quality'],
+  only_recommended_found: ['Janela recomendada (ainda não a ideal)', 'Recommended window (not optimal yet)'],
+  optimal_found: ['Janela ideal encontrada', 'Optimal window found'],
+};
+const ouraL = (map, k, lang) => (map[k] ? map[k][lang === 'pt' ? 0 : 1] : String(k || '').replace(/_/g, ' '));
+const HR_SRC_COLOR = (src) => ({ sleep: C.violet, workout: C.rose, rest: C.teal, session: C.green, live: C.sky }[src] || C.blue);
+// "-3600" (segundos a partir da meia-noite; negativo = na véspera) -> "23:00"
+const offsetToHM = (off) => {
+  if (off == null) return '—';
+  const s = ((off % 86400) + 86400) % 86400;
+  return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}`;
+};
+const minToHM = (m) => (m == null ? '—' : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m}min`);
+
+// último dia (até hoje) que tem o campo, com a média dos 30 dias anteriores a ele pra comparação
+function ouraLatest(health, key, today) {
+  const dates = Object.keys(health || {}).filter((d) => d <= today && typeof (health[d] || {})[key] === 'number').sort();
+  if (!dates.length) return null;
+  const date = dates[dates.length - 1];
+  const prev = dates.filter((d) => d < date && d >= addDays(date, -30)).map((d) => health[d][key]);
+  const avg30 = prev.length >= 3 ? Math.round((prev.reduce((a, b) => a + b, 0) / prev.length) * 10) / 10 : null;
+  return { date, value: health[date][key], avg30 };
+}
+
+function OuraCardHead({ icon: Icon, color, title, right }) {
+  return (
+    <div style={{ display: 'flex', gap: 7, alignItems: 'center', marginBottom: 10 }}>
+      <Icon size={14} style={{ color }} />
+      <span style={{ flex: 1, fontSize: 11.5, fontWeight: 700, color: C.text2, textTransform: 'uppercase', letterSpacing: '.04em' }}>{title}</span>
+      {right && <span style={{ fontSize: 11, color: C.text3 }}>{right}</span>}
+    </div>
+  );
+}
+
+function ContribBars({ contrib, lang }) {
+  const rows = Object.entries(contrib || {}).sort((a, b) => a[1] - b[1]);
+  return (
+    <div style={{ display: 'grid', gap: 6 }}>
+      {rows.map(([k, v]) => {
+        const col = v >= 85 ? C.green : v >= 70 ? C.blue : v >= 60 ? C.sky : C.rose;
+        return (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11.5 }}>
+            <span style={{ width: 150, color: C.text2, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ouraL(OURA_CONTRIB_LABELS, k, lang)}</span>
+            <div style={{ flex: 1, height: 6, borderRadius: 999, background: C.surface2, overflow: 'hidden' }}><div style={{ width: Math.max(2, Math.min(100, v)) + '%', height: '100%', background: col }} /></div>
+            <span style={{ width: 24, textAlign: 'right', fontWeight: 700, fontFamily: 'ui-monospace,Menlo,monospace' }}>{v}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function HeartRate24h({ series, dayStats, lang }) {
+  const pt = lang === 'pt';
+  if (!series || series.length < 3) return null;
+  const W = 320, H = 90, now = Date.now(), from = now - 24 * 3600000;
+  const bpms = series.map((p) => p[1]);
+  const lo = Math.min(...bpms) - 4, hi = Math.max(...bpms) + 4, span = hi - lo || 1;
+  const x = (ms) => ((ms - from) / (now - from)) * W;
+  const y = (b) => H - ((b - lo) / span) * (H - 8) - 4;
+  // quebra a linha onde faltam mais de 15 min de leitura (anel fora do dedo, carregando…)
+  const segs = [];
+  series.forEach((p, i) => {
+    const prev = series[i - 1];
+    if (!prev || p[0] - prev[0] > 15 * 60000 || prev[2] !== p[2]) segs.push({ src: p[2], pts: prev && p[0] - prev[0] <= 15 * 60000 ? [prev] : [] });
+    segs[segs.length - 1].pts.push(p);
+  });
+  const srcs = [...new Set(series.map((p) => p[2]))];
+  const srcLabel = { awake: pt ? 'acordado' : 'awake', sleep: pt ? 'sono' : 'sleep', rest: pt ? 'repouso' : 'rest', workout: pt ? 'treino' : 'workout', session: pt ? 'sessão' : 'session', live: pt ? 'ao vivo' : 'live' };
+  const hours = [0, 6, 12, 18, 24].map((h) => from + h * 3600000);
+  return (
+    <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+      <OuraCardHead icon={HeartPulse} color={C.rose} title={pt ? 'Frequência cardíaca · 24h' : 'Heart rate · 24h'} right={series.length ? `${bpms[bpms.length - 1]} bpm` : null} />
+      <svg viewBox={`0 0 ${W} ${H + 14}`} style={{ width: '100%', height: 'auto', display: 'block' }}>
+        {segs.map((s, i) => <path key={i} d={s.pts.map((p, j) => (j ? 'L' : 'M') + x(p[0]).toFixed(1) + ',' + y(p[1]).toFixed(1)).join(' ')} fill="none" stroke={HR_SRC_COLOR(s.src)} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />)}
+        {hours.map((ms, i) => <text key={i} x={Math.min(W - 24, Math.max(0, x(ms) - 12))} y={H + 12} fontSize="8.5" fill={C.text3}>{new Date(ms).toLocaleTimeString(pt ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</text>)}
+      </svg>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, margin: '6px 0 10px' }}>
+        {srcs.map((s) => <span key={s} style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 10.5, color: C.text2 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: HR_SRC_COLOR(s) }} />{srcLabel[s] || s}</span>)}
+      </div>
+      {dayStats && (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <MiniStat label={pt ? 'Mín hoje' : 'Min today'} value={dayStats.hrMin ?? '—'} color={C.teal} small />
+          <MiniStat label={pt ? 'Média' : 'Avg'} value={dayStats.hrAvg ?? '—'} color={C.blue} small />
+          <MiniStat label={pt ? 'Acordado' : 'Awake'} value={dayStats.hrAwakeAvg ?? '—'} color={C.violet} small />
+          <MiniStat label={pt ? 'Máx' : 'Max'} value={dayStats.hrMax ?? '—'} color={C.rose} small />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OuraSpark({ health, k, label, unit, color, today, lang, invert }) {
+  const days = [];
+  for (let i = 29; i >= 0; i--) { const d = addDays(today, -i); const v = (health[d] || {})[k]; days.push(typeof v === 'number' ? v : null); }
+  const vals = days.filter((v) => v != null);
+  if (vals.length < 2) return null;
+  const lo = Math.min(...vals), hi = Math.max(...vals), span = hi - lo || 1;
+  const W = 120, H = 30;
+  let d = ''; let pen = false;
+  days.forEach((v, i) => {
+    if (v == null) { pen = false; return; }
+    const px = (i / 29) * W, py = H - ((v - lo) / span) * (H - 4) - 2;
+    d += (pen ? 'L' : 'M') + px.toFixed(1) + ',' + py.toFixed(1) + ' '; pen = true;
+  });
+  const last = vals[vals.length - 1];
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const up = last > avg;
+  const good = invert ? !up : up;
+  const fmt = (n) => (Math.abs(n) < 10 && n % 1 ? n.toFixed(1) : Math.round(n)).toLocaleString(lang === 'pt' ? 'pt-BR' : 'en-US');
+  return (
+    <div style={{ background: C.bg2, borderRadius: 12, padding: '10px 10px 8px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 6 }}>
+        <span style={{ fontSize: 10.5, color: C.text2, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color }}>{fmt(last)}{unit ? <span style={{ fontSize: 10, fontWeight: 500, color: C.text3 }}> {unit}</span> : null}</span>
+      </div>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ width: '100%', height: 30, display: 'block', marginTop: 4 }}><path d={d} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" /></svg>
+      <div style={{ fontSize: 10, color: C.text3, marginTop: 2 }}>{lang === 'pt' ? 'média 30d' : '30d avg'} {fmt(avg)} <span style={{ color: Math.abs(last - avg) < span * 0.1 ? C.text3 : good ? C.green : C.rose }}>{up ? '▲' : '▼'}</span></div>
+    </div>
+  );
+}
+
+function OuraInsights({ health, extra, lang }) {
+  const pt = lang === 'pt';
+  const today = todayISO();
+  const h = health || {};
+  const w = h[today] || {};
+  const ex = extra || {};
+  const L = (k) => ouraLatest(h, k, today);
+  const spo2 = L('spo2'), resp = L('respRate'), lowHR = L('sleepLowestHR'), hrv = L('sleepHRV'), temp = L('tempDeviation'), bdi = L('breathingDisturbance');
+  const vasc = L('vascularAge'), vo2 = L('vo2max');
+  const stressDay = [today, addDays(today, -1)].find((d) => h[d] && (h[d].stressHighMin != null || h[d].recoveryHighMin != null));
+  const st = stressDay ? h[stressDay] : null;
+  const resDay = [today, addDays(today, -1), addDays(today, -2)].find((d) => h[d] && h[d].resilience);
+  const res = resDay ? h[resDay] : null;
+  const contribDay = [today, addDays(today, -1)].find((d) => h[d] && (h[d].readinessContrib || h[d].sleepContrib));
+  const contrib = contribDay ? h[contribDay] : null;
+  const actDay = [today, addDays(today, -1)].find((d) => h[d] && (h[d].activeCalories != null || h[d].sedentaryMin != null));
+  const act = actDay ? h[actDay] : null;
+  const week = Object.keys(h).filter((d) => d >= addDays(today, -7) && d <= today).sort().reverse();
+  const workouts = week.flatMap((d) => (h[d].ouraWorkouts || []).map((x) => ({ ...x, day: d })));
+  const sessions = week.flatMap((d) => (h[d].ouraSessions || []).map((x) => ({ ...x, day: d })));
+  const missing = ex.sources ? Object.entries(ex.sources).filter(([, v]) => v === 'sem permissão').map(([k]) => k) : [];
+  const age = ex.personal && ex.personal.age;
+  const sub = (x, unit = '') => (x && x.avg30 != null ? `${pt ? 'média 30d' : '30d avg'} ${x.avg30}${unit}` : x && x.date !== today ? fmtDate(x.date, lang) : null);
+  const vitals = [
+    spo2 && { label: 'SpO2', value: spo2.value + '%', sub: sub(spo2, '%'), color: spo2.value < 94 ? C.rose : C.blue },
+    resp && { label: pt ? 'Respiração' : 'Breathing', value: resp.value + (pt ? ' rpm' : ' br/min'), sub: sub(resp), color: C.teal },
+    lowHR && { label: pt ? 'FC mín sono' : 'Sleep min HR', value: lowHR.value + ' bpm', sub: sub(lowHR), color: C.rose },
+    hrv && { label: pt ? 'HRV sono' : 'Sleep HRV', value: hrv.value + ' ms', sub: sub(hrv), color: C.violet },
+    temp && { label: pt ? 'Temp. (desvio)' : 'Temp. deviation', value: (temp.value > 0 ? '+' : '') + temp.value + '°C', sub: sub(temp, '°C'), color: Math.abs(temp.value) >= 0.5 ? C.sky : C.green },
+    bdi && { label: pt ? 'Distúrbio resp.' : 'Breathing dist.', value: String(bdi.value), sub: pt ? 'índice (BDI)' : 'index (BDI)', color: bdi.value >= 15 ? C.rose : C.green },
+  ].filter(Boolean);
+  const stressTot = st ? (st.stressHighMin || 0) + (st.recoveryHighMin || 0) : 0;
+  const resLevels = ['limited', 'adequate', 'solid', 'strong', 'exceptional'];
+  const hasTrends = ['spo2', 'respRate', 'sleepHRV', 'sleepLowestHR', 'stressHighMin', 'tempDeviation', 'hrAwakeAvg', 'sedentaryMin'].some((k) => Object.keys(h).filter((d) => d >= addDays(today, -30) && typeof (h[d] || {})[k] === 'number').length >= 2);
+  const actBar = act ? [['high', act.highActivityMin, C.rose, pt ? 'Alta' : 'High'], ['med', act.mediumActivityMin, C.sky, pt ? 'Média' : 'Medium'], ['low', act.lowActivityMin, C.teal, pt ? 'Leve' : 'Low']].filter((x) => x[1]) : [];
+  const actTot = actBar.reduce((a, b) => a + b[1], 0) || 1;
+
+  return (
+    <>
+      {ex.restMode && <HintCard icon={Moon} text={pt ? `Modo descanso ativo desde ${fmtDate(ex.restMode.since, lang)} — a Oura pausou metas de atividade e está focada em recuperação.` : `Rest mode on since ${fmtDate(ex.restMode.since, lang)}.`} />}
+      {missing.length > 0 && <HintCard icon={AlertTriangle} text={pt ? `A Oura não liberou: ${missing.join(', ')}. Reconecte a Oura em Ajustes → Conexões pra autorizar os dados novos.` : `Oura didn't grant: ${missing.join(', ')}. Reconnect Oura in Settings.`} />}
+
+      {/* grade: 1 coluna no celular, 2+ no desktop (a aba Saúde lá chega a 940px+) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 360px), 1fr))', columnGap: 10 }}>
+      {vitals.length > 0 && (
+        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+          <OuraCardHead icon={Activity} color={C.blue} title={pt ? 'Sinais vitais (Oura)' : 'Vitals (Oura)'} right={pt ? 'durante o sono' : 'during sleep'} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
+            {vitals.map((v) => <MiniStat key={v.label} label={v.label} value={v.value} sub={v.sub} color={v.color} small />)}
+          </div>
+        </div>
+      )}
+
+      <HeartRate24h series={ex.hr24h} dayStats={w.hrMin != null ? w : null} lang={lang} />
+
+      {(st || res) && (
+        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+          <OuraCardHead icon={Brain} color={C.violet} title={pt ? 'Estresse & resiliência' : 'Stress & resilience'} right={st && st.stressSummary ? ouraL(OURA_STRESS_SUMMARY, st.stressSummary, lang) : null} />
+          {st && (
+            <>
+              <div style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: C.surface2, marginBottom: 6 }}>
+                {stressTot > 0 && <div style={{ width: ((st.stressHighMin || 0) / stressTot) * 100 + '%', background: C.sky }} />}
+                {stressTot > 0 && <div style={{ width: ((st.recoveryHighMin || 0) / stressTot) * 100 + '%', background: C.teal }} />}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: C.text2, marginBottom: res ? 12 : 0 }}>
+                <span><span style={{ color: C.sky, fontWeight: 700 }}>{minToHM(st.stressHighMin || 0)}</span> {pt ? 'estresse alto' : 'high stress'}</span>
+                <span><span style={{ color: C.teal, fontWeight: 700 }}>{minToHM(st.recoveryHighMin || 0)}</span> {pt ? 'recuperação' : 'recovery'}</span>
+              </div>
+            </>
+          )}
+          {res && (
+            <>
+              <div style={{ fontSize: 11.5, color: C.text2, marginBottom: 6 }}>{pt ? 'Resiliência' : 'Resilience'}: <b style={{ color: C.text }}>{ouraL(OURA_RESILIENCE, res.resilience, lang)}</b></div>
+              <div style={{ display: 'flex', gap: 3, marginBottom: res.resilienceContrib ? 10 : 0 }}>
+                {resLevels.map((lv, i) => <div key={lv} style={{ flex: 1, height: 6, borderRadius: 999, background: i <= resLevels.indexOf(res.resilience) ? C.violet : C.surface2 }} />)}
+              </div>
+              {res.resilienceContrib && <ContribBars contrib={res.resilienceContrib} lang={lang} />}
+            </>
+          )}
+        </div>
+      )}
+
+      {(vasc || vo2) && (
+        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+          <OuraCardHead icon={Heart} color={C.rose} title={pt ? 'Saúde cardiovascular' : 'Heart health'} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            {vasc && <MiniStat label={pt ? 'Idade vascular' : 'Vascular age'} value={vasc.value + (pt ? ' anos' : ' y')} color={age && vasc.value > age ? C.sky : C.green} small sub={age ? (vasc.value === age ? (pt ? 'igual à sua idade' : 'same as your age') : `${Math.abs(vasc.value - age)} ${pt ? 'anos' : 'y'} ${vasc.value < age ? (pt ? 'mais jovem' : 'younger') : (pt ? 'mais velha' : 'older')}`) : null} />}
+            {vo2 && <MiniStat label="VO2 máx" value={vo2.value} color={C.blue} small sub={vo2.avg30 != null ? `${pt ? 'média 30d' : '30d avg'} ${vo2.avg30}` : 'ml/kg/min'} />}
+          </div>
+        </div>
+      )}
+
+      {act && (
+        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+          <OuraCardHead icon={Flame} color={C.sky} title={pt ? 'Atividade detalhada' : 'Activity detail'} right={actDay !== today ? fmtDate(actDay, lang) : null} />
+          <div style={{ display: 'flex', gap: 8, marginBottom: actBar.length ? 12 : 0 }}>
+            <MiniStat label={pt ? 'Cal. ativas' : 'Active kcal'} value={act.activeCalories ?? '—'} sub={act.targetCalories ? `${pt ? 'meta' : 'goal'} ${act.targetCalories}` : null} color={C.sky} small />
+            <MiniStat label={pt ? 'Cal. totais' : 'Total kcal'} value={act.totalCalories ?? '—'} color={C.rose} small />
+            <MiniStat label={pt ? 'Distância' : 'Distance'} value={act.walkingDistanceKm != null ? act.walkingDistanceKm + ' km' : '—'} color={C.green} small />
+            <MiniStat label={pt ? 'Sentado' : 'Sedentary'} value={minToHM(act.sedentaryMin)} sub={act.inactivityAlerts ? `${act.inactivityAlerts} ${pt ? 'alertas' : 'alerts'}` : null} color={C.text2} small />
+          </div>
+          {actBar.length > 0 && (
+            <>
+              <div style={{ display: 'flex', height: 8, borderRadius: 999, overflow: 'hidden', marginBottom: 7 }}>{actBar.map(([k, v, col]) => <div key={k} style={{ width: (v / actTot) * 100 + '%', background: col }} />)}</div>
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>{actBar.map(([k, v, col, lb]) => <span key={k} style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: 11.5 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: col }} /><span style={{ color: C.text2 }}>{lb}</span><b>{minToHM(v)}</b></span>)}</div>
+            </>
+          )}
+        </div>
+      )}
+
+      {contrib && (
+        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+          <OuraCardHead icon={Sparkles} color={C.green} title={pt ? 'O que puxou as notas' : 'What drove the scores'} right={contribDay !== today ? fmtDate(contribDay, lang) : null} />
+          {contrib.readinessContrib && <><div style={{ fontSize: 11.5, fontWeight: 700, color: C.green, marginBottom: 6 }}>{pt ? 'Prontidão' : 'Readiness'} {contrib.readiness != null ? `· ${contrib.readiness}` : ''}</div><ContribBars contrib={contrib.readinessContrib} lang={lang} /></>}
+          {contrib.sleepContrib && <><div style={{ fontSize: 11.5, fontWeight: 700, color: C.violet, margin: contrib.readinessContrib ? '12px 0 6px' : '0 0 6px' }}>{pt ? 'Sono' : 'Sleep'} {contrib.sleep != null ? `· ${contrib.sleep}` : ''}</div><ContribBars contrib={contrib.sleepContrib} lang={lang} /></>}
+        </div>
+      )}
+
+      {ex.sleepTime && (ex.sleepTime.optimalStart != null || ex.sleepTime.status) && (
+        <div style={{ ...card, padding: 14, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: C.violet + '1e', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><Moon size={17} style={{ color: C.violet }} /></div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 11, color: C.text3, textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700 }}>{pt ? 'Horário ideal pra dormir' : 'Optimal bedtime'}</div>
+            {ex.sleepTime.optimalStart != null && <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{offsetToHM(ex.sleepTime.optimalStart)} – {offsetToHM(ex.sleepTime.optimalEnd)}</div>}
+            <div style={{ fontSize: 11.5, color: C.text2, marginTop: 2 }}>{ex.sleepTime.recommendation ? ouraL(OURA_BEDTIME_REC, ex.sleepTime.recommendation, lang) : ouraL(OURA_BEDTIME_STATUS, ex.sleepTime.status, lang)}</div>
+          </div>
+        </div>
+      )}
+
+      {(workouts.length > 0 || sessions.length > 0) && (
+        <div style={{ ...card, padding: 14, marginBottom: 10 }}>
+          <OuraCardHead icon={Dumbbell} color={C.rose} title={pt ? 'Treinos e sessões · 7 dias (Oura)' : 'Workouts & sessions · 7d (Oura)'} />
+          {workouts.slice(0, 8).map((x, i) => (
+            <div key={'w' + i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, padding: '6px 0', borderTop: i ? `1px solid ${C.borderSoft}` : 'none' }}>
+              <Dumbbell size={13} style={{ color: C.rose, flexShrink: 0 }} />
+              <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'capitalize' }}>{x.label || String(x.activity || '').replace(/_/g, ' ')}{x.intensity ? <span style={{ color: C.text3, textTransform: 'none' }}> · {ouraL(OURA_INTENSITY, x.intensity, lang)}</span> : null}</span>
+              <span style={{ color: C.text3, fontSize: 11.5, whiteSpace: 'nowrap' }}>{fmtDate(x.day, lang)} · {minToHM(x.min)}{x.kcal ? ` · ${x.kcal} kcal` : ''}{x.km ? ` · ${x.km} km` : ''}</span>
+            </div>
+          ))}
+          {sessions.slice(0, 6).map((x, i) => (
+            <div key={'s' + i} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, padding: '6px 0', borderTop: i || workouts.length ? `1px solid ${C.borderSoft}` : 'none' }}>
+              <Wind size={13} style={{ color: C.teal, flexShrink: 0 }} />
+              <span style={{ flex: 1 }}>{ouraL(OURA_SESSION_TYPE, x.type, lang)}</span>
+              <span style={{ color: C.text3, fontSize: 11.5, whiteSpace: 'nowrap' }}>{fmtDate(x.day, lang)} · {minToHM(x.min)}{x.hrAvg ? ` · ${x.hrAvg} bpm` : ''}{x.hrvAvg ? ` · HRV ${x.hrvAvg}` : ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasTrends && (
+        <div style={{ ...card, padding: 14, marginBottom: 10, gridColumn: '1 / -1' }}>
+          <OuraCardHead icon={TrendingUp} color={C.accent} title={pt ? 'Tendências · 30 dias' : 'Trends · 30 days'} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(158px, 1fr))', gap: 8 }}>
+            <OuraSpark health={h} k="spo2" label="SpO2" unit="%" color={C.blue} today={today} lang={lang} />
+            <OuraSpark health={h} k="respRate" label={pt ? 'Respiração' : 'Breathing'} unit="rpm" color={C.teal} today={today} lang={lang} invert />
+            <OuraSpark health={h} k="sleepHRV" label={pt ? 'HRV sono' : 'Sleep HRV'} unit="ms" color={C.violet} today={today} lang={lang} />
+            <OuraSpark health={h} k="sleepLowestHR" label={pt ? 'FC mín sono' : 'Sleep min HR'} unit="bpm" color={C.rose} today={today} lang={lang} invert />
+            <OuraSpark health={h} k="hrAwakeAvg" label={pt ? 'FC acordado' : 'Awake HR'} unit="bpm" color={C.rose} today={today} lang={lang} invert />
+            <OuraSpark health={h} k="stressHighMin" label={pt ? 'Estresse alto' : 'High stress'} unit="min" color={C.sky} today={today} lang={lang} invert />
+            <OuraSpark health={h} k="tempDeviation" label={pt ? 'Temperatura' : 'Temperature'} unit="°C" color={C.sky} today={today} lang={lang} invert />
+            <OuraSpark health={h} k="sedentaryMin" label={pt ? 'Sentado' : 'Sedentary'} unit="min" color={C.text2} today={today} lang={lang} invert />
+          </div>
+        </div>
+      )}
+      </div>
+    </>
+  );
+}
+
 function SleepCard({ s, lang, t }) {
   const hm = (sec) => (sec == null ? '—' : `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`);
   const parts = [['deep', s.deep, C.violet, t('deepS')], ['rem', s.rem, C.blue, t('remS')], ['light', s.light, C.teal, t('lightS')], ['awake', s.awake, C.text3, t('awakeS')]];
@@ -6166,6 +6520,14 @@ function SleepCard({ s, lang, t }) {
           {s.efficiency != null && <MiniStat label={t('efficiency')} value={s.efficiency + '%'} color={C.green} />}
           {s.hrLowest != null && <MiniStat label="FC mín" value={s.hrLowest} color={C.rose} />}
           {s.hrv != null && <MiniStat label="HRV" value={s.hrv} color={C.blue} />}
+        </div>
+      )}
+      {(s.respRate != null || s.latency != null || s.timeInBed || s.restless != null) && (
+        <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+          {s.respRate != null && <MiniStat label={lang === 'pt' ? 'Respiração' : 'Breathing'} value={s.respRate} sub="rpm" color={C.teal} small />}
+          {s.latency != null && <MiniStat label={lang === 'pt' ? 'Pra dormir' : 'Latency'} value={Math.round(s.latency / 60) + 'min'} color={C.violet} small />}
+          {s.timeInBed ? <MiniStat label={lang === 'pt' ? 'Na cama' : 'In bed'} value={hm(s.timeInBed)} color={C.text2} small /> : null}
+          {s.restless != null && <MiniStat label={lang === 'pt' ? 'Inquieto' : 'Restless'} value={s.restless} sub={lang === 'pt' ? 'períodos' : 'periods'} color={C.sky} small />}
         </div>
       )}
     </div>
@@ -8440,6 +8802,17 @@ function Connections({ lang, t, onOuraSync }) {
         <Row id="ticktick" label="TickTick" icon={ListTodo} color={C.green} />
         <Row id="mercadolivre" label="Mercado Livre" icon={ShoppingCart} color={C.accent} />
       </ResponsiveGrid>
+      {st.oura && st.oura.connected && st.oura.missingScopes && st.oura.missingScopes.length > 0 && (
+        <div style={{ ...card, padding: 12, marginBottom: 8, display: 'flex', gap: 10, alignItems: 'center', borderColor: C.sky + '55' }}>
+          <AlertTriangle size={15} style={{ color: C.sky, flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: 12, color: C.text2, lineHeight: 1.45 }}>
+            {lang === 'pt'
+              ? 'A Oura tem dados novos pra liberar (SpO2, frequência cardíaca contínua, estresse, treinos, idade vascular…). Reconecte pra autorizar.'
+              : 'Oura has new data to unlock (SpO2, continuous heart rate, stress, workouts, vascular age…). Reconnect to authorize.'}
+          </div>
+          <Btn kind="soft" onClick={() => start('oura')} disabled={busy === 'oura'} style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}>{busy === 'oura' ? '…' : (lang === 'pt' ? 'Reconectar' : 'Reconnect')}</Btn>
+        </div>
+      )}
       {st.oura && st.oura.connected && <OuraWebhookSetup lang={lang} onOuraSync={onOuraSync} />}
     </>
   );
@@ -8979,6 +9352,7 @@ function App() {
   const [theme, setThemeState] = useState(_theme); const applyTheme = (name) => { setTheme(name); setThemeState(name); };
   const [ouraByDate, setOuraByDate] = useState({}); const [ouraOn, setOuraOn] = useState(false); const [lastSleep, setLastSleep] = useState(null);
   const [ouraBattery, setOuraBattery] = useState(null); // { level, charging, at } — ver fetchOuraBattery em lib/oura.js
+  const [ouraExtra, setOuraExtra] = useState(null); // FC 24h, horário ideal de dormir, perfil, modo descanso — ver fetchOuraData
   // histórico permanente de saúde (tabela health_daily — ver /api/health/history e
   // lib/healthDaily.js): diferente do cache de curta janela que a Oura/HealthKit devolvem,
   // isto nunca perde dias antigos e é a base usada tanto pra visão histórica quanto pro
@@ -8992,7 +9366,20 @@ function App() {
   // deixava a Hoje/Saúde com os dados antigos até um reload completo da página.
   const applyOuraData = (j) => {
     if (!j) return;
-    if (j.byDate) { setOuraByDate(j.byDate); setHealth((h) => ({ ...h, ...j.byDate })); }
+    if (j.byDate) {
+      setOuraByDate(j.byDate);
+      // settings.health (sincronizado entre aparelhos) guarda só as notas básicas — o resto
+      // (SpO2, FC, estresse, treinos...) já fica no histórico permanente health_daily do servidor,
+      // não precisa inflar as configurações. mergedHealth funde as camadas campo a campo.
+      const slim = {};
+      Object.entries(j.byDate).forEach(([d, v]) => {
+        const o = {};
+        ['readiness', 'sleep', 'activity', 'steps', 'tempDeviation'].forEach((k) => { if (v[k] != null) o[k] = v[k]; });
+        if (Object.keys(o).length) slim[d] = o;
+      });
+      setHealth((h) => { const n = { ...h }; Object.entries(slim).forEach(([d, o]) => { n[d] = { ...(h[d] || {}), ...o }; }); return n; });
+    }
+    if (j.extra) setOuraExtra(j.extra);
     if (j.lastSleep) setLastSleep(j.lastSleep);
     if (j.battery) setOuraBattery(j.battery);
     setOuraOn(!!j.connected);
@@ -9435,7 +9822,12 @@ function App() {
   // camada base: histórico permanente (health_daily, meses/anos) por dia; por cima, o que já
   // estava acumulado em settings.health e por fim a leitura mais fresca desta sessão (ouraByDate)
   // — cada camada só complementa/atualiza o dia, nunca perde o que a anterior já tinha.
-  const mergedHealth = { ...healthHistoryByDate, ...(settings.health || {}), ...ouraByDate };
+  // (campo a campo por dia: settings.health só tem as notas básicas, então substituir o dia
+  // inteiro apagaria SpO2/FC/estresse que vêm do histórico)
+  const mergedHealth = {};
+  [healthHistoryByDate, settings.health || {}, ouraByDate].forEach((layer) => {
+    Object.keys(layer).forEach((d) => { mergedHealth[d] = { ...(mergedHealth[d] || {}), ...layer[d] }; });
+  });
   // HealthKit tem prioridade só pro campo "steps" (dado mais fresco, sem o delay de sync da
   // Oura) — não pode sobrescrever o dia inteiro, senão perde readiness/sono que só a Oura tem.
   // "server" (funciona em qualquer plataforma) primeiro, "local" (só existe no próprio app iOS,
@@ -9454,7 +9846,7 @@ function App() {
     if (mo.custom === 'work') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><WorkScreen module={mo} {...shared} back={back} gmail={gmail} loadGmail={loadGmail} /></ErrorBoundary>;
     if (mo.custom === 'purchases') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><PurchasesScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
     if (mo.custom === 'finance') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><FinanceScreen module={mo} {...shared} back={back} /></ErrorBoundary>;
-    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
+    if (mo.custom === 'health') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HealthScreen module={mo} {...shared} back={back} health={mergedHealth} setHealth={setHealth} ouraOn={ouraOn} lastSleep={lastSleep} ouraExtra={ouraExtra} weights={settings.weights || []} addWeight={addWeight} profile={settings.profile || {}} setProfile={setProfile} goMedical={() => setActive({ screen: 'medical', module: null })} goDiet={() => setActive({ screen: 'diet', module: null })} goDocs={() => setActive({ screen: 'healthDocs', module: null })} healthSummary={settings.healthSummary} setHealthSummary={setHealthSummary} /></ErrorBoundary>;
     if (mo.custom === 'house') return <ErrorBoundary fallback={(msg) => <ModuleErrorCard t={t} back={back} module={mo} msg={msg} />}><HouseScreen module={mo} {...shared} back={back} devices={settings.devices || DEFAULT_DEVICES} setDevices={setDevices} tuyaPrefs={settings.tuyaPrefs || {}} setTuyaPrefs={setTuyaPrefs} scenes={settings.scenes || []} setScenes={setScenes} lastScene={settings.lastSceneRun || null} setLastScene={setLastSceneRun} /></ErrorBoundary>;
     if (mo.custom === 'kids') return <KidsScreen module={mo} {...shared} back={back} />;
     if (mo.custom === 'docs') return <DocsScreen module={mo} {...shared} back={back} />;
@@ -9567,7 +9959,7 @@ function App() {
         {active.screen === 'healthDocs' && <HealthDocsScreen items={allItems} lang={lang} t={t} back={() => setActive({ screen: 'dashboard', module: moduleByKey('health') })} onOpen={setDetail} />}
         {active.screen === 'messages' && <MessagesScreen {...shared} setItems={setItems} />}
         {active.screen === 'calendar' && <CalendarScreen {...shared} onRefresh={() => Promise.all([refreshGoogle(), loadGmail()])} onMount={() => { refreshGoogle(); loadGmail(); }} />}
-        {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} health={mergedHealth} lastSleep={lastSleep} />}
+        {active.screen === 'claude' && <ClaudeScreen items={allItems} lang={lang} t={t} name={settings.name} health={mergedHealth} lastSleep={lastSleep} ouraExtra={ouraExtra} />}
         {active.screen === 'dashboard' && (active.module ? renderModule(active.module) : <DashboardScreen items={allItems} lang={lang} t={t} gmailCount={gmail.messages.length} open={(mo) => setActive({ screen: 'dashboard', module: mo })} goNews={() => setActive({ screen: 'news', module: null })} order={settings.moduleOrder || []} setOrder={(o) => setSettings((st) => ({ ...st, moduleOrder: o }))} />)}
       </div>
       </div>
@@ -9604,7 +9996,7 @@ function App() {
         onUnsave={(n) => unsaveNewsItem(items.find((i) => i.type === 'note' && i.meta && i.meta.source === 'news' && i.meta.link === n.link))}
         onShare={sendNewsItem} />}
       {undo && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '8px 10px 8px 16px', borderRadius: 999, fontSize: 13, zIndex: 60, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 12, animation: 'slideup .2s ease' }}><span style={{ display: 'inline-flex', gap: 7, alignItems: 'center' }}><CircleCheck size={15} style={{ color: C.green }} />{t('doneLabel')}</span><button onClick={() => toggleTask(undo)} style={{ background: 'none', border: 'none', color: C.accent, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>{t('undo')}</button></div>}
-      {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} health={mergedHealth} lastSleep={lastSleep} />}
+      {claudeSeed && <ClaudeOverlay seed={claudeSeed} onClose={() => setClaudeSeed(null)} items={allItems} lang={lang} t={t} name={settings.name} health={mergedHealth} lastSleep={lastSleep} ouraExtra={ouraExtra} />}
       {toast && <div style={{ position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', maxWidth: 'calc(100vw - 32px)', width: 'max-content', background: C.surface2, border: `1px solid ${C.border}`, color: C.text, padding: '9px 16px', borderRadius: 16, fontSize: 13, lineHeight: 1.4, textAlign: 'center', zIndex: 60, whiteSpace: 'normal', wordBreak: 'break-word' }}>{toast}</div>}
       {!isOnline && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, background: C.sky, color: '#1A1200', textAlign: 'center', fontSize: 11.5, fontWeight: 600, padding: '6px 10px', zIndex: 90 }}>{lang === 'pt' ? 'Offline — vendo dados salvos no aparelho; alterações sincronizam ao reconectar' : 'Offline — showing data saved on this device; changes sync once back online'}</div>}
     </div>

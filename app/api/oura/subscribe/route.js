@@ -2,7 +2,7 @@ import { admin, userFromRequest, siteUrl, PROVIDERS } from '../../../../lib/oaut
 
 export const runtime = 'nodejs';
 
-const DATA_TYPES = ['daily_readiness', 'daily_sleep', 'daily_activity', 'sleep'];
+const DATA_TYPES = ['daily_readiness', 'daily_sleep', 'daily_activity', 'sleep', 'daily_spo2', 'daily_stress', 'workout', 'session', 'sleep_time', 'rest_mode_period'];
 const EVENT_TYPES = ['create', 'update'];
 
 function ouraAppHeaders() {
