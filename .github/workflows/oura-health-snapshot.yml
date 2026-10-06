@@ -1,11 +1,12 @@
 name: Oura health history snapshot
 
-# Roda de hora em hora e chama /api/cron/oura-snapshot no app publicado,
-# gravando o dia mais recente de todo mundo conectado à Oura no histórico
-# permanente de saúde (health_daily — ver schema8.sql). É uma rede de
-# segurança: o webhook da Oura já faz isso a cada sincronização do anel, mas
-# se um evento se perder, este cron garante que nenhum dia fique sem
-# registro histórico.
+# Roda 2x por dia (6h e 20h de Brasília = 09:00 e 23:00 UTC) e chama
+# /api/cron/oura-snapshot no app publicado: atualiza os dados da Oura e a
+# bateria do anel de todo mundo conectado, gravando no cache e no histórico
+# permanente de saúde (health_daily — ver schema8.sql). O webhook da Oura já
+# atualiza os dados a cada sincronização do anel; este cron é a rede de
+# segurança se um evento se perder e a única leitura agendada da bateria.
+# (O GitHub pode atrasar execuções agendadas em alguns minutos.)
 #
 # Mesmo esquema do mercadolivre-sync.yml/morning-brief.yml — contas Hobby da
 # Vercel só permitem cron nativo diário, não horário. Precisa dos mesmos
@@ -15,7 +16,7 @@ name: Oura health history snapshot
 
 on:
   schedule:
-    - cron: '30 * * * *'
+    - cron: '0 9,23 * * *'
   workflow_dispatch: {}
 
 jobs:

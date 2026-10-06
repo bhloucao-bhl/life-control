@@ -1,20 +1,20 @@
 import { admin, userFromRequest, validToken } from '../../../lib/oauth';
-import { fetchOuraData, fetchOuraBattery, saveOuraCache } from '../../../lib/oura';
-import { mergeHealthDaily } from '../../../lib/healthDaily';
+import { refreshOuraCache } from '../../../lib/oura';
 
 export const runtime = 'nodejs';
 
-// Se o cache (normalmente mantido fresco pelo webhook) ficar mais velho que
-// isso, busca ao vivo mesmo sem ninguem ter pedido — rede de seguranca caso
-// o webhook pare de chegar (assinatura expirada, evento perdido, etc).
-const STALE_MS = 3 * 60 * 60 * 1000; // 3h
+// Rede de segurança: o cache é mantido fresco pelo cron das 6h e das 20h (BRT) e pelo webhook a
+// cada sincronização do anel. Só busca ao vivo se o cache sumir ou ficar mais velho que isso —
+// ou seja, se o cron e o webhook pararem por mais de um dia. (Era 3h, o que fazia qualquer tela
+// aberta no desktop, atualizando a cada 10 min, ir à Oura várias vezes por dia.)
+const STALE_MS = 26 * 60 * 60 * 1000;
 
 /**
- * GET /api/oura -> { byDate: { 'YYYY-MM-DD': { readiness, sleep, spo2, ... } }, lastSleep, extra }
+ * GET /api/oura -> { byDate: { 'YYYY-MM-DD': { readiness, sleep, spo2, ... } }, lastSleep, extra, battery }
  * (campos: ver fetchOuraData em lib/oura.js)
- * Le do cache (populado pelo webhook assim que o anel sincroniza com o app).
- * Se ainda nao houver cache, se o cache estiver velho, ou se ?refresh=1,
- * busca ao vivo na Oura.
+ * Lê SEMPRE do cache (oura_cache, mantido pelo cron 2x/dia + webhook) — a bateria também, que
+ * vem da última leitura agendada. Só vai ao vivo na Oura se não houver cache, se ele estiver
+ * velho demais, ou se ?refresh=1 (botão "Atualizar agora" dos Ajustes).
  */
 export async function GET(req) {
   const user = await userFromRequest(req);
@@ -26,31 +26,35 @@ export async function GET(req) {
   const db = admin();
   const force = new URL(req.url).searchParams.get('refresh') === '1';
 
-  // bateria do anel: sempre ao vivo (não fica no cache), em paralelo com o resto
-  const batteryP = fetchOuraBattery(token).then(({ battery, error }) => ({ battery, batteryError: error }));
-
   if (!force) {
     const { data: cached } = await db.from('oura_cache').select('*').eq('user_id', user.id).maybeSingle();
     const fresh = cached && (Date.now() - new Date(cached.updated_at).getTime()) < STALE_MS;
     if (fresh) {
+      const extra = cached.extra || null;
       return Response.json({
         connected: true,
         byDate: cached.by_date || {},
         lastSleep: cached.last_sleep || null,
-        extra: cached.extra || null,
+        extra,
+        battery: (extra && extra.battery) || null,
+        batteryError: (extra && extra.batteryError) || null,
         cachedAt: cached.updated_at,
-        ...(await batteryP), // battery + batteryError (ver fetchOuraBattery)
       }, { headers: { 'Cache-Control': 'private, s-maxage=900' } });
     }
   }
 
-  const data = await fetchOuraData(token);
-  const { byDate, lastSleep, errors } = data;
-  await saveOuraCache(db, user.id, data);
-  // histórico permanente (ver lib/healthDaily.js) — não perde dias fora da janela do cache acima
-  await mergeHealthDaily(db, user.id, byDate);
+  // refresh manual / cache ausente: busca tudo ao vivo (inclui a bateria) e grava no cache + histórico
+  const data = await refreshOuraCache(db, user.id, token, { battery: true });
+  const { data: saved } = await db.from('oura_cache').select('extra').eq('user_id', user.id).maybeSingle();
+  const extra = (saved && saved.extra) || { ...data.extra, sources: data.sources };
 
-  return Response.json({ connected: true, byDate, lastSleep, extra: { ...data.extra, sources: data.sources }, errors, ...(await batteryP) }, {
-    headers: { 'Cache-Control': 'private, s-maxage=900' },
-  });
+  return Response.json({
+    connected: true,
+    byDate: data.byDate,
+    lastSleep: data.lastSleep,
+    extra,
+    errors: data.errors,
+    battery: extra.battery || null,
+    batteryError: extra.batteryError || null,
+  }, { headers: { 'Cache-Control': 'private, s-maxage=900' } });
 }
