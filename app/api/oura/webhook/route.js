@@ -3,6 +3,14 @@ import { refreshOuraCache } from '../../../../lib/oura';
 
 export const runtime = 'nodejs';
 
+// Uma sincronização do anel gera uma rajada de eventos (um por tipo de dado e por create/update —
+// até ~20 assinaturas), chegando quase juntos. Cada um disparava uma atualização COMPLETA (~15
+// chamadas à Oura), então uma sincronização virava ~300 chamadas. Agora só o primeiro evento de
+// cada janela atualiza; os outros são descartados. Janela curta de propósito: dados processados
+// pela Oura alguns minutos depois (ex.: a nota do sono) ainda entram por um evento posterior, e o
+// cron das 6h/20h fecha qualquer lacuna.
+const MIN_GAP_MS = 5 * 60 * 1000;
+
 /**
  * GET /api/oura/webhook -> handshake de verificacao que a Oura faz na hora
  * de criar a assinatura. Ela manda verification_token + challenge por query
@@ -54,9 +62,23 @@ export async function POST(req) {
       .select('user_id').eq('provider', 'oura').eq('oura_user_id', ouraUserId).maybeSingle();
     if (!conn) return;
 
+    // reivindica a janela de forma atômica (UPDATE condicional): os eventos da rajada chegam em
+    // paralelo, então só quem conseguir mexer na linha atualiza — checar "cache recente" antes
+    // deixaria todos passarem juntos.
+    const { data: row } = await db.from('oura_cache').select('updated_at').eq('user_id', conn.user_id).maybeSingle();
+    if (row) {
+      const { data: claimed } = await db.from('oura_cache')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('user_id', conn.user_id)
+        .lt('updated_at', new Date(Date.now() - MIN_GAP_MS).toISOString())
+        .select('user_id');
+      if (!claimed || !claimed.length) return; // outro evento da rajada já está atualizando
+    }
+
     const token = await validToken(conn.user_id, 'oura');
     if (!token) return;
 
+    // sem { battery: true }: a bateria só é lida nas rodadas agendadas
     await refreshOuraCache(db, conn.user_id, token);
   }));
 
